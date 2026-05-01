@@ -1,0 +1,81 @@
+name: Performance issue
+description: grx is slower, allocates more, or uses more memory than expected.
+title: "[perf]: "
+labels: ["performance", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Performance bugs are reproducible bugs — I need numbers, not just "feels slow".
+
+        Run a benchmark or pprof profile and paste the output. The `benchmark/` module
+        in this repo is a good template to copy.
+
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: Which operation is slow / allocates too much, and by how much?
+      placeholder: "Resolving a list field with 1k items takes ~25ms and allocates ~1.2MB. I expected <5ms based on the README benchmarks."
+    validations:
+      required: true
+
+  - type: input
+    id: grx-version
+    attributes:
+      label: grx version
+      placeholder: "v0.1.0  /  main @ abc1234"
+    validations:
+      required: true
+
+  - type: input
+    id: go-version
+    attributes:
+      label: Go version & GOARCH
+      placeholder: "go1.22.5 darwin/arm64"
+    validations:
+      required: true
+
+  - type: textarea
+    id: schema
+    attributes:
+      label: Schema definition
+      description: Trimmed-down schema that exhibits the issue.
+      render: go
+    validations:
+      required: true
+
+  - type: textarea
+    id: operation
+    attributes:
+      label: GraphQL operation
+      render: graphql
+    validations:
+      required: true
+
+  - type: textarea
+    id: benchmark
+    attributes:
+      label: Benchmark or measurement
+      description: |
+        Paste the output of `go test -bench=. -benchmem`, a `pprof` top, an HTTP load-test
+        result, or however you measured. Include the **full** command you ran.
+      render: shell
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected performance
+      description: What numbers did you expect, and where did that expectation come from? (README benchmark, another library, prior version, etc.)
+    validations:
+      required: true
+
+  - type: textarea
+    id: extra
+    attributes:
+      label: Anything else?
+      description: pprof flame graphs, suspected allocation sources, plugins enabled, etc.
+    validations:
+      required: false

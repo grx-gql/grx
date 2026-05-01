@@ -1,0 +1,132 @@
+name: Bug report
+description: Something in grx behaves incorrectly. Help me reproduce it.
+title: "[bug]: "
+labels: ["bug", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to file a bug.
+
+        **Before you submit**, please make sure you can answer:
+        1. *What did you do?* — schema + query/mutation/subscription.
+        2. *What did you expect?* — the response you wanted.
+        3. *What actually happened?* — the response (or panic) you got.
+
+        Without those three things I usually can't reproduce the bug, and the issue stalls.
+
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: One or two sentences describing the bug.
+      placeholder: "Subscription resolvers panic when the channel is closed before the first publish."
+    validations:
+      required: true
+
+  - type: input
+    id: grx-version
+    attributes:
+      label: grx version
+      description: Output of `go list -m github.com/patrickkabwe/grx` in your module, or the commit SHA if you're on `main`.
+      placeholder: "v0.1.0  /  main @ abc1234"
+    validations:
+      required: true
+
+  - type: input
+    id: go-version
+    attributes:
+      label: Go version
+      description: Output of `go version`.
+      placeholder: "go version go1.22.5 darwin/arm64"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Affected area
+      description: Where in grx do you think the bug lives? Pick your best guess — it just helps me triage.
+      options:
+        - "schema (schema.Build / reflection)"
+        - "exec (lexer / parser / executor)"
+        - "server (HTTP / GraphiQL)"
+        - "transport: WebSocket (pkg/websocket)"
+        - "transport: SSE (pkg/sse)"
+        - "pubsub (pkg/pubsub)"
+        - "pubsub: Redis backend (pkg/pubsub/redis)"
+        - "plugins (plugin.*)"
+        - "introspection"
+        - "docs / examples"
+        - "not sure"
+    validations:
+      required: true
+
+  - type: textarea
+    id: schema
+    attributes:
+      label: Schema definition
+      description: The Go structs / resolvers you passed to `schema.Build`. Trim to the smallest version that still triggers the bug.
+      render: go
+      placeholder: |
+        type Query struct{}
+
+        func (Query) User(ctx context.Context, args struct{ ID string }) (*User, error) {
+            ...
+        }
+    validations:
+      required: true
+
+  - type: textarea
+    id: operation
+    attributes:
+      label: GraphQL operation
+      description: The query, mutation, or subscription that triggers the bug. Include variables if any.
+      render: graphql
+      placeholder: |
+        query GetUser($id: ID!) {
+          user(id: $id) { id name }
+        }
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behaviour
+      description: What response or behaviour did you expect?
+      placeholder: |
+        Should return:
+        { "data": { "user": { "id": "1", "name": "Ada" } } }
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behaviour
+      description: The actual response, error message, panic + stack trace, or wrong value. Paste verbatim.
+      render: shell
+    validations:
+      required: true
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: Minimal reproduction
+      description: |
+        A runnable `main.go` (or link to a tiny repo / gist / failing test) that reproduces the bug.
+        Anything in `examples/basic` is a good starting point — copy + edit it down.
+
+        If you cannot provide a repro, list the **exact** steps you took.
+      render: go
+    validations:
+      required: true
+
+  - type: textarea
+    id: extra
+    attributes:
+      label: Anything else?
+      description: Logs (especially with the `plugin/logger` plugin attached), suspected cause, related issues, workarounds you tried, etc.
+    validations:
+      required: false

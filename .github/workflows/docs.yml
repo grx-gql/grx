@@ -1,0 +1,121 @@
+name: Docs
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "docs/**"
+      - "scripts/gen-api-docs.sh"
+      - "scripts/sync-changelog.sh"
+      - "scripts/sync-roadmap.sh"
+      - "CHANGELOG.md"
+      - "README.md"
+      - "Makefile"
+      - ".github/workflows/docs.yml"
+      - "**/*.go"
+  pull_request:
+    paths:
+      - "docs/**"
+      - "scripts/gen-api-docs.sh"
+      - "scripts/sync-changelog.sh"
+      - "scripts/sync-roadmap.sh"
+      - "CHANGELOG.md"
+      - "README.md"
+      - "Makefile"
+      - ".github/workflows/docs.yml"
+      - "**/*.go"
+  workflow_dispatch:
+
+# Required by actions/deploy-pages. `contents: read` is enough for the
+# checkout, `pages: write` and `id-token: write` are what the official
+# Pages deploy action expects.
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Allow only one concurrent deployment per ref. Don't cancel in-progress
+# deploys on `main` so a queued release isn't lost; PR builds key on the
+# PR ref so they can run in parallel with main.
+concurrency:
+  group: pages-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  build:
+    name: Build site
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          # Starlight's `lastUpdated: true` reads commit history from git
+          # to render the "Last updated" timestamp on every page.
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          # Pulls the version from the project's go.mod (currently 1.22).
+          go-version-file: go.mod
+          # No go.sum at the module root (zero runtime deps), so the
+          # default cache key would fail. Disable caching for setup-go;
+          # the gomarkdoc download cache is handled separately below.
+          cache: false
+
+      - name: Cache Go module downloads (for gomarkdoc)
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/go/pkg/mod
+            ~/.cache/go-build
+          key: ${{ runner.os }}-gomarkdoc-${{ hashFiles('scripts/gen-api-docs.sh') }}
+          restore-keys: |
+            ${{ runner.os }}-gomarkdoc-
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          # Pin to a known-good version; bump deliberately.
+          bun-version: 1.3.10
+
+      - name: Install docs dependencies
+        working-directory: docs
+        run: bun install --frozen-lockfile
+
+      - name: Generate API reference, changelog, roadmap
+        run: make docs-content
+
+      - name: Build site
+        working-directory: docs
+        run: bun run build
+
+      - name: Verify build output
+        run: |
+          set -euo pipefail
+          test -s docs/dist/index.html
+          test -d docs/dist/_astro
+          test -d docs/dist/pagefind
+          file_count=$(find docs/dist -type f | wc -l | tr -d ' ')
+          echo "✓ docs/dist looks healthy (${file_count} files)"
+
+      - name: Upload Pages artifact
+        # Skip the upload on PR builds — they validate the build only.
+        if: github.event_name != 'pull_request'
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: ./docs/dist
+
+  deploy:
+    name: Deploy to GitHub Pages
+    # Only deploy from pushes to main and manual dispatches, never PRs.
+    if: github.event_name != 'pull_request'
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy
+        id: deployment
+        uses: actions/deploy-pages@v4

@@ -1,0 +1,150 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v[0-9]+.[0-9]+.[0-9]+"
+      - "v[0-9]+.[0-9]+.[0-9]+-*"
+      - "pkg/pubsub/redis/v[0-9]+.[0-9]+.[0-9]+"
+      - "pkg/pubsub/redis/v[0-9]+.[0-9]+.[0-9]+-*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag to release (e.g. v0.1.0). Must already exist."
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    name: Verify build & tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: false
+
+      - name: go vet
+        run: make vet
+
+      - name: go build
+        run: make build
+
+      - name: go test (root + submodules)
+        run: make test
+
+      - name: go test -race
+        run: make test-race
+
+  release:
+    name: Create GitHub Release
+    needs: verify
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+          fetch-depth: 0
+
+      - name: Resolve tag metadata
+        id: meta
+        run: |
+          set -euo pipefail
+          if [[ -n "${{ inputs.tag }}" ]]; then
+            TAG="${{ inputs.tag }}"
+          else
+            TAG="${GITHUB_REF#refs/tags/}"
+          fi
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+
+          if [[ "${TAG}" == pkg/pubsub/redis/* ]]; then
+            VERSION="${TAG#pkg/pubsub/redis/}"
+            echo "module=pkg/pubsub/redis" >> "$GITHUB_OUTPUT"
+          else
+            VERSION="${TAG}"
+            echo "module=root" >> "$GITHUB_OUTPUT"
+          fi
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+
+          if [[ "${VERSION}" == *-* ]]; then
+            echo "prerelease=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "prerelease=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Extract changelog section
+        id: changelog
+        run: |
+          set -euo pipefail
+          VERSION="${{ steps.meta.outputs.version }}"
+          # Strip the leading `v` so we match `## [0.1.0]` style headers.
+          STRIPPED="${VERSION#v}"
+
+          NOTES_FILE="$(mktemp)"
+          awk -v v="${STRIPPED}" '
+            BEGIN { found=0 }
+            /^## / {
+              if (found) exit
+              # Match `## [0.1.0]`, `## [0.1.0] - 2026-05-01`, `## v0.1.0`, `## 0.1.0`
+              if ($0 ~ "(\\[" v "\\]|[ \\[]v?" v "([ \\]]|$))") { found=1; next }
+            }
+            found { print }
+          ' CHANGELOG.md > "${NOTES_FILE}" || true
+
+          if [[ -s "${NOTES_FILE}" ]]; then
+            echo "found=true" >> "$GITHUB_OUTPUT"
+            echo "path=${NOTES_FILE}" >> "$GITHUB_OUTPUT"
+          else
+            echo "found=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Create release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.meta.outputs.tag }}
+          name: ${{ steps.meta.outputs.module == 'root' && steps.meta.outputs.version || format('pkg/pubsub/redis {0}', steps.meta.outputs.version) }}
+          body_path: ${{ steps.changelog.outputs.found == 'true' && steps.changelog.outputs.path || '' }}
+          generate_release_notes: ${{ steps.changelog.outputs.found != 'true' }}
+          prerelease: ${{ steps.meta.outputs.prerelease == 'true' }}
+          fail_on_unmatched_files: false
+
+  proxy-warm:
+    name: Warm pkg.go.dev
+    needs: release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Request module from proxy.golang.org
+        run: |
+          set -euo pipefail
+          if [[ -n "${{ inputs.tag }}" ]]; then
+            TAG="${{ inputs.tag }}"
+          else
+            TAG="${GITHUB_REF#refs/tags/}"
+          fi
+
+          if [[ "${TAG}" == pkg/pubsub/redis/* ]]; then
+            MODULE="github.com/patrickkabwe/grx/pkg/pubsub/redis"
+            VERSION="${TAG#pkg/pubsub/redis/}"
+          else
+            MODULE="github.com/patrickkabwe/grx"
+            VERSION="${TAG}"
+          fi
+
+          echo "Warming proxy for ${MODULE}@${VERSION}"
+          curl -fsSL "https://proxy.golang.org/${MODULE}/@v/${VERSION}.info" || \
+            echo "::warning::proxy.golang.org did not return ${MODULE}@${VERSION} yet (it may take a few minutes)"

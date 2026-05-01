@@ -1,0 +1,59 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 520 420" width="520" height="420" role="img" aria-label="grx  GraphQL execution graph">
+  <defs>
+    <radialGradient id="grx-bg" cx="50%" cy="50%" r="55%">
+      <stop offset="0%" stop-color="#6366f1" stop-opacity="0.22"/>
+      <stop offset="55%" stop-color="#6366f1" stop-opacity="0.06"/>
+      <stop offset="100%" stop-color="#6366f1" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="grx-edge" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#a5b4fc" stop-opacity="0.55"/>
+      <stop offset="100%" stop-color="#6366f1" stop-opacity="0.95"/>
+    </linearGradient>
+    <linearGradient id="grx-root" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#818cf8"/>
+      <stop offset="100%" stop-color="#4338ca"/>
+    </linearGradient>
+    <linearGradient id="grx-mid" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#a5b4fc"/>
+      <stop offset="100%" stop-color="#6366f1"/>
+    </linearGradient>
+    <pattern id="grx-grid" width="32" height="32" patternUnits="userSpaceOnUse">
+      <path d="M 32 0 L 0 0 0 32" fill="none" stroke="#a5b4fc" stroke-opacity="0.06" stroke-width="1"/>
+    </pattern>
+  </defs>
+
+  <rect x="0" y="0" width="520" height="420" fill="url(#grx-grid)"/>
+  <circle cx="260" cy="210" r="200" fill="url(#grx-bg)"/>
+
+  <g stroke="url(#grx-edge)" stroke-width="1.6" fill="none" stroke-linecap="round">
+    <path d="M 110 210 C 160 210, 170 110, 230 100"/>
+    <path d="M 110 210 C 170 210, 180 210, 230 210"/>
+    <path d="M 110 210 C 160 210, 170 310, 230 320"/>
+    <path d="M 230 100 C 280 100, 300 60, 380 60"/>
+    <path d="M 230 100 C 280 100, 300 130, 380 140"/>
+    <path d="M 230 210 C 290 210, 310 190, 380 200"/>
+    <path d="M 230 210 C 290 210, 310 240, 380 260"/>
+    <path d="M 230 320 C 280 320, 300 290, 380 300"/>
+    <path d="M 230 320 C 280 320, 300 350, 380 360"/>
+  </g>
+
+  <g>
+    <circle cx="380" cy="60"  r="9" fill="#c7d2fe"/>
+    <circle cx="380" cy="140" r="9" fill="#c7d2fe"/>
+    <circle cx="380" cy="200" r="9" fill="#c7d2fe"/>
+    <circle cx="380" cy="260" r="9" fill="#c7d2fe"/>
+    <circle cx="380" cy="300" r="9" fill="#c7d2fe"/>
+    <circle cx="380" cy="360" r="9" fill="#c7d2fe"/>
+
+    <circle cx="230" cy="100" r="14" fill="url(#grx-mid)"/>
+    <circle cx="230" cy="210" r="14" fill="url(#grx-mid)"/>
+    <circle cx="230" cy="320" r="14" fill="url(#grx-mid)"/>
+
+    <circle cx="110" cy="210" r="26" fill="url(#grx-root)"/>
+    <circle cx="110" cy="210" r="26" fill="none" stroke="#c7d2fe" stroke-opacity="0.4" stroke-width="1.5"/>
+    <text x="110" y="216" text-anchor="middle"
+          font-family="Inter, system-ui, -apple-system, sans-serif"
+          font-weight="700" font-size="14" fill="#ffffff"
+          letter-spacing="-0.4">{ }</text>
+  </g>
+</svg>

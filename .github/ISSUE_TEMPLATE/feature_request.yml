@@ -1,0 +1,53 @@
+name: Feature request / proposal
+description: Suggest a concrete addition or change. Vague ideas belong in Discussions.
+title: "[feat]: "
+labels: ["enhancement", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        For open-ended ideas please use [Discussions](https://github.com/patrickkabwe/grx/discussions).
+        File an issue when you have a concrete proposal you'd like reviewed.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What are you trying to do that grx doesn't (cleanly) let you do today?
+      placeholder: "I want to enforce a per-field authorization rule, but plugins only see the full operation."
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed API or behaviour
+      description: Sketch the API, config, or behaviour you'd like. Go signatures or example usage are ideal.
+      render: go
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Workarounds you tried, other libraries that do this, prior art.
+    validations:
+      required: false
+
+  - type: dropdown
+    id: scope
+    attributes:
+      label: Scope
+      description: Which part of grx does this affect?
+      options:
+        - "schema"
+        - "exec"
+        - "server / transports"
+        - "pubsub"
+        - "plugins"
+        - "docs / examples"
+        - "tooling (Makefile / CI / release)"
+        - "cross-cutting"
+    validations:
+      required: true

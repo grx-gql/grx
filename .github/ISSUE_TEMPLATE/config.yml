@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Question or usage help
+    url: https://github.com/patrickkabwe/grx/discussions
+    about: Open a Discussion for questions about how to use grx. Use Issues only for reproducible bugs or concrete proposals.
