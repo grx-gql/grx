@@ -2,6 +2,7 @@ package exec
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	"github.com/patrickkabwe/grx/core"
@@ -12,6 +13,44 @@ type testUser struct {
 	ID   string `gql:"id,nonNull"`
 	Name string `gql:"name,nonNull"`
 }
+
+type testEpisode string
+
+const (
+	testEpisodeNewHope testEpisode = "NEWHOPE"
+	testEpisodeEmpire  testEpisode = "EMPIRE"
+	testEpisodeJedi    testEpisode = "JEDI"
+)
+
+type testDate struct {
+	Raw string
+}
+
+type testNode interface {
+	isTestNode()
+}
+
+type testSearchResult interface {
+	isTestSearchResult()
+}
+
+type testNodeUser struct {
+	ID   string `gql:"id,nonNull"`
+	Name string `gql:"name,nonNull"`
+}
+
+func (*testNodeUser) isTestNode() {}
+
+func (*testNodeUser) isTestSearchResult() {}
+
+type testNodePost struct {
+	ID    string `gql:"id,nonNull"`
+	Title string `gql:"title,nonNull"`
+}
+
+func (*testNodePost) isTestNode() {}
+
+func (*testNodePost) isTestSearchResult() {}
 
 type testQuery struct{}
 
@@ -29,10 +68,51 @@ type testUserCreatePayload struct {
 	User *testUser `gql:"user,nonNull"`
 }
 
+type testDefaultInput struct {
+	Query string `gql:"query,default=all"`
+	Limit int    `gql:"limit,default=10"`
+}
+
 func (testQuery) User(ctx context.Context, args struct {
 	ID string `gql:"id,nonNull"`
 }) (*testUser, error) {
 	return &testUser{ID: args.ID, Name: "Ada"}, nil
+}
+
+func (testQuery) FavoriteEpisode(ctx context.Context, args struct {
+	Episode testEpisode `gql:"episode,default=JEDI"`
+}) (testEpisode, error) {
+	return args.Episode, nil
+}
+
+func (testQuery) EchoDate(ctx context.Context, args struct {
+	At testDate `gql:"at,default=2026-05-01"`
+}) (testDate, error) {
+	return args.At, nil
+}
+
+func (testQuery) Node(ctx context.Context, args struct {
+	Kind string `gql:"kind,default=user"`
+}) (testNode, error) {
+	if args.Kind == "post" {
+		return &testNodePost{ID: "post_1", Title: "GraphQL"}, nil
+	}
+	return &testNodeUser{ID: "user_1", Name: "Ada"}, nil
+}
+
+func (testQuery) Search(ctx context.Context, args struct {
+	Kind string `gql:"kind,default=user"`
+}) (testSearchResult, error) {
+	if args.Kind == "post" {
+		return &testNodePost{ID: "post_1", Title: "GraphQL"}, nil
+	}
+	return &testNodeUser{ID: "user_1", Name: "Ada"}, nil
+}
+
+func (testQuery) Defaulted(ctx context.Context, args struct {
+	Input testDefaultInput `gql:"input,nonNull"`
+}) (string, error) {
+	return fmt.Sprintf("%s:%d", args.Input.Query, args.Input.Limit), nil
 }
 
 func (testMutation) CreateUser(ctx context.Context, args testUserCreateArgs) (*testUserCreatePayload, error) {
@@ -55,15 +135,9 @@ func TestExecutorResolvesNestedSelection(t *testing.T) {
 		t.Fatalf("unexpected errors: %#v", response.Errors)
 	}
 
-	data, ok := response.Data.(map[string]any)
-	if !ok {
-		t.Fatalf("expected map data, got %T", response.Data)
-	}
+	data := responseObject(t, response.Data)
 
-	user, ok := data["user"].(map[string]any)
-	if !ok {
-		t.Fatalf("expected user map, got %T", data["user"])
-	}
+	user := responseObject(t, data["user"])
 	if user["id"] != "1" {
 		t.Fatalf("expected id 1, got %#v", user["id"])
 	}
@@ -97,20 +171,11 @@ func TestExecutorBindsNestedInputObject(t *testing.T) {
 		t.Fatalf("unexpected errors: %#v", response.Errors)
 	}
 
-	data, ok := response.Data.(map[string]any)
-	if !ok {
-		t.Fatalf("expected map data, got %T", response.Data)
-	}
+	data := responseObject(t, response.Data)
 
-	payload, ok := data["createUser"].(map[string]any)
-	if !ok {
-		t.Fatalf("expected payload map, got %T", data["createUser"])
-	}
+	payload := responseObject(t, data["createUser"])
 
-	user, ok := payload["user"].(map[string]any)
-	if !ok {
-		t.Fatalf("expected user map, got %T", payload["user"])
-	}
+	user := responseObject(t, payload["user"])
 	if user["name"] != "Grace" {
 		t.Fatalf("expected name Grace, got %#v", user["name"])
 	}
@@ -139,18 +204,9 @@ func TestExecutorBindsInlineInputObjectLiteral(t *testing.T) {
 		t.Fatalf("unexpected errors: %#v", response.Errors)
 	}
 
-	data, ok := response.Data.(map[string]any)
-	if !ok {
-		t.Fatalf("expected map data, got %T", response.Data)
-	}
-	payload, ok := data["createUser"].(map[string]any)
-	if !ok {
-		t.Fatalf("expected payload map, got %T", data["createUser"])
-	}
-	user, ok := payload["user"].(map[string]any)
-	if !ok {
-		t.Fatalf("expected user map, got %T", payload["user"])
-	}
+	data := responseObject(t, response.Data)
+	payload := responseObject(t, data["createUser"])
+	user := responseObject(t, payload["user"])
 	if user["name"] != "test" {
 		t.Fatalf("expected name test, got %#v", user["name"])
 	}
@@ -188,20 +244,11 @@ func TestExecutorHandlesSchemaIntrospectionQueryWithFragments(t *testing.T) {
 		t.Fatalf("unexpected errors: %#v", response.Errors)
 	}
 
-	data, ok := response.Data.(map[string]any)
-	if !ok {
-		t.Fatalf("expected map data, got %T", response.Data)
-	}
+	data := responseObject(t, response.Data)
 
-	schemaData, ok := data["__schema"].(map[string]any)
-	if !ok {
-		t.Fatalf("expected __schema map, got %T", data["__schema"])
-	}
+	schemaData := responseObject(t, data["__schema"])
 
-	queryType, ok := schemaData["queryType"].(map[string]any)
-	if !ok {
-		t.Fatalf("expected queryType map, got %T", schemaData["queryType"])
-	}
+	queryType := responseObject(t, schemaData["queryType"])
 	if queryType["name"] != "Query" {
 		t.Fatalf("expected Query root, got %#v", queryType["name"])
 	}
@@ -252,7 +299,7 @@ func introspectionField(t *testing.T, types []any, typeName string, fieldName st
 			t.Fatalf("expected fields list for %s, got %T", typeName, typeValue["fields"])
 		}
 		for _, rawField := range fields {
-			field, ok := rawField.(map[string]any)
+			field, ok := responseObjectValue(rawField)
 			if ok && field["name"] == fieldName {
 				return field
 			}
@@ -261,4 +308,194 @@ func introspectionField(t *testing.T, types []any, typeName string, fieldName st
 
 	t.Fatalf("expected field %s.%s", typeName, fieldName)
 	return nil
+}
+
+func testAdvancedSchema(t *testing.T) *schema.Schema {
+	t.Helper()
+
+	schemaValue, err := schema.Build(schema.Config{
+		Query: testQuery{},
+		Scalars: []schema.ScalarConfig{
+			{
+				Type: testDate{},
+				Name: "Date",
+				Parse: func(input any) (any, error) {
+					value, ok := input.(string)
+					if !ok {
+						return nil, fmt.Errorf("expected string date input, got %T", input)
+					}
+					return testDate{Raw: value}, nil
+				},
+				Serialize: func(value any) (any, error) {
+					date, ok := value.(testDate)
+					if !ok {
+						return nil, fmt.Errorf("expected testDate value, got %T", value)
+					}
+					return date.Raw, nil
+				},
+			},
+		},
+		Enums: []schema.EnumConfig{
+			{
+				Type: testEpisode(""),
+				Name: "Episode",
+				Values: []schema.EnumValueConfig{
+					{Name: "NEWHOPE", Value: testEpisodeNewHope},
+					{Name: "EMPIRE", Value: testEpisodeEmpire},
+					{Name: "JEDI", Value: testEpisodeJedi},
+				},
+			},
+		},
+		Interfaces: []schema.InterfaceConfig{
+			{
+				Type:         (*testNode)(nil),
+				Implementors: []any{testNodeUser{}, testNodePost{}},
+			},
+		},
+		Unions: []schema.UnionConfig{
+			{
+				Type:         (*testSearchResult)(nil),
+				Name:         "SearchResult",
+				Implementors: []any{testNodeUser{}, testNodePost{}},
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("build advanced schema: %v", err)
+	}
+
+	return schemaValue
+}
+
+func TestExecutorBindsEnumArgumentAndSerializesEnumValue(t *testing.T) {
+	executor := New(testAdvancedSchema(t), nil)
+	response := executor.Execute(context.Background(), core.Request{
+		Query: `query FavoriteEpisode($episode: Episode!) {
+			favoriteEpisode(episode: $episode)
+		}`,
+		Variables: map[string]any{"episode": "EMPIRE"},
+	})
+
+	if len(response.Errors) != 0 {
+		t.Fatalf("unexpected errors: %#v", response.Errors)
+	}
+
+	data := responseObject(t, response.Data)
+	if data["favoriteEpisode"] != "EMPIRE" {
+		t.Fatalf("expected EMPIRE, got %#v", data["favoriteEpisode"])
+	}
+}
+
+func TestExecutorUsesCustomScalarParseAndSerialize(t *testing.T) {
+	executor := New(testAdvancedSchema(t), nil)
+	response := executor.Execute(context.Background(), core.Request{
+		Query: `query EchoDate($at: Date!) {
+			echoDate(at: $at)
+		}`,
+		Variables: map[string]any{"at": "2026-05-02"},
+	})
+
+	if len(response.Errors) != 0 {
+		t.Fatalf("unexpected errors: %#v", response.Errors)
+	}
+
+	data := responseObject(t, response.Data)
+	if data["echoDate"] != "2026-05-02" {
+		t.Fatalf("expected serialized date, got %#v", data["echoDate"])
+	}
+}
+
+func TestExecutorResolvesInterfaceSelectionAndTypename(t *testing.T) {
+	executor := New(testAdvancedSchema(t), nil)
+	response := executor.Execute(context.Background(), core.Request{
+		Query: `query Node($kind: String!) {
+			node(kind: $kind) {
+				__typename
+				id
+			}
+		}`,
+		Variables: map[string]any{"kind": "user"},
+	})
+
+	if len(response.Errors) != 0 {
+		t.Fatalf("unexpected errors: %#v", response.Errors)
+	}
+
+	data := responseObject(t, response.Data)
+	node := responseObject(t, data["node"])
+	if node["__typename"] != "testNodeUser" {
+		t.Fatalf("expected concrete typename, got %#v", node["__typename"])
+	}
+	if node["id"] != "user_1" {
+		t.Fatalf("expected user_1 id, got %#v", node["id"])
+	}
+}
+
+func TestExecutorResolvesUnionTypename(t *testing.T) {
+	executor := New(testAdvancedSchema(t), nil)
+	response := executor.Execute(context.Background(), core.Request{
+		Query: `query Search($kind: String!) {
+			search(kind: $kind) {
+				__typename
+			}
+		}`,
+		Variables: map[string]any{"kind": "post"},
+	})
+
+	if len(response.Errors) != 0 {
+		t.Fatalf("unexpected errors: %#v", response.Errors)
+	}
+
+	data := responseObject(t, response.Data)
+	search := responseObject(t, data["search"])
+	if search["__typename"] != "testNodePost" {
+		t.Fatalf("expected concrete typename, got %#v", search["__typename"])
+	}
+}
+
+func TestExecutorAppliesDefaultValues(t *testing.T) {
+	executor := New(testAdvancedSchema(t), nil)
+	response := executor.Execute(context.Background(), core.Request{
+		Query: `query Defaults {
+			favoriteEpisode
+			echoDate
+			defaulted(input: {})
+		}`,
+	})
+
+	if len(response.Errors) != 0 {
+		t.Fatalf("unexpected errors: %#v", response.Errors)
+	}
+
+	data := responseObject(t, response.Data)
+	if data["favoriteEpisode"] != "JEDI" {
+		t.Fatalf("expected enum default JEDI, got %#v", data["favoriteEpisode"])
+	}
+	if data["echoDate"] != "2026-05-01" {
+		t.Fatalf("expected scalar default 2026-05-01, got %#v", data["echoDate"])
+	}
+	if data["defaulted"] != "all:10" {
+		t.Fatalf("expected nested defaults all:10, got %#v", data["defaulted"])
+	}
+}
+
+func responseObject(t *testing.T, value any) map[string]any {
+	t.Helper()
+
+	object, ok := responseObjectValue(value)
+	if !ok {
+		t.Fatalf("expected response object, got %T", value)
+	}
+	return object
+}
+
+func responseObjectValue(value any) (map[string]any, bool) {
+	switch typed := value.(type) {
+	case map[string]any:
+		return typed, true
+	case *core.OrderedObject:
+		return typed.Map(), true
+	default:
+		return nil, false
+	}
 }

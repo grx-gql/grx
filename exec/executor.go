@@ -76,7 +76,7 @@ func (e *Executor) Execute(ctx context.Context, req core.Request) core.Response 
 		return errorResponse(err)
 	}
 
-	data, fieldErrors := e.executeSelectionSet(ctx, root, nil, doc.Selections, []string{})
+	data, fieldErrors := e.executeSelectionSet(ctx, root, nil, doc.Selections, nil)
 	res := core.Response{Data: data, Errors: fieldErrors}
 	if len(fieldErrors) == 0 {
 		res.Errors = nil
@@ -182,8 +182,9 @@ func (e *Executor) Subscribe(ctx context.Context, req core.Request) (<-chan core
 				return
 			}
 
-			data, fieldErrors := e.completeValue(ctx, field.Type, value.Interface(), rootField.Selections, []string{rootField.Name})
-			payload := map[string]any{rootField.Name: data}
+			data, fieldErrors := e.completeValue(ctx, field.Type, value.Interface(), rootField.Selections, []any{rootField.Name})
+			payload := core.NewOrderedObject(1)
+			payload.Set(rootField.Name, data)
 			res := core.Response{Data: payload}
 			if len(fieldErrors) > 0 {
 				res.Errors = fieldErrors
@@ -233,26 +234,26 @@ func (e *Executor) rootObject(kind operationKind) (*schema.Object, error) {
 	}
 }
 
-func (e *Executor) executeSelectionSet(ctx context.Context, object *schema.Object, source any, selections []selection, path []string) (map[string]any, []core.Error) {
-	data := map[string]any{}
+func (e *Executor) executeSelectionSet(ctx context.Context, object *schema.Object, source any, selections []selection, path []any) (*core.OrderedObject, []core.Error) {
+	data := core.NewOrderedObject(len(selections))
 	errors := []core.Error{}
 
 	for _, selected := range selections {
 		if selected.Name == "__typename" {
-			data[selected.Name] = object.Name()
+			data.Set(selected.Name, object.Name())
 			continue
 		}
 
 		field, ok := object.Fields[selected.Name]
 		if !ok {
-			errors = append(errors, core.Error{Message: fmt.Sprintf("unknown field %q on %s", selected.Name, object.Name()), Path: appendPath(path, selected.Name)})
+			errors = append(errors, newFieldError(fmt.Sprintf("unknown field %q on %s", selected.Name, object.Name()), appendPath(path, selected.Name), selected.Location))
 			continue
 		}
 
 		fieldPath := appendPath(path, selected.Name)
 		for _, hook := range e.Plugins {
-			if err := hook.FieldResolveStart(ctx, plugin.FieldContext{Path: fieldPath, FieldName: selected.Name}); err != nil {
-				errors = append(errors, core.Error{Message: err.Error(), Path: fieldPath})
+			if err := hook.FieldResolveStart(ctx, plugin.FieldContext{Path: pathStrings(fieldPath), FieldName: selected.Name}); err != nil {
+				errors = append(errors, newFieldError(err.Error(), fieldPath, selected.Location))
 				continue
 			}
 		}
@@ -260,22 +261,22 @@ func (e *Executor) executeSelectionSet(ctx context.Context, object *schema.Objec
 		value, err := field.Resolver(ctx, schema.ResolveParams{Source: source, Args: selected.Arguments})
 		if err != nil {
 			e.notifyError(ctx, err)
-			errors = append(errors, core.Error{Message: err.Error(), Path: fieldPath})
+			errors = append(errors, newFieldError(err.Error(), fieldPath, selected.Location))
 			continue
 		}
 
 		resolved, nestedErrors := e.completeValue(ctx, field.Type, value, selected.Selections, fieldPath)
-		data[selected.Name] = resolved
+		data.Set(selected.Name, resolved)
 		errors = append(errors, nestedErrors...)
 	}
 
 	return data, errors
 }
 
-func (e *Executor) completeValue(ctx context.Context, fieldType schema.Type, value any, selections []selection, path []string) (any, []core.Error) {
+func (e *Executor) completeValue(ctx context.Context, fieldType schema.Type, value any, selections []selection, path []any) (any, []core.Error) {
 	if value == nil {
 		if fieldType.Kind() == schema.NonNullKind {
-			return nil, []core.Error{{Message: "non-null field resolved to null", Path: path}}
+			return nil, []core.Error{newFieldError("non-null field resolved to null", path, core.Location{})}
 		}
 		return nil, nil
 	}
@@ -287,24 +288,48 @@ func (e *Executor) completeValue(ctx context.Context, fieldType schema.Type, val
 		return e.completeList(ctx, typed.OfType, value, selections, path)
 	case *schema.Object:
 		return e.executeSelectionSet(ctx, typed, value, selections, path)
+	case *schema.Interface:
+		objectType, err := typed.Resolve(value)
+		if err != nil {
+			return nil, []core.Error{newFieldError(err.Error(), path, core.Location{})}
+		}
+		return e.executeSelectionSet(ctx, objectType, value, selections, path)
+	case *schema.Union:
+		objectType, err := typed.Resolve(value)
+		if err != nil {
+			return nil, []core.Error{newFieldError(err.Error(), path, core.Location{})}
+		}
+		return e.executeSelectionSet(ctx, objectType, value, selections, path)
+	case *schema.Enum:
+		serialized, err := typed.Serialize(value)
+		if err != nil {
+			return nil, []core.Error{newFieldError(err.Error(), path, core.Location{})}
+		}
+		return serialized, nil
+	case *schema.Scalar:
+		serialized, err := typed.Serialize(value)
+		if err != nil {
+			return nil, []core.Error{newFieldError(err.Error(), path, core.Location{})}
+		}
+		return serialized, nil
 	default:
 		return value, nil
 	}
 }
 
-func (e *Executor) completeList(ctx context.Context, itemType schema.Type, value any, selections []selection, path []string) ([]any, []core.Error) {
+func (e *Executor) completeList(ctx context.Context, itemType schema.Type, value any, selections []selection, path []any) ([]any, []core.Error) {
 	raw := reflect.ValueOf(value)
 	if raw.Kind() == reflect.Pointer {
 		raw = raw.Elem()
 	}
 	if raw.Kind() != reflect.Slice && raw.Kind() != reflect.Array {
-		return nil, []core.Error{{Message: fmt.Sprintf("expected list value, got %T", value), Path: path}}
+		return nil, []core.Error{newFieldError(fmt.Sprintf("expected list value, got %T", value), path, core.Location{})}
 	}
 
 	items := make([]any, 0, raw.Len())
 	errors := []core.Error{}
 	for index := 0; index < raw.Len(); index++ {
-		itemPath := appendPath(path, fmt.Sprintf("%d", index))
+		itemPath := appendPath(path, index)
 		item, itemErrors := e.completeValue(ctx, itemType, raw.Index(index).Interface(), selections, itemPath)
 		items = append(items, item)
 		errors = append(errors, itemErrors...)
@@ -361,13 +386,50 @@ func (e *Executor) notifyError(ctx context.Context, err error) {
 	}
 }
 
-func appendPath(path []string, item string) []string {
-	next := make([]string, 0, len(path)+1)
+func appendPath(path []any, item any) []any {
+	next := make([]any, 0, len(path)+1)
 	next = append(next, path...)
 	next = append(next, item)
 	return next
 }
 
+func pathStrings(path []any) []string {
+	result := make([]string, 0, len(path))
+	for _, item := range path {
+		result = append(result, fmt.Sprint(item))
+	}
+	return result
+}
+
 func errorResponse(err error) core.Response {
-	return core.Response{Errors: []core.Error{{Message: err.Error()}}}
+	return core.Response{Errors: []core.Error{newRequestError(err)}}
+}
+
+func newRequestError(err error) core.Error {
+	result := core.Error{
+		Message: err.Error(),
+		Extensions: map[string]any{
+			"classification": "request",
+		},
+	}
+
+	if provider, ok := err.(interface{ GraphQLLocations() []core.Location }); ok {
+		result.Locations = provider.GraphQLLocations()
+	}
+
+	return result
+}
+
+func newFieldError(message string, path []any, location core.Location) core.Error {
+	result := core.Error{
+		Message: message,
+		Path:    path,
+		Extensions: map[string]any{
+			"classification": "field",
+		},
+	}
+	if location.Line > 0 && location.Column > 0 {
+		result.Locations = []core.Location{location}
+	}
+	return result
 }

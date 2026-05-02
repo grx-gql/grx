@@ -92,6 +92,8 @@ func TestServeHTTPReturnsMutationFieldErrorsWithPartialData(t *testing.T) {
 	if errorValue["message"] != `unknown field "missing" on Mutation` {
 		t.Fatalf("unexpected error message: %#v", errorValue["message"])
 	}
+	assertErrorClassification(t, errorValue, "field")
+	assertErrorLocations(t, errorValue, 1, 45)
 	path, ok := errorValue["path"].([]any)
 	if !ok || len(path) != 1 || path[0] != "missing" {
 		t.Fatalf("expected missing error path, got %#v", errorValue["path"])

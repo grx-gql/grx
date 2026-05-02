@@ -56,14 +56,8 @@ func TestExecutorSubscribeStreamsResponses(t *testing.T) {
 			if len(res.Errors) != 0 {
 				t.Fatalf("unexpected errors at index %d: %#v", index, res.Errors)
 			}
-			payload, ok := res.Data.(map[string]any)
-			if !ok {
-				t.Fatalf("expected map data, got %T", res.Data)
-			}
-			user, ok := payload["userCreated"].(map[string]any)
-			if !ok {
-				t.Fatalf("expected userCreated map, got %T", payload["userCreated"])
-			}
+			payload := responseObject(t, res.Data)
+			user := responseObject(t, payload["userCreated"])
 			if user["name"] != expected {
 				t.Fatalf("expected %s, got %#v", expected, user["name"])
 			}
