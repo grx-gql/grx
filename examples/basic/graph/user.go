@@ -43,6 +43,10 @@ func (UserQuery) User(ctx context.Context, args UserArgs) (*User, error) {
 	return &User{ID: args.ID, Name: "Ada Lovelace", Email: &email}, nil
 }
 
+func (UserQuery) ErrorExample(ctx context.Context) (string, error) {
+	return "", fmt.Errorf("example error from basic server")
+}
+
 // UserMutation groups every write-side resolver for the User entity.
 // The Bus dependency is wired by NewSchema so the mutation can publish
 // domain events that subscriptions consume.

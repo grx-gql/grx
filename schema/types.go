@@ -7,7 +7,11 @@
 // executor's per-request hot path stays allocation-aware.
 package schema
 
-import "context"
+import (
+	"context"
+	"fmt"
+	"reflect"
+)
 
 // Kind identifies a GraphQL type kind, matching the introspection
 // __TypeKind enum.
@@ -36,7 +40,8 @@ type Type interface {
 // Scalar represents a GraphQL scalar type such as String, Int, Float,
 // Boolean, ID, or a custom user-defined scalar.
 type Scalar struct {
-	TypeName string
+	TypeName    string
+	serializeFn func(any) (any, error)
 }
 
 // Name returns the scalar type name.
@@ -47,6 +52,14 @@ func (s *Scalar) Name() string {
 // Kind returns [ScalarKind].
 func (s *Scalar) Kind() Kind {
 	return ScalarKind
+}
+
+// Serialize converts a Go scalar value into a GraphQL response value.
+func (s *Scalar) Serialize(value any) (any, error) {
+	if s.serializeFn == nil {
+		return value, nil
+	}
+	return s.serializeFn(value)
 }
 
 // List wraps another [Type] to represent a GraphQL list (`[T]`).
@@ -80,6 +93,52 @@ func (n *NonNull) Kind() Kind {
 	return NonNullKind
 }
 
+// EnumValue describes one legal enum member.
+type EnumValue struct {
+	Name string
+}
+
+// Enum represents a GraphQL enum type.
+type Enum struct {
+	TypeName    string
+	Values      []EnumValue
+	valueByName map[string]any
+	nameByValue map[string]string
+}
+
+// Name returns the enum type name.
+func (e *Enum) Name() string {
+	return e.TypeName
+}
+
+// Kind returns [EnumKind].
+func (e *Enum) Kind() Kind {
+	return EnumKind
+}
+
+// Parse validates input and returns the registered Go enum value.
+func (e *Enum) Parse(input any) (any, error) {
+	name, ok := input.(string)
+	if !ok {
+		return nil, fmt.Errorf("expected enum %s input to be string, got %T", e.TypeName, input)
+	}
+	value, ok := e.valueByName[name]
+	if !ok {
+		return nil, fmt.Errorf("invalid enum %s value %q", e.TypeName, name)
+	}
+	return value, nil
+}
+
+// Serialize converts a Go enum value into its GraphQL enum name.
+func (e *Enum) Serialize(value any) (any, error) {
+	key := enumValueKey(value)
+	name, ok := e.nameByValue[key]
+	if !ok {
+		return nil, fmt.Errorf("invalid enum %s value %v", e.TypeName, value)
+	}
+	return name, nil
+}
+
 // Resolver is the function the executor invokes to produce the value of
 // a single field. Implementations should be safe for concurrent use.
 type Resolver func(ctx context.Context, params ResolveParams) (any, error)
@@ -95,10 +154,11 @@ type ResolveParams struct {
 // Field describes a single field on an object, interface, or input
 // object. Args is empty when the field takes no arguments.
 type Field struct {
-	Name     string
-	Type     Type
-	Args     []InputValue
-	Resolver Resolver
+	Name         string
+	Type         Type
+	Args         []InputValue
+	Resolver     Resolver
+	DefaultValue any
 }
 
 // InputValue describes a single argument or input-object field.
@@ -112,8 +172,10 @@ type InputValue struct {
 // Object describes a GraphQL object type. Fields is keyed by GraphQL
 // field name (already lowercased from the originating Go method name).
 type Object struct {
-	TypeName string
-	Fields   map[string]*Field
+	TypeName   string
+	Fields     map[string]*Field
+	Interfaces []*Interface
+	goType     reflect.Type
 }
 
 // Name returns the object type name.
@@ -128,8 +190,9 @@ func (o *Object) Kind() Kind {
 
 // Interface describes a GraphQL interface type.
 type Interface struct {
-	TypeName string
-	Fields   map[string]*Field
+	TypeName      string
+	Fields        map[string]*Field
+	PossibleTypes []*Object
 }
 
 // Name returns the interface type name.
@@ -140,6 +203,11 @@ func (i *Interface) Name() string {
 // Kind returns [InterfaceKind].
 func (i *Interface) Kind() Kind {
 	return InterfaceKind
+}
+
+// Resolve returns the concrete object metadata for value.
+func (i *Interface) Resolve(value any) (*Object, error) {
+	return resolvePossibleType(i.TypeName, i.PossibleTypes, value)
 }
 
 // Union describes a GraphQL union type as the set of object types it
@@ -157,6 +225,11 @@ func (u *Union) Name() string {
 // Kind returns [UnionKind].
 func (u *Union) Kind() Kind {
 	return UnionKind
+}
+
+// Resolve returns the concrete object metadata for value.
+func (u *Union) Resolve(value any) (*Object, error) {
+	return resolvePossibleType(u.TypeName, u.Types, value)
 }
 
 // InputObject describes a GraphQL input object type. The Resolver field
@@ -185,4 +258,27 @@ type Schema struct {
 	Mutation     *Object
 	Subscription *Object
 	Types        map[string]Type
+}
+
+func enumValueKey(value any) string {
+	return fmt.Sprintf("%T:%#v", value, value)
+}
+
+func resolvePossibleType(typeName string, possibleTypes []*Object, value any) (*Object, error) {
+	if value == nil {
+		return nil, fmt.Errorf("%s resolved to nil", typeName)
+	}
+
+	rawType := reflect.TypeOf(value)
+	for rawType.Kind() == reflect.Pointer {
+		rawType = rawType.Elem()
+	}
+
+	for _, object := range possibleTypes {
+		if object.goType == rawType {
+			return object, nil
+		}
+	}
+
+	return nil, fmt.Errorf("no possible type on %s matches %T", typeName, value)
 }

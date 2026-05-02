@@ -57,7 +57,8 @@ Current status:
 
 - Core query, mutation, and subscription flows are implemented.
 - HTTP, SSE, and WebSocket transport support exists.
-- The roadmap still includes missing parity items such as broader GraphQL-over-HTTP semantics and additional language and execution features.
+- GraphQL responses now include field and request error classification, source locations, and stable response field ordering.
+- The roadmap still includes missing parity items such as broader GraphQL-over-HTTP semantics, incremental delivery execution, and additional language and execution features.
 
 For detailed status and planned work, see:
 

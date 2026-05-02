@@ -54,6 +54,10 @@ func (*testNodePost) isTestSearchResult() {}
 
 type testQuery struct{}
 
+type testAdvancedQuery struct {
+	testQuery
+}
+
 type testMutation struct{}
 
 type testUserCreateInput struct {
@@ -79,19 +83,25 @@ func (testQuery) User(ctx context.Context, args struct {
 	return &testUser{ID: args.ID, Name: "Ada"}, nil
 }
 
-func (testQuery) FavoriteEpisode(ctx context.Context, args struct {
+func (testAdvancedQuery) User(ctx context.Context, args struct {
+	ID string `gql:"id,nonNull"`
+}) (*testUser, error) {
+	return testQuery{}.User(ctx, args)
+}
+
+func (testAdvancedQuery) FavoriteEpisode(ctx context.Context, args struct {
 	Episode testEpisode `gql:"episode,default=JEDI"`
 }) (testEpisode, error) {
 	return args.Episode, nil
 }
 
-func (testQuery) EchoDate(ctx context.Context, args struct {
+func (testAdvancedQuery) EchoDate(ctx context.Context, args struct {
 	At testDate `gql:"at,default=2026-05-01"`
 }) (testDate, error) {
 	return args.At, nil
 }
 
-func (testQuery) Node(ctx context.Context, args struct {
+func (testAdvancedQuery) Node(ctx context.Context, args struct {
 	Kind string `gql:"kind,default=user"`
 }) (testNode, error) {
 	if args.Kind == "post" {
@@ -100,7 +110,7 @@ func (testQuery) Node(ctx context.Context, args struct {
 	return &testNodeUser{ID: "user_1", Name: "Ada"}, nil
 }
 
-func (testQuery) Search(ctx context.Context, args struct {
+func (testAdvancedQuery) Search(ctx context.Context, args struct {
 	Kind string `gql:"kind,default=user"`
 }) (testSearchResult, error) {
 	if args.Kind == "post" {
@@ -109,7 +119,7 @@ func (testQuery) Search(ctx context.Context, args struct {
 	return &testNodeUser{ID: "user_1", Name: "Ada"}, nil
 }
 
-func (testQuery) Defaulted(ctx context.Context, args struct {
+func (testAdvancedQuery) Defaulted(ctx context.Context, args struct {
 	Input testDefaultInput `gql:"input,nonNull"`
 }) (string, error) {
 	return fmt.Sprintf("%s:%d", args.Input.Query, args.Input.Limit), nil
@@ -269,6 +279,9 @@ func TestExecutorHandlesSchemaIntrospectionQueryWithFragments(t *testing.T) {
 
 	idArg, ok := args[0].(map[string]any)
 	if !ok {
+		idArg, ok = responseObjectValue(args[0])
+	}
+	if !ok {
 		t.Fatalf("expected id arg map, got %T", args[0])
 	}
 	if idArg["name"] != "id" {
@@ -289,7 +302,7 @@ func introspectionField(t *testing.T, types []any, typeName string, fieldName st
 	t.Helper()
 
 	for _, rawType := range types {
-		typeValue, ok := rawType.(map[string]any)
+		typeValue, ok := responseObjectValue(rawType)
 		if !ok || typeValue["name"] != typeName {
 			continue
 		}
@@ -314,7 +327,7 @@ func testAdvancedSchema(t *testing.T) *schema.Schema {
 	t.Helper()
 
 	schemaValue, err := schema.Build(schema.Config{
-		Query: testQuery{},
+		Query: testAdvancedQuery{},
 		Scalars: []schema.ScalarConfig{
 			{
 				Type: testDate{},

@@ -10,6 +10,12 @@ help: ## Show this help.
 	@awk 'BEGIN {FS = ":.*##"; printf "\nUsage:\n  make \033[36m<target>\033[0m\n\nTargets:\n"} \
 	     /^[a-zA-Z0-9_.-]+:.*?##/ { printf "  \033[36m%-22s\033[0m %s\n", $$1, $$2 }' $(MAKEFILE_LIST)
 
+## ---- Run Examples --------------------------------------------------------
+
+.PHONY: run-basic
+run-basic: ## Run the basic example server.
+	$(GO) run ./examples/basic
+
 ## ---- Build / test --------------------------------------------------------
 
 .PHONY: build
@@ -40,10 +46,6 @@ fmt: ## gofmt every Go file in place.
 docs-install: ## Install docs site dependencies (uses bun).
 	cd $(DOCS_DIR) && $(BUN) install
 
-.PHONY: docs-api
-docs-api: ## Regenerate the API reference markdown from Go doc comments.
-	./scripts/gen-api-docs.sh
-
 .PHONY: docs-changelog
 docs-changelog: ## Mirror CHANGELOG.md into the docs site.
 	./scripts/sync-changelog.sh
@@ -53,7 +55,7 @@ docs-roadmap: ## Mirror the README Feature Parity Checklist into the docs site a
 	./scripts/sync-roadmap.sh
 
 .PHONY: docs-content
-docs-content: docs-api docs-changelog docs-roadmap ## Regenerate every auto-generated docs page (API ref + changelog + roadmap).
+docs-content: docs-changelog docs-roadmap ## Regenerate every auto-generated docs page (API ref + changelog + roadmap).
 
 .PHONY: docs-dev
 docs-dev: docs-content ## Run the docs site dev server with HMR (http://localhost:4321/grx).
@@ -74,3 +76,17 @@ docs-pkgsite: ## Run pkgsite locally (the engine behind pkg.go.dev) on :6060.
 .PHONY: docs-clean
 docs-clean: ## Remove the built docs site and node_modules.
 	rm -rf $(DOCS_DIR)/dist $(DOCS_DIR)/node_modules $(DOCS_DIR)/.astro
+
+## ---- Benchmark -----------------------------------------------------------
+
+.PHONY: benchmark
+benchmark: ## Run the benchmarks.
+	$(GO) test -bench=. ./...
+
+.PHONY: benchmark-race
+benchmark-race: ## Run the benchmarks with race detection.
+	$(GO) test -race -bench=. ./...
+
+.PHONY: benchmark-mem
+benchmark-mem: ## Run the benchmarks with memory profiling.
+	$(GO) test -bench=. -memprofile=mem.prof ./...
