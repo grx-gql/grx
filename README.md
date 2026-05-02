@@ -45,13 +45,6 @@ Contribution rules for this repository:
 - Do not revert unrelated changes.
 - Run relevant validation before opening a change, at minimum `make test` when code changes affect runtime behavior.
 
-If you are updating docs or generated reference content, use the existing repo targets instead of ad hoc commands:
-
-```bash
-make docs-api
-make docs-content
-```
-
 ## License
 
 This repository does not currently include a root `LICENSE` file. Until a license is added, the usage terms are not explicitly defined in the repository.
