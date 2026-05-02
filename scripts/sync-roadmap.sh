@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Mirror the "Feature Parity Checklist", "Implementation Plan", and
-# "Performance Requirements" sections from the root README.md into the
+# "Performance Requirements" sections from the root ROADMAP.md into the
 # Starlight content collection as the project roadmap. Also compute a
 # per-section progress summary ([x] vs [ ] counts) and prepend it as a
 # "Progress at a glance" table so the "what's done vs what's not"
@@ -10,7 +10,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
 ROOT_DIR="$(cd -- "$SCRIPT_DIR/.." >/dev/null 2>&1 && pwd)"
-SRC="$ROOT_DIR/README.md"
+SRC="$ROOT_DIR/ROADMAP.md"
 DST="$ROOT_DIR/docs/src/content/docs/roadmap.md"
 
 if [[ ! -f "$SRC" ]]; then
@@ -20,7 +20,7 @@ fi
 
 mkdir -p "$(dirname "$DST")"
 
-# 1) Slice the relevant range from the README: from "## Feature Parity
+# 1) Slice the relevant range from the roadmap source: from "## Feature Parity
 #    Checklist" through end of file (which is "## Performance Requirements"
 #    today). Captured into a temp file so we can read it twice.
 SLICE="$(mktemp -t grx-roadmap.XXXXXX)"
@@ -86,7 +86,7 @@ tableOfContents:
 ---
 
 > This page is mirrored from the **Feature Parity Checklist** in
-> [\`README.md\`](https://github.com/patrickkabwe/grx/blob/main/README.md)
+> [\`ROADMAP.md\`](https://github.com/patrickkabwe/grx/blob/main/ROADMAP.md)
 > at the repository root. Edit that file, not this one.
 
 ## Overall progress

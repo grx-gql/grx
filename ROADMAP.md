@@ -1,46 +1,8 @@
----
-title: Roadmap
-description: What grx supports today, what is planned, and how the work is sequenced.
-sidebar:
-  order: 6
-editUrl: https://github.com/patrickkabwe/grx/edit/main/README.md
-tableOfContents:
-  minHeadingLevel: 2
-  maxHeadingLevel: 3
----
+# Roadmap
 
-> This page is mirrored from the **Feature Parity Checklist** in
-> [`ROADMAP.md`](https://github.com/patrickkabwe/grx/blob/main/ROADMAP.md)
-> at the repository root. Edit that file, not this one.
+This file is the source of truth for feature parity tracking and roadmap sync into the docs site.
 
-## Overall progress
-
-**122 / 324 items complete (37%)** across the
-sections below.
-
-## Progress at a glance
-
-| Area | Done / Total | % |
-| --- | --- | --- |
-| Server HTTP Transport | 7 / 24 | 29% |
-| GraphQL Language Lexer | 20 / 22 | 90% |
-| GraphQL Parser | 11 / 28 | 39% |
-| Type System | 8 / 35 | 22% |
-| Validation | 0 / 40 | 0% |
-| Execution | 10 / 38 | 26% |
-| Introspection | 8 / 24 | 33% |
-| Built-in Directives | 0 / 7 | 0% |
-| Response Format | 4 / 13 | 30% |
-| Developer Experience | 10 / 20 | 50% |
-| Subscriptions | 17 / 17 | 100% |
-| WebSocket Transport (RFC 6455) | 15 / 19 | 78% |
-| graphql-transport-ws Subprotocol | 12 / 12 | 100% |
-| Security | 0 / 11 | 0% |
-| Observability | 0 / 9 | 0% |
-| Data Loading | 0 / 5 | 0% |
-
-## Detailed checklist
-
+## Feature Parity Checklist
 
 ### Server HTTP Transport
 
