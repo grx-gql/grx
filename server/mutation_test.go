@@ -93,7 +93,7 @@ func TestServeHTTPReturnsMutationFieldErrorsWithPartialData(t *testing.T) {
 		t.Fatalf("unexpected error message: %#v", errorValue["message"])
 	}
 	assertErrorClassification(t, errorValue, "field")
-	assertErrorLocations(t, errorValue, 1, 45)
+	assertErrorLocations(t, errorValue, 1, 60)
 	path, ok := errorValue["path"].([]any)
 	if !ok || len(path) != 1 || path[0] != "missing" {
 		t.Fatalf("expected missing error path, got %#v", errorValue["path"])

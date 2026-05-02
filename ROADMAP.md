@@ -75,7 +75,7 @@ This file is the source of truth for feature parity tracking and roadmap sync in
 - [ ] Variable definitions with default values
 - [x] List value literals
 - [x] Object value literals
-- [ ] Enum value literals with type context
+- [x] Enum value literals with type context
 - [ ] Null value validation in context
 - [ ] Full grammar-compliant error reporting
 - [ ] Type system definitions via SDL (schema, types, directives)
@@ -96,10 +96,10 @@ This file is the source of truth for feature parity tracking and roadmap sync in
 - [x] List type wrappers
 - [x] Non-null type wrappers
 - [x] Input object types for resolver arguments
-- [ ] Enum types
-- [ ] Interface types
-- [ ] Union types
-- [ ] Custom scalar registration
+- [x] Enum types
+- [x] Interface types
+- [x] Union types
+- [x] Custom scalar registration
 - [ ] Schema directives
 - [ ] Field directives
 - [ ] Argument directives
@@ -108,8 +108,8 @@ This file is the source of truth for feature parity tracking and roadmap sync in
 - [ ] Field descriptions
 - [ ] Argument descriptions
 - [ ] Deprecation metadata
-- [ ] Default argument values
-- [ ] Default input field values
+- [x] Default argument values
+- [x] Default input field values
 - [ ] Schema extension
 - [ ] Type extension
 - [ ] SDL parser
@@ -189,13 +189,13 @@ This file is the source of truth for feature parity tracking and roadmap sync in
 - [ ] Argument default value coercion
 - [ ] Input object default value coercion
 - [ ] Scalar result coercion
-- [ ] Enum result coercion
+- [x] Enum result coercion
 - [ ] List input coercion
 - [ ] Non-null error bubbling
 - [ ] Error path for aliased fields
 - [ ] Error locations
-- [ ] Interface concrete type resolution
-- [ ] Union concrete type resolution
+- [x] Interface concrete type resolution
+- [x] Union concrete type resolution
 - [ ] Custom scalar serialization and parsing
 - [ ] Context cancellation checks
 - [x] Subscription source streams

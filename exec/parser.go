@@ -424,6 +424,7 @@ func (p *parser) next() token {
 // implementation favours raw byte indexing over rune iteration and only falls
 // back to UTF-8 decoding when a non-ASCII byte is encountered.
 func lex(input string) ([]token, error) {
+	input = normalizeSource(input)
 	// Heuristic: roughly one token per ~4 source bytes for typical operations.
 	tokens := make([]token, 0, len(input)/4+1)
 	n := len(input)

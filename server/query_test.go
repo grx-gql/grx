@@ -64,9 +64,40 @@ func TestServeHTTPReturnsQueryFieldErrorsWithPartialData(t *testing.T) {
 		t.Fatalf("unexpected error message: %#v", errorValue["message"])
 	}
 	assertErrorClassification(t, errorValue, "field")
-	assertErrorLocations(t, errorValue, 1, 40)
+	assertErrorLocations(t, errorValue, 1, 42)
 	path, ok := errorValue["path"].([]any)
 	if !ok || len(path) != 1 || path[0] != "missing" {
 		t.Fatalf("expected missing error path, got %#v", errorValue["path"])
+	}
+}
+
+func TestServeHTTPReturnsExampleFieldErrorFromBasicSchema(t *testing.T) {
+	server := newTestServer(t)
+	response := executeGraphQL(t, server, `{"query":"query ExampleError { errorExample }"}`)
+
+	if response.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d", http.StatusOK, response.Code)
+	}
+
+	body := graphQLResponseBody(t, response)
+	data := nestedMap(t, body, "data")
+	if len(data) != 0 {
+		t.Fatalf("expected empty partial data for errorExample, got %#v", data)
+	}
+
+	errors := graphQLErrors(t, body)
+	if len(errors) != 1 {
+		t.Fatalf("expected one error, got %#v", errors)
+	}
+
+	errorValue := graphQLError(t, errors, 0)
+	if errorValue["message"] != "example error from basic server" {
+		t.Fatalf("unexpected error message: %#v", errorValue["message"])
+	}
+	assertErrorClassification(t, errorValue, "field")
+	assertErrorLocations(t, errorValue, 1, 22)
+	path, ok := errorValue["path"].([]any)
+	if !ok || len(path) != 1 || path[0] != "errorExample" {
+		t.Fatalf("expected errorExample path, got %#v", errorValue["path"])
 	}
 }

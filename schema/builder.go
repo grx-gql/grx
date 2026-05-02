@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"strconv"
 	"strings"
 )
 
@@ -15,6 +16,40 @@ var (
 	booleanScalar = &Scalar{TypeName: "Boolean"}
 	idScalar      = &Scalar{TypeName: "ID"}
 )
+
+// ScalarConfig registers a custom scalar for a Go type.
+type ScalarConfig struct {
+	Type      any
+	Name      string
+	Parse     func(input any) (any, error)
+	Serialize func(value any) (any, error)
+}
+
+// EnumValueConfig registers one GraphQL enum member and its Go value.
+type EnumValueConfig struct {
+	Name  string
+	Value any
+}
+
+// EnumConfig registers an enum for a named Go type.
+type EnumConfig struct {
+	Type   any
+	Name   string
+	Values []EnumValueConfig
+}
+
+// InterfaceConfig registers a GraphQL interface for a Go interface type.
+type InterfaceConfig struct {
+	Type         any
+	Implementors []any
+}
+
+// UnionConfig registers a GraphQL union for a Go interface type.
+type UnionConfig struct {
+	Type         any
+	Name         string
+	Implementors []any
+}
 
 // Config holds the user-supplied root resolvers that [Build] reflects
 // into a runtime [Schema]. Query is required; Mutation and Subscription
@@ -27,13 +62,38 @@ type Config struct {
 	Mutation any
 	// Subscription is the root subscription resolver value. Optional.
 	Subscription any
+	// Scalars registers custom scalars by Go type.
+	Scalars []ScalarConfig
+	// Enums registers enums by Go type.
+	Enums []EnumConfig
+	// Interfaces registers GraphQL interfaces by Go interface type.
+	Interfaces []InterfaceConfig
+	// Unions registers GraphQL unions by Go interface type.
+	Unions []UnionConfig
+}
+
+type customScalar struct {
+	scalar *Scalar
+	parse  func(input any) (any, error)
 }
 
 // Builder accumulates the type registry while a [Schema] is being
 // assembled. It is not safe for concurrent use; construct one per Build
 // call.
 type Builder struct {
-	types map[string]Type
+	types        map[string]Type
+	scalars      map[reflect.Type]customScalar
+	enums        map[reflect.Type]*Enum
+	interfaces   map[reflect.Type]*Interface
+	unions       map[reflect.Type]*Union
+	implementors map[reflect.Type][]reflect.Type
+}
+
+type tagOptions struct {
+	name         string
+	required     bool
+	hasDefault   bool
+	defaultValue string
 }
 
 // Build reflects the supplied resolver values into a runtime [Schema].
@@ -41,29 +101,33 @@ type Builder struct {
 // missing Query root, both Schema and root fields supplied) or when a
 // resolver cannot be reflected into the GraphQL type system.
 func Build(config Config) (*Schema, error) {
-	builder := Builder{types: builtinScalars()}
+	builder, err := newBuilder(config)
+	if err != nil {
+		return nil, err
+	}
+
 	result := &Schema{Types: builder.types}
 
 	if config.Query != nil {
-		query, err := builder.buildRootObject("Query", config.Query)
-		if err != nil {
-			return nil, err
+		query, buildErr := builder.buildRootObject("Query", config.Query)
+		if buildErr != nil {
+			return nil, buildErr
 		}
 		result.Query = query
 	}
 
 	if config.Mutation != nil {
-		mutation, err := builder.buildRootObject("Mutation", config.Mutation)
-		if err != nil {
-			return nil, err
+		mutation, buildErr := builder.buildRootObject("Mutation", config.Mutation)
+		if buildErr != nil {
+			return nil, buildErr
 		}
 		result.Mutation = mutation
 	}
 
 	if config.Subscription != nil {
-		subscription, err := builder.buildRootObject("Subscription", config.Subscription)
-		if err != nil {
-			return nil, err
+		subscription, buildErr := builder.buildRootObject("Subscription", config.Subscription)
+		if buildErr != nil {
+			return nil, buildErr
 		}
 		result.Subscription = subscription
 	}
@@ -75,6 +139,32 @@ func Build(config Config) (*Schema, error) {
 	return result, nil
 }
 
+func newBuilder(config Config) (*Builder, error) {
+	builder := &Builder{
+		types:        builtinScalars(),
+		scalars:      map[reflect.Type]customScalar{},
+		enums:        map[reflect.Type]*Enum{},
+		interfaces:   map[reflect.Type]*Interface{},
+		unions:       map[reflect.Type]*Union{},
+		implementors: map[reflect.Type][]reflect.Type{},
+	}
+
+	if err := builder.registerScalars(config.Scalars); err != nil {
+		return nil, err
+	}
+	if err := builder.registerEnums(config.Enums); err != nil {
+		return nil, err
+	}
+	if err := builder.registerInterfaces(config.Interfaces); err != nil {
+		return nil, err
+	}
+	if err := builder.registerUnions(config.Unions); err != nil {
+		return nil, err
+	}
+
+	return builder, nil
+}
+
 func builtinScalars() map[string]Type {
 	return map[string]Type{
 		"String":  stringScalar,
@@ -83,6 +173,145 @@ func builtinScalars() map[string]Type {
 		"Boolean": booleanScalar,
 		"ID":      idScalar,
 	}
+}
+
+func (b *Builder) registerScalars(configs []ScalarConfig) error {
+	for _, config := range configs {
+		goType, err := namedTypeOf(config.Type)
+		if err != nil {
+			return fmt.Errorf("scalar %q: %w", config.Name, err)
+		}
+		if config.Name == "" {
+			return fmt.Errorf("scalar %s must have a GraphQL name", goType.String())
+		}
+		if config.Parse == nil {
+			return fmt.Errorf("scalar %q must define Parse", config.Name)
+		}
+		scalar := &Scalar{TypeName: config.Name, serializeFn: config.Serialize}
+		b.types[config.Name] = scalar
+		b.scalars[goType] = customScalar{scalar: scalar, parse: config.Parse}
+	}
+	return nil
+}
+
+func (b *Builder) registerEnums(configs []EnumConfig) error {
+	for _, config := range configs {
+		goType, err := namedTypeOf(config.Type)
+		if err != nil {
+			return fmt.Errorf("enum %q: %w", config.Name, err)
+		}
+		if config.Name == "" {
+			return fmt.Errorf("enum %s must have a GraphQL name", goType.String())
+		}
+		if len(config.Values) == 0 {
+			return fmt.Errorf("enum %q must define at least one value", config.Name)
+		}
+
+		enumType := &Enum{
+			TypeName:    config.Name,
+			Values:      make([]EnumValue, 0, len(config.Values)),
+			valueByName: map[string]any{},
+			nameByValue: map[string]string{},
+		}
+		for _, value := range config.Values {
+			enumType.Values = append(enumType.Values, EnumValue{Name: value.Name})
+			enumType.valueByName[value.Name] = value.Value
+			enumType.nameByValue[enumValueKey(value.Value)] = value.Name
+		}
+
+		b.types[config.Name] = enumType
+		b.enums[goType] = enumType
+	}
+	return nil
+}
+
+func (b *Builder) registerInterfaces(configs []InterfaceConfig) error {
+	for _, config := range configs {
+		interfaceType, err := interfaceTypeOf(config.Type)
+		if err != nil {
+			return err
+		}
+
+		graphqlInterface := &Interface{
+			TypeName:      interfaceType.Name(),
+			Fields:        map[string]*Field{},
+			PossibleTypes: make([]*Object, 0, len(config.Implementors)),
+		}
+		b.types[graphqlInterface.TypeName] = graphqlInterface
+		b.interfaces[interfaceType] = graphqlInterface
+
+		for _, implementor := range config.Implementors {
+			goType, typeErr := namedTypeOf(implementor)
+			if typeErr != nil {
+				return fmt.Errorf("interface %q implementor: %w", graphqlInterface.TypeName, typeErr)
+			}
+			b.implementors[interfaceType] = append(b.implementors[interfaceType], goType)
+		}
+	}
+	return nil
+}
+
+func (b *Builder) registerUnions(configs []UnionConfig) error {
+	for _, config := range configs {
+		interfaceType, err := interfaceTypeOf(config.Type)
+		if err != nil {
+			return err
+		}
+
+		name := config.Name
+		if name == "" {
+			name = interfaceType.Name()
+		}
+		if name == "" {
+			return fmt.Errorf("union %s must have a GraphQL name", interfaceType.String())
+		}
+
+		unionType := &Union{TypeName: name, Types: make([]*Object, 0, len(config.Implementors))}
+		b.types[unionType.TypeName] = unionType
+		b.unions[interfaceType] = unionType
+
+		for _, implementor := range config.Implementors {
+			goType, typeErr := namedTypeOf(implementor)
+			if typeErr != nil {
+				return fmt.Errorf("union %q implementor: %w", unionType.TypeName, typeErr)
+			}
+			b.implementors[interfaceType] = append(b.implementors[interfaceType], goType)
+		}
+	}
+	return nil
+}
+
+func namedTypeOf(value any) (reflect.Type, error) {
+	if value == nil {
+		return nil, errors.New("type cannot be nil")
+	}
+
+	goType := reflect.TypeOf(value)
+	for goType.Kind() == reflect.Pointer {
+		goType = goType.Elem()
+	}
+	if goType.Name() == "" {
+		return nil, fmt.Errorf("type %s must be named", goType.String())
+	}
+	return goType, nil
+}
+
+func interfaceTypeOf(value any) (reflect.Type, error) {
+	if value == nil {
+		return nil, errors.New("interface type cannot be nil")
+	}
+
+	goType := reflect.TypeOf(value)
+	if goType.Kind() == reflect.Pointer {
+		goType = goType.Elem()
+	}
+	if goType.Kind() != reflect.Interface {
+		return nil, fmt.Errorf("type %s must be an interface", goType.String())
+	}
+	if goType.Name() == "" {
+		return nil, fmt.Errorf("interface type %s must be named", goType.String())
+	}
+	return goType, nil
 }
 
 func (b *Builder) buildRootObject(name string, value any) (*Object, error) {
@@ -136,7 +365,7 @@ func (b *Builder) buildMethodField(receiver any, method reflect.Method) (*Field,
 		Type: outputType,
 		Args: args,
 		Resolver: func(ctx context.Context, params ResolveParams) (any, error) {
-			return callResolver(ctx, receiver, method, argsType, params.Args)
+			return b.callResolver(ctx, receiver, method, argsType, params.Args)
 		},
 	}
 
@@ -169,13 +398,13 @@ func resolverArgsType(method reflect.Method) (reflect.Type, error) {
 	return argsType, nil
 }
 
-func callResolver(ctx context.Context, receiver any, method reflect.Method, argsType reflect.Type, args map[string]any) (any, error) {
+func (b *Builder) callResolver(ctx context.Context, receiver any, method reflect.Method, argsType reflect.Type, args map[string]any) (any, error) {
 	values := []reflect.Value{reflect.ValueOf(receiver)}
 	if method.Type.NumIn() > 1 && method.Type.In(1) == reflect.TypeOf((*context.Context)(nil)).Elem() {
 		values = append(values, reflect.ValueOf(ctx))
 	}
 	if argsType != nil {
-		argValue, err := buildArgs(argsType, args)
+		argValue, err := b.buildArgs(argsType, args)
 		if err != nil {
 			return nil, err
 		}
@@ -190,24 +419,43 @@ func callResolver(ctx context.Context, receiver any, method reflect.Method, args
 	return results[0].Interface(), nil
 }
 
-func buildArgs(argsType reflect.Type, args map[string]any) (reflect.Value, error) {
+func (b *Builder) buildArgs(argsType reflect.Type, args map[string]any) (reflect.Value, error) {
 	value := reflect.New(argsType).Elem()
 	for index := 0; index < argsType.NumField(); index++ {
 		field := argsType.Field(index)
-		argName, required := parseTag(field)
+		if field.PkgPath != "" {
+			continue
+		}
+
+		options := parseTag(field)
+		if options.name == "-" {
+			continue
+		}
+
+		argName := options.name
 		if argName == "" {
 			argName = lowerFirst(field.Name)
 		}
 
 		raw, exists := args[argName]
 		if !exists {
-			if required {
+			if options.hasDefault {
+				defaultValue, err := b.parseDefaultValue(field.Type, options.defaultValue)
+				if err != nil {
+					return reflect.Value{}, fmt.Errorf("argument %q default: %w", argName, err)
+				}
+				if err := b.setValue(value.Field(index), defaultValue); err != nil {
+					return reflect.Value{}, fmt.Errorf("argument %q default: %w", argName, err)
+				}
+				continue
+			}
+			if options.required {
 				return reflect.Value{}, fmt.Errorf("missing required argument %q", argName)
 			}
 			continue
 		}
 
-		if err := setValue(value.Field(index), raw); err != nil {
+		if err := b.setValue(value.Field(index), raw); err != nil {
 			return reflect.Value{}, fmt.Errorf("argument %q: %w", argName, err)
 		}
 	}
@@ -215,38 +463,66 @@ func buildArgs(argsType reflect.Type, args map[string]any) (reflect.Value, error
 	return value, nil
 }
 
-func setValue(target reflect.Value, raw any) error {
+func (b *Builder) setValue(target reflect.Value, raw any) error {
 	if raw == nil {
 		return nil
 	}
 	if target.Kind() == reflect.Pointer {
 		value := reflect.New(target.Type().Elem())
-		if err := setValue(value.Elem(), raw); err != nil {
+		if err := b.setValue(value.Elem(), raw); err != nil {
 			return err
 		}
 		target.Set(value)
 		return nil
 	}
+
+	rawValue := reflect.ValueOf(raw)
+	if rawValue.IsValid() {
+		if rawValue.Type().AssignableTo(target.Type()) {
+			target.Set(rawValue)
+			return nil
+		}
+		if rawValue.Type().ConvertibleTo(target.Type()) {
+			target.Set(rawValue.Convert(target.Type()))
+			return nil
+		}
+	}
+
+	if enumType, ok := b.enums[target.Type()]; ok {
+		value, err := enumType.Parse(raw)
+		if err != nil {
+			return err
+		}
+		target.Set(reflect.ValueOf(value).Convert(target.Type()))
+		return nil
+	}
+	if scalar, ok := b.scalars[target.Type()]; ok {
+		value, err := scalar.parse(raw)
+		if err != nil {
+			return err
+		}
+		rawValue := reflect.ValueOf(value)
+		if !rawValue.Type().AssignableTo(target.Type()) && !rawValue.Type().ConvertibleTo(target.Type()) {
+			return fmt.Errorf("cannot assign %T to %s", value, target.Type().String())
+		}
+		if rawValue.Type().AssignableTo(target.Type()) {
+			target.Set(rawValue)
+			return nil
+		}
+		target.Set(rawValue.Convert(target.Type()))
+		return nil
+	}
+
 	if target.Kind() == reflect.Struct {
 		fields, ok := raw.(map[string]any)
 		if !ok {
 			return fmt.Errorf("cannot assign %T to %s", raw, target.Type().String())
 		}
-		inputValue, err := buildArgs(target.Type(), fields)
+		inputValue, err := b.buildArgs(target.Type(), fields)
 		if err != nil {
 			return err
 		}
 		target.Set(inputValue)
-		return nil
-	}
-
-	rawValue := reflect.ValueOf(raw)
-	if rawValue.Type().AssignableTo(target.Type()) {
-		target.Set(rawValue)
-		return nil
-	}
-	if rawValue.Type().ConvertibleTo(target.Type()) {
-		target.Set(rawValue.Convert(target.Type()))
 		return nil
 	}
 
@@ -265,10 +541,12 @@ func (b *Builder) graphQLArgs(argsType reflect.Type) ([]InputValue, error) {
 			continue
 		}
 
-		argName, required := parseTag(field)
-		if argName == "-" {
+		options := parseTag(field)
+		if options.name == "-" {
 			continue
 		}
+
+		argName := options.name
 		if argName == "" {
 			argName = lowerFirst(field.Name)
 		}
@@ -277,28 +555,41 @@ func (b *Builder) graphQLArgs(argsType reflect.Type) ([]InputValue, error) {
 		if err != nil {
 			return nil, fmt.Errorf("field %s.%s: %w", argsType.Name(), field.Name, err)
 		}
-		if required {
+		if options.required {
 			argType = &NonNull{OfType: argType}
 		}
 
-		args = append(args, InputValue{Name: argName, Type: argType})
+		defaultValue, err := b.defaultValue(field.Type, options)
+		if err != nil {
+			return nil, fmt.Errorf("field %s.%s default: %w", argsType.Name(), field.Name, err)
+		}
+
+		args = append(args, InputValue{Name: argName, Type: argType, DefaultValue: defaultValue})
 	}
 	return args, nil
 }
 
 func (b *Builder) graphQLInputType(goType reflect.Type) (Type, error) {
-	if goType.Kind() == reflect.Pointer {
-		return b.graphQLInputType(goType.Elem())
+	baseType := goType
+	for baseType.Kind() == reflect.Pointer {
+		baseType = baseType.Elem()
 	}
-	if goType.Kind() == reflect.Slice || goType.Kind() == reflect.Array {
-		itemType, err := b.graphQLInputType(goType.Elem())
+
+	if enumType, ok := b.enums[baseType]; ok {
+		return enumType, nil
+	}
+	if scalar, ok := b.scalars[baseType]; ok {
+		return scalar.scalar, nil
+	}
+	if baseType.Kind() == reflect.Slice || baseType.Kind() == reflect.Array {
+		itemType, err := b.graphQLInputType(baseType.Elem())
 		if err != nil {
 			return nil, err
 		}
 		return &List{OfType: itemType}, nil
 	}
 
-	switch goType.Kind() {
+	switch baseType.Kind() {
 	case reflect.String:
 		return stringScalar, nil
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
@@ -308,25 +599,45 @@ func (b *Builder) graphQLInputType(goType reflect.Type) (Type, error) {
 	case reflect.Bool:
 		return booleanScalar, nil
 	case reflect.Struct:
-		return b.buildInputObject(goType)
+		return b.buildInputObject(baseType)
 	default:
-		return nil, fmt.Errorf("unsupported Go input type %s", goType.String())
+		return nil, fmt.Errorf("unsupported Go input type %s", baseType.String())
 	}
 }
 
 func (b *Builder) graphQLType(goType reflect.Type) (Type, error) {
-	if goType.Kind() == reflect.Pointer {
-		return b.graphQLType(goType.Elem())
+	baseType := goType
+	for baseType.Kind() == reflect.Pointer {
+		baseType = baseType.Elem()
 	}
-	if goType.Kind() == reflect.Slice || goType.Kind() == reflect.Array {
-		itemType, err := b.graphQLType(goType.Elem())
+
+	if enumType, ok := b.enums[baseType]; ok {
+		return enumType, nil
+	}
+	if scalar, ok := b.scalars[baseType]; ok {
+		return scalar.scalar, nil
+	}
+	if interfaceType, ok := b.interfaces[baseType]; ok {
+		if err := b.populateInterface(interfaceType, baseType); err != nil {
+			return nil, err
+		}
+		return interfaceType, nil
+	}
+	if unionType, ok := b.unions[baseType]; ok {
+		if err := b.populateUnion(unionType, baseType); err != nil {
+			return nil, err
+		}
+		return unionType, nil
+	}
+	if baseType.Kind() == reflect.Slice || baseType.Kind() == reflect.Array {
+		itemType, err := b.graphQLType(baseType.Elem())
 		if err != nil {
 			return nil, err
 		}
 		return &List{OfType: itemType}, nil
 	}
 
-	switch goType.Kind() {
+	switch baseType.Kind() {
 	case reflect.String:
 		return stringScalar, nil
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
@@ -336,9 +647,9 @@ func (b *Builder) graphQLType(goType reflect.Type) (Type, error) {
 	case reflect.Bool:
 		return booleanScalar, nil
 	case reflect.Struct:
-		return b.buildObject(goType)
+		return b.buildObject(baseType)
 	default:
-		return nil, fmt.Errorf("unsupported Go type %s", goType.String())
+		return nil, fmt.Errorf("unsupported Go type %s", baseType.String())
 	}
 }
 
@@ -352,7 +663,7 @@ func (b *Builder) buildObject(goType reflect.Type) (*Object, error) {
 		return object, nil
 	}
 
-	object := &Object{TypeName: name, Fields: map[string]*Field{}}
+	object := &Object{TypeName: name, Fields: map[string]*Field{}, goType: goType}
 	b.types[name] = object
 
 	for index := 0; index < goType.NumField(); index++ {
@@ -361,10 +672,12 @@ func (b *Builder) buildObject(goType reflect.Type) (*Object, error) {
 			continue
 		}
 
-		fieldName, required := parseTag(structField)
-		if fieldName == "-" {
+		options := parseTag(structField)
+		if options.name == "-" {
 			continue
 		}
+
+		fieldName := options.name
 		if fieldName == "" {
 			fieldName = lowerFirst(structField.Name)
 		}
@@ -373,7 +686,7 @@ func (b *Builder) buildObject(goType reflect.Type) (*Object, error) {
 		if err != nil {
 			return nil, fmt.Errorf("field %s.%s: %w", goType.Name(), structField.Name, err)
 		}
-		if required {
+		if options.required {
 			fieldType = &NonNull{OfType: fieldType}
 		}
 
@@ -391,7 +704,88 @@ func (b *Builder) buildObject(goType reflect.Type) (*Object, error) {
 		}
 	}
 
+	for interfaceType, implementors := range b.implementors {
+		if !containsType(implementors, goType) {
+			continue
+		}
+		if graphqlInterface, ok := b.interfaces[interfaceType]; ok {
+			if err := b.populateInterface(graphqlInterface, interfaceType); err != nil {
+				return nil, err
+			}
+			object.Interfaces = append(object.Interfaces, graphqlInterface)
+		}
+		if graphqlUnion, ok := b.unions[interfaceType]; ok {
+			if err := b.populateUnion(graphqlUnion, interfaceType); err != nil {
+				return nil, err
+			}
+		}
+	}
+
 	return object, nil
+}
+
+func (b *Builder) populateInterface(interfaceType *Interface, goType reflect.Type) error {
+	if len(interfaceType.PossibleTypes) > 0 {
+		return nil
+	}
+
+	implementors := b.implementors[goType]
+	commonFields := map[string]Type{}
+	initialized := false
+
+	for _, implementor := range implementors {
+		objectType, err := b.buildObject(implementor)
+		if err != nil {
+			return err
+		}
+		interfaceType.PossibleTypes = append(interfaceType.PossibleTypes, objectType)
+
+		if !initialized {
+			for name, field := range objectType.Fields {
+				commonFields[name] = field.Type
+			}
+			initialized = true
+			continue
+		}
+
+		for name, fieldType := range commonFields {
+			objectField, ok := objectType.Fields[name]
+			if !ok || objectField.Type.Name() != fieldType.Name() {
+				delete(commonFields, name)
+			}
+		}
+	}
+
+	for name, fieldType := range commonFields {
+		interfaceType.Fields[name] = &Field{Name: name, Type: fieldType}
+	}
+
+	return nil
+}
+
+func (b *Builder) populateUnion(unionType *Union, goType reflect.Type) error {
+	if len(unionType.Types) > 0 {
+		return nil
+	}
+
+	for _, implementor := range b.implementors[goType] {
+		objectType, err := b.buildObject(implementor)
+		if err != nil {
+			return err
+		}
+		unionType.Types = append(unionType.Types, objectType)
+	}
+
+	return nil
+}
+
+func containsType(values []reflect.Type, target reflect.Type) bool {
+	for _, value := range values {
+		if value == target {
+			return true
+		}
+	}
+	return false
 }
 
 func (b *Builder) buildInputObject(goType reflect.Type) (*InputObject, error) {
@@ -417,10 +811,12 @@ func (b *Builder) buildInputObject(goType reflect.Type) (*InputObject, error) {
 			continue
 		}
 
-		fieldName, required := parseTag(structField)
-		if fieldName == "-" {
+		options := parseTag(structField)
+		if options.name == "-" {
 			continue
 		}
+
+		fieldName := options.name
 		if fieldName == "" {
 			fieldName = lowerFirst(structField.Name)
 		}
@@ -429,35 +825,88 @@ func (b *Builder) buildInputObject(goType reflect.Type) (*InputObject, error) {
 		if err != nil {
 			return nil, fmt.Errorf("field %s.%s: %w", goType.Name(), structField.Name, err)
 		}
-		if required {
+		if options.required {
 			fieldType = &NonNull{OfType: fieldType}
 		}
 
+		defaultValue, err := b.defaultValue(structField.Type, options)
+		if err != nil {
+			return nil, fmt.Errorf("field %s.%s default: %w", goType.Name(), structField.Name, err)
+		}
+
 		inputObject.Fields[fieldName] = &Field{
-			Name: fieldName,
-			Type: fieldType,
+			Name:         fieldName,
+			Type:         fieldType,
+			DefaultValue: defaultValue,
 		}
 	}
 
 	return inputObject, nil
 }
 
-func parseTag(field reflect.StructField) (string, bool) {
+func (b *Builder) defaultValue(goType reflect.Type, options tagOptions) (any, error) {
+	if !options.hasDefault {
+		return nil, nil
+	}
+	return b.parseDefaultValue(goType, options.defaultValue)
+}
+
+func (b *Builder) parseDefaultValue(goType reflect.Type, raw string) (any, error) {
+	baseType := goType
+	for baseType.Kind() == reflect.Pointer {
+		baseType = baseType.Elem()
+	}
+
+	if enumType, ok := b.enums[baseType]; ok {
+		return enumType.Parse(raw)
+	}
+	if scalar, ok := b.scalars[baseType]; ok {
+		return scalar.parse(raw)
+	}
+
+	switch baseType.Kind() {
+	case reflect.String:
+		return raw, nil
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		value, err := strconv.ParseInt(raw, 10, 64)
+		if err != nil {
+			return nil, err
+		}
+		return reflect.ValueOf(value).Convert(baseType).Interface(), nil
+	case reflect.Float32, reflect.Float64:
+		value, err := strconv.ParseFloat(raw, 64)
+		if err != nil {
+			return nil, err
+		}
+		return reflect.ValueOf(value).Convert(baseType).Interface(), nil
+	case reflect.Bool:
+		return strconv.ParseBool(raw)
+	default:
+		return nil, fmt.Errorf("unsupported default for type %s", baseType.String())
+	}
+}
+
+func parseTag(field reflect.StructField) tagOptions {
 	tag := field.Tag.Get("gql")
 	if tag == "" {
-		return "", false
+		return tagOptions{}
 	}
 
 	parts := strings.Split(tag, ",")
-	name := strings.TrimSpace(parts[0])
-	required := false
+	options := tagOptions{name: strings.TrimSpace(parts[0])}
 	for _, part := range parts[1:] {
-		if strings.TrimSpace(part) == "nonNull" {
-			required = true
+		trimmed := strings.TrimSpace(part)
+		if trimmed == "nonNull" {
+			options.required = true
+			continue
+		}
+		if strings.HasPrefix(trimmed, "default=") {
+			options.hasDefault = true
+			options.defaultValue = strings.TrimPrefix(trimmed, "default=")
 		}
 	}
 
-	return name, required
+	return options
 }
 
 func lowerFirst(value string) string {
