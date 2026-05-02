@@ -139,9 +139,8 @@ require values.
 
 ## What isn't supported yet
 
-The following are tracked on the
-[implementation checklist](https://github.com/patrickkabwe/grx#type-system)
-and are not yet usable:
+The following are tracked on the [Roadmap](/roadmap/) and are not yet
+usable:
 
 - Enum types
 - Interface types and `implements` lists

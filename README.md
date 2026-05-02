@@ -204,8 +204,8 @@ transports never look at the concrete type.
 - [x] Variable references in argument values
 - [x] Basic scalar argument values
 - [x] Basic nested input object variables
-- [ ] Multiple definitions per document
-- [ ] Operation selection by `operationName`
+- [x] Multiple definitions per document
+- [x] Operation selection by `operationName`
 - [x] Subscription operations
 - [ ] Field aliases
 - [ ] Fragment definitions
@@ -324,7 +324,7 @@ transports never look at the concrete type.
 - [ ] `@include(if:)`
 - [ ] Serial mutation field execution guarantee
 - [ ] Parallel query field execution where safe
-- [ ] Operation selection by `operationName`
+- [x] Operation selection by `operationName`
 - [ ] Variable default value coercion
 - [ ] Argument default value coercion
 - [ ] Input object default value coercion
@@ -407,14 +407,14 @@ transports never look at the concrete type.
 - [x] GraphiQL UI for local testing
 - [x] Logger plugin hooks
 - [x] Basic plugin lifecycle hooks
-- [ ] Public documentation for server configuration
-- [ ] Public documentation for schema mapping
-- [ ] Public documentation for resolver signatures
-- [ ] Public examples for query-only server
-- [ ] Public examples for query and mutation server
+- [x] Public documentation for server configuration
+- [x] Public documentation for schema mapping
+- [x] Public documentation for resolver signatures
+- [x] Public examples for query-only server
+- [x] Public examples for query and mutation server
 - [ ] Public examples for custom scalars
 - [ ] Public examples for directives
-- [ ] Benchmarks
+- [x] Benchmarks
 - [ ] Fuzz tests for parser
 - [ ] Spec fixture tests
 - [ ] Race detector CI

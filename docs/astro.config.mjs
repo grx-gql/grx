@@ -12,7 +12,7 @@ export default defineConfig({
       description:
         "A fast, dependency-free Go GraphQL server and runtime — built for clarity and predictable performance.",
       logo: {
-        src: "./src/assets/logo.svg",
+        src: "./src/assets/hero.svg",
         replacesTitle: true,
       },
       favicon: "/favicon.svg",
@@ -22,11 +22,11 @@ export default defineConfig({
           label: "GitHub",
           href: "https://github.com/patrickkabwe/grx",
         },
-        {
-          icon: "seti:go",
-          label: "pkg.go.dev",
-          href: "https://pkg.go.dev/github.com/patrickkabwe/grx",
-        },
+        // {
+        //   icon: "seti:go",
+        //   label: "pkg.go.dev",
+        //   href: "https://pkg.go.dev/github.com/patrickkabwe/grx",
+        // },
       ],
       editLink: {
         baseUrl: "https://github.com/patrickkabwe/grx/edit/main/docs/",

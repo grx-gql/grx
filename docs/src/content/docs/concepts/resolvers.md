@@ -105,7 +105,7 @@ return nil, &core.Error{
 :::caution[Don't leak internals]
 Wrap or sanitize errors before returning them. Stack traces and database
 errors often contain information that should not be sent to clients. The
-[security checklist](https://github.com/patrickkabwe/grx#security) tracks
+[Roadmap](/roadmap/) tracks
 the upcoming first-class error masking story; baseline hygiene applies now.
 :::
 

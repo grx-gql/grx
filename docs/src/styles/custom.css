@@ -39,29 +39,6 @@ header.header .site-title svg {
   width: auto;
 }
 
-/* Lift social icons and the search button onto the same baseline. */
-header.header {
-  align-items: center;
-}
-
-header.header .social-icons {
-  align-items: center;
-  gap: 0.25rem;
-}
-
-header.header .social-icons a {
-  display: inline-flex;
-  align-items: center;
-  padding: 0.5rem;
-  border-radius: 0.5rem;
-  transition: background-color 150ms ease, color 150ms ease;
-}
-
-header.header .social-icons a:hover {
-  background-color: var(--sl-color-accent-low);
-  color: var(--sl-color-accent-high);
-}
-
 /* ------------------------------------------------------------------ */
 /* Splash hero                                                          */
 /* ------------------------------------------------------------------ */

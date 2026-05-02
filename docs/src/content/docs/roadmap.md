@@ -15,7 +15,7 @@ tableOfContents:
 
 ## Overall progress
 
-**113 / 324 items complete (34%)** across the
+**122 / 324 items complete (37%)** across the
 sections below.
 
 ## Progress at a glance
@@ -24,14 +24,14 @@ sections below.
 | --- | --- | --- |
 | Server HTTP Transport | 7 / 24 | 29% |
 | GraphQL Language Lexer | 20 / 22 | 90% |
-| GraphQL Parser | 9 / 28 | 32% |
+| GraphQL Parser | 11 / 28 | 39% |
 | Type System | 8 / 35 | 22% |
 | Validation | 0 / 40 | 0% |
-| Execution | 9 / 38 | 23% |
+| Execution | 10 / 38 | 26% |
 | Introspection | 8 / 24 | 33% |
 | Built-in Directives | 0 / 7 | 0% |
 | Response Format | 4 / 13 | 30% |
-| Developer Experience | 4 / 20 | 20% |
+| Developer Experience | 10 / 20 | 50% |
 | Subscriptions | 17 / 17 | 100% |
 | WebSocket Transport (RFC 6455) | 15 / 19 | 78% |
 | graphql-transport-ws Subprotocol | 12 / 12 | 100% |
@@ -102,8 +102,8 @@ sections below.
 - [x] Variable references in argument values
 - [x] Basic scalar argument values
 - [x] Basic nested input object variables
-- [ ] Multiple definitions per document
-- [ ] Operation selection by `operationName`
+- [x] Multiple definitions per document
+- [x] Operation selection by `operationName`
 - [x] Subscription operations
 - [ ] Field aliases
 - [ ] Fragment definitions
@@ -222,7 +222,7 @@ sections below.
 - [ ] `@include(if:)`
 - [ ] Serial mutation field execution guarantee
 - [ ] Parallel query field execution where safe
-- [ ] Operation selection by `operationName`
+- [x] Operation selection by `operationName`
 - [ ] Variable default value coercion
 - [ ] Argument default value coercion
 - [ ] Input object default value coercion
@@ -305,14 +305,14 @@ sections below.
 - [x] GraphiQL UI for local testing
 - [x] Logger plugin hooks
 - [x] Basic plugin lifecycle hooks
-- [ ] Public documentation for server configuration
-- [ ] Public documentation for schema mapping
-- [ ] Public documentation for resolver signatures
-- [ ] Public examples for query-only server
-- [ ] Public examples for query and mutation server
+- [x] Public documentation for server configuration
+- [x] Public documentation for schema mapping
+- [x] Public documentation for resolver signatures
+- [x] Public examples for query-only server
+- [x] Public examples for query and mutation server
 - [ ] Public examples for custom scalars
 - [ ] Public examples for directives
-- [ ] Benchmarks
+- [x] Benchmarks
 - [ ] Fuzz tests for parser
 - [ ] Spec fixture tests
 - [ ] Race detector CI

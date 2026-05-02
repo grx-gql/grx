@@ -43,7 +43,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   per-request hot path uses precomputed indices.
 - Lexer, parser, AST, and executor (`exec`) for queries, mutations, and
   subscriptions covering the subset listed in the
-  [README checklist](https://github.com/patrickkabwe/grx#feature-parity-checklist).
+  [Roadmap](https://patrickkabwe.github.io/grx/roadmap/).
 - Introspection fast-path (`__schema`, `__type`) sufficient to load the
   bundled GraphiQL UI.
 

@@ -32,7 +32,7 @@ tokens. The parser builds an AST of operations and selection sets.
 
 Today the parser supports anonymous and named queries, mutations,
 subscriptions, list and object literal values, and scalar arguments. The
-[Implementation Checklist](https://github.com/patrickkabwe/grx#graphql-parser)
+[Roadmap](/roadmap/)
 tracks the remaining grammar work (fragments, directives, full SDL, …).
 
 ## Validation
@@ -41,8 +41,7 @@ Validation runs before execution and is responsible for catching
 spec-defined errors at the request boundary so resolvers can assume their
 inputs are well-typed. The current set of validation rules is being filled
 in alongside the parser (see the
-[Validation section](https://github.com/patrickkabwe/grx#validation) of
-the checklist).
+[Roadmap](/roadmap/)).
 
 ## Execute
 
@@ -81,7 +80,6 @@ The most visible gaps in execution today:
 - No serial-mutation guarantee or parallel-query field execution.
 - No request-scoped resolver cache (DataLoader-style batching is planned).
 
-These are all tracked under
-[Execution](https://github.com/patrickkabwe/grx#execution) in the
-checklist. Each completed item there reflects real, tested behaviour in
-this package.
+These are all tracked on the [Roadmap](/roadmap/) under "Execution".
+Each completed item there reflects real, tested behaviour in this
+package.
