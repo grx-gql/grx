@@ -5,11 +5,12 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"testing"
 
-	"github.com/patrickkabwe/grx/pkg/pubsub"
 	"github.com/patrickkabwe/grx/examples/basic/graph"
+	"github.com/patrickkabwe/grx/pkg/pubsub"
 )
 
 func TestServeHTTPServesPlaygroundAtConfiguredPath(t *testing.T) {
@@ -82,6 +83,10 @@ func TestServeHTTPReturnsBadRequestForMalformedJSON(t *testing.T) {
 	if !strings.Contains(errorValue["message"].(string), "invalid GraphQL JSON body") {
 		t.Fatalf("unexpected error message: %#v", errorValue["message"])
 	}
+	if _, exists := body["data"]; exists {
+		t.Fatalf("expected malformed JSON error to omit data, got %#v", body["data"])
+	}
+	assertErrorClassification(t, errorValue, "request")
 }
 
 func TestServeHTTPReturnsBadRequestForMissingQuery(t *testing.T) {
@@ -101,6 +106,51 @@ func TestServeHTTPReturnsBadRequestForMissingQuery(t *testing.T) {
 	if errorValue["message"] != "missing GraphQL query" {
 		t.Fatalf("unexpected error message: %#v", errorValue["message"])
 	}
+	if _, exists := body["data"]; exists {
+		t.Fatalf("expected missing query error to omit data, got %#v", body["data"])
+	}
+	assertErrorClassification(t, errorValue, "request")
+}
+
+func TestServeHTTPReturnsRequestErrorLocationsForInvalidQuery(t *testing.T) {
+	server := newTestServer(t)
+	response := executeGraphQL(t, server, `{"query":"query Broken { user(id: ) { id } }"}`)
+
+	if response.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d", http.StatusOK, response.Code)
+	}
+
+	body := graphQLResponseBody(t, response)
+	if _, exists := body["data"]; exists {
+		t.Fatalf("expected invalid query error to omit data, got %#v", body["data"])
+	}
+
+	errors := graphQLErrors(t, body)
+	if len(errors) != 1 {
+		t.Fatalf("expected one error, got %#v", errors)
+	}
+
+	errorValue := graphQLError(t, errors, 0)
+	assertErrorClassification(t, errorValue, "request")
+	assertErrorLocations(t, errorValue, 1, 25)
+}
+
+func TestServeHTTPPreservesSelectionOrderInJSONResponse(t *testing.T) {
+	server := newTestServer(t)
+	response := executeGraphQL(
+		t,
+		server,
+		`{"query":"query Ordered($id: String!) { user(id: $id) { name id email } __typename }","variables":{"id":"user_42"}}`,
+	)
+
+	if response.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d", http.StatusOK, response.Code)
+	}
+
+	body := response.Body.String()
+	assertOrderedSubstring(t, body, `"data":{"user":{`, `"__typename":"Query"`)
+	assertOrderedSubstring(t, body, `"name":"Ada Lovelace"`, `"id":"user_42"`)
+	assertOrderedSubstring(t, body, `"id":"user_42"`, `"email":"ada@example.com"`)
 }
 
 func newTestServer(t *testing.T) *Server {
@@ -184,5 +234,46 @@ func assertExactKeys(t *testing.T, value map[string]any, expectedKeys ...string)
 		if _, exists := value[key]; !exists {
 			t.Fatalf("expected key %q in %#v", key, value)
 		}
+	}
+}
+
+func assertErrorClassification(t *testing.T, value map[string]any, expected string) {
+	t.Helper()
+
+	extensions, ok := value["extensions"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected extensions object, got %T", value["extensions"])
+	}
+	if extensions["classification"] != expected {
+		t.Fatalf("expected error classification %q, got %#v", expected, extensions["classification"])
+	}
+}
+
+func assertErrorLocations(t *testing.T, value map[string]any, expectedLine float64, expectedColumn float64) {
+	t.Helper()
+
+	locations, ok := value["locations"].([]any)
+	if !ok || len(locations) != 1 {
+		t.Fatalf("expected one error location, got %#v", value["locations"])
+	}
+
+	location, ok := locations[0].(map[string]any)
+	if !ok {
+		t.Fatalf("expected location object, got %T", locations[0])
+	}
+	if location["line"] != expectedLine || location["column"] != expectedColumn {
+		t.Fatalf("expected location (%v,%v), got %#v", expectedLine, expectedColumn, location)
+	}
+}
+
+func assertOrderedSubstring(t *testing.T, body string, earlier string, later string) {
+	t.Helper()
+
+	positions := []int{strings.Index(body, earlier), strings.Index(body, later)}
+	if slices.Contains(positions, -1) {
+		t.Fatalf("expected response body %q to contain %q before %q", body, earlier, later)
+	}
+	if positions[0] >= positions[1] {
+		t.Fatalf("expected %q before %q in %q", earlier, later, body)
 	}
 }

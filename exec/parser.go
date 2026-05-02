@@ -6,6 +6,8 @@ import (
 	"strings"
 	"unicode/utf16"
 	"unicode/utf8"
+
+	"github.com/patrickkabwe/grx/core"
 )
 
 // tokenKind enumerates every lexical category recognised by the GraphQL lexer.
@@ -79,14 +81,16 @@ func (k tokenKind) String() string {
 }
 
 type token struct {
-	kind  tokenKind
-	value string
+	kind   tokenKind
+	value  string
+	offset int
 }
 
 type parser struct {
 	tokens []token
 	index  int
 	vars   map[string]any
+	source string
 }
 
 // parseDocument parses a GraphQL source containing one or more operations and
@@ -101,12 +105,13 @@ func parseDocument(query string, variables map[string]any) (document, error) {
 // document defines exactly one operation (matching the GraphQL spec rule for
 // "GetOperation").
 func parseDocumentNamed(query string, variables map[string]any, operationName string) (document, error) {
-	tokens, err := lex(query)
+	source := normalizeSource(query)
+	tokens, err := lex(source)
 	if err != nil {
 		return document{}, err
 	}
 
-	p := parser{tokens: tokens, vars: variables}
+	p := parser{tokens: tokens, vars: variables, source: source}
 
 	var operations []document
 	for p.peek().kind != tokenEOF {
@@ -122,7 +127,7 @@ func parseDocumentNamed(query string, variables map[string]any, operationName st
 	}
 
 	if len(operations) == 0 {
-		return document{}, fmt.Errorf("document contains no operations")
+		return document{}, newParseError(source, 0, "document contains no operations")
 	}
 
 	if operationName != "" {
@@ -131,11 +136,11 @@ func parseDocumentNamed(query string, variables map[string]any, operationName st
 				return op, nil
 			}
 		}
-		return document{}, fmt.Errorf("operation %q not found in document", operationName)
+		return document{}, newParseError(source, 0, "operation %q not found in document", operationName)
 	}
 
 	if len(operations) > 1 {
-		return document{}, fmt.Errorf("must provide operationName when document contains multiple operations")
+		return document{}, newParseError(source, 0, "must provide operationName when document contains multiple operations")
 	}
 	return operations[0], nil
 }
@@ -160,9 +165,9 @@ func (p *parser) parseOperationHeader() (operationKind, string, error) {
 		p.next()
 		kind = operationSubscription
 	case "fragment":
-		return kind, "", fmt.Errorf("unsupported operation %q", "fragment")
+		return kind, "", newParseError(p.source, p.peek().offset, "unsupported operation %q", "fragment")
 	default:
-		return kind, "", fmt.Errorf("unexpected token %q at top of operation", p.peek().value)
+		return kind, "", newParseError(p.source, p.peek().offset, "unexpected token %q at top of operation", p.peek().value)
 	}
 
 	var name string
@@ -191,7 +196,7 @@ func (p *parser) parseSelectionSet() ([]selection, error) {
 	selections := make([]selection, 0, 4)
 	for p.peek().kind != tokenBraceClose {
 		if p.peek().kind == tokenEOF {
-			return nil, fmt.Errorf("unexpected end of query inside selection set")
+			return nil, newParseError(p.source, p.peek().offset, "unexpected end of query inside selection set")
 		}
 		sel, err := p.parseSelection()
 		if err != nil {
@@ -206,7 +211,7 @@ func (p *parser) parseSelectionSet() ([]selection, error) {
 func (p *parser) parseSelection() (selection, error) {
 	nameToken := p.next()
 	if nameToken.kind != tokenName {
-		return selection{}, fmt.Errorf("expected field name, got %q", nameToken.value)
+		return selection{}, newParseError(p.source, nameToken.offset, "expected field name, got %q", nameToken.value)
 	}
 
 	var args map[string]any
@@ -234,7 +239,12 @@ func (p *parser) parseSelection() (selection, error) {
 		nested = parsed
 	}
 
-	return selection{Name: nameToken.value, Arguments: args, Selections: nested}, nil
+	return selection{
+		Name:       nameToken.value,
+		Arguments:  args,
+		Selections: nested,
+		Location:   locationForOffset(p.source, nameToken.offset),
+	}, nil
 }
 
 func (p *parser) parseArguments() (map[string]any, error) {
@@ -242,11 +252,11 @@ func (p *parser) parseArguments() (map[string]any, error) {
 	args := make(map[string]any, 4)
 	for p.peek().kind != tokenParenClose {
 		if p.peek().kind == tokenEOF {
-			return nil, fmt.Errorf("unexpected end of query inside arguments")
+			return nil, newParseError(p.source, p.peek().offset, "unexpected end of query inside arguments")
 		}
 		name := p.next()
 		if name.kind != tokenName {
-			return nil, fmt.Errorf("expected argument name, got %q", name.value)
+			return nil, newParseError(p.source, name.offset, "expected argument name, got %q", name.value)
 		}
 		if err := p.expect(tokenColon); err != nil {
 			return nil, err
@@ -271,7 +281,7 @@ func (p *parser) parseValue() (any, error) {
 		if strings.ContainsAny(current.value, ".eE") {
 			f, err := strconv.ParseFloat(current.value, 64)
 			if err != nil {
-				return nil, fmt.Errorf("invalid float literal %q: %w", current.value, err)
+				return nil, newParseError(p.source, current.offset, "invalid float literal %q: %s", current.value, err.Error())
 			}
 			return f, nil
 		}
@@ -282,7 +292,7 @@ func (p *parser) parseValue() (any, error) {
 		// Fall back to int64 for values that overflow int on 32-bit platforms.
 		i64, err64 := strconv.ParseInt(current.value, 10, 64)
 		if err64 != nil {
-			return nil, fmt.Errorf("invalid integer literal %q: %w", current.value, err)
+			return nil, newParseError(p.source, current.offset, "invalid integer literal %q: %s", current.value, err64.Error())
 		}
 		return i64, nil
 	case tokenName:
@@ -300,11 +310,11 @@ func (p *parser) parseValue() (any, error) {
 	case tokenDollar:
 		name := p.next()
 		if name.kind != tokenName {
-			return nil, fmt.Errorf("expected variable name after $")
+			return nil, newParseError(p.source, current.offset, "expected variable name after $")
 		}
 		value, ok := p.vars[name.value]
 		if !ok {
-			return nil, fmt.Errorf("missing variable %q", name.value)
+			return nil, newParseError(p.source, name.offset, "missing variable %q", name.value)
 		}
 		return value, nil
 	case tokenBraceOpen:
@@ -312,7 +322,7 @@ func (p *parser) parseValue() (any, error) {
 	case tokenBracketOpen:
 		return p.parseListLiteral()
 	default:
-		return nil, fmt.Errorf("unexpected value token %q", current.value)
+		return nil, newParseError(p.source, current.offset, "unexpected value token %q", current.value)
 	}
 }
 
@@ -320,11 +330,11 @@ func (p *parser) parseObjectLiteral() (map[string]any, error) {
 	object := make(map[string]any, 4)
 	for p.peek().kind != tokenBraceClose {
 		if p.peek().kind == tokenEOF {
-			return nil, fmt.Errorf("unexpected end of query inside object literal")
+			return nil, newParseError(p.source, p.peek().offset, "unexpected end of query inside object literal")
 		}
 		name := p.next()
 		if name.kind != tokenName {
-			return nil, fmt.Errorf("expected object field name, got %q", name.value)
+			return nil, newParseError(p.source, name.offset, "expected object field name, got %q", name.value)
 		}
 		if err := p.expect(tokenColon); err != nil {
 			return nil, err
@@ -343,7 +353,7 @@ func (p *parser) parseListLiteral() ([]any, error) {
 	list := make([]any, 0, 4)
 	for p.peek().kind != tokenBracketClose {
 		if p.peek().kind == tokenEOF {
-			return nil, fmt.Errorf("unexpected end of query inside list literal")
+			return nil, newParseError(p.source, p.peek().offset, "unexpected end of query inside list literal")
 		}
 		value, err := p.parseValue()
 		if err != nil {
@@ -371,7 +381,7 @@ func (p *parser) skipBalancedParens() error {
 				return nil
 			}
 		case tokenEOF:
-			return fmt.Errorf("unexpected end of query inside operation variables")
+			return newParseError(p.source, current.offset, "unexpected end of query inside operation variables")
 		}
 	}
 }
@@ -382,7 +392,7 @@ func (p *parser) skipDirective() error {
 	p.next() // consume @
 	name := p.next()
 	if name.kind != tokenName {
-		return fmt.Errorf("expected directive name, got %q", name.value)
+		return newParseError(p.source, name.offset, "expected directive name, got %q", name.value)
 	}
 	if p.peek().kind == tokenParenOpen {
 		if err := p.skipBalancedParens(); err != nil {
@@ -395,7 +405,7 @@ func (p *parser) skipDirective() error {
 func (p *parser) expect(kind tokenKind) error {
 	current := p.next()
 	if current.kind != kind {
-		return fmt.Errorf("expected token kind %s, got %q", kind, current.value)
+		return newParseError(p.source, current.offset, "expected token kind %s, got %q", kind, current.value)
 	}
 	return nil
 }
@@ -414,11 +424,6 @@ func (p *parser) next() token {
 // implementation favours raw byte indexing over rune iteration and only falls
 // back to UTF-8 decoding when a non-ASCII byte is encountered.
 func lex(input string) ([]token, error) {
-	// Optional UTF-8 BOM.
-	if len(input) >= 3 && input[0] == 0xEF && input[1] == 0xBB && input[2] == 0xBF {
-		input = input[3:]
-	}
-
 	// Heuristic: roughly one token per ~4 source bytes for typical operations.
 	tokens := make([]token, 0, len(input)/4+1)
 	n := len(input)
@@ -445,80 +450,80 @@ func lex(input string) ([]token, error) {
 		// Single-character punctuators.
 		switch c {
 		case '{':
-			tokens = append(tokens, token{kind: tokenBraceOpen, value: "{"})
+			tokens = append(tokens, token{kind: tokenBraceOpen, value: "{", offset: i})
 			i++
 			continue
 		case '}':
-			tokens = append(tokens, token{kind: tokenBraceClose, value: "}"})
+			tokens = append(tokens, token{kind: tokenBraceClose, value: "}", offset: i})
 			i++
 			continue
 		case '(':
-			tokens = append(tokens, token{kind: tokenParenOpen, value: "("})
+			tokens = append(tokens, token{kind: tokenParenOpen, value: "(", offset: i})
 			i++
 			continue
 		case ')':
-			tokens = append(tokens, token{kind: tokenParenClose, value: ")"})
+			tokens = append(tokens, token{kind: tokenParenClose, value: ")", offset: i})
 			i++
 			continue
 		case ':':
-			tokens = append(tokens, token{kind: tokenColon, value: ":"})
+			tokens = append(tokens, token{kind: tokenColon, value: ":", offset: i})
 			i++
 			continue
 		case '$':
-			tokens = append(tokens, token{kind: tokenDollar, value: "$"})
+			tokens = append(tokens, token{kind: tokenDollar, value: "$", offset: i})
 			i++
 			continue
 		case '[':
-			tokens = append(tokens, token{kind: tokenBracketOpen, value: "["})
+			tokens = append(tokens, token{kind: tokenBracketOpen, value: "[", offset: i})
 			i++
 			continue
 		case ']':
-			tokens = append(tokens, token{kind: tokenBracketClose, value: "]"})
+			tokens = append(tokens, token{kind: tokenBracketClose, value: "]", offset: i})
 			i++
 			continue
 		case '!':
-			tokens = append(tokens, token{kind: tokenBang, value: "!"})
+			tokens = append(tokens, token{kind: tokenBang, value: "!", offset: i})
 			i++
 			continue
 		case '=':
-			tokens = append(tokens, token{kind: tokenEquals, value: "="})
+			tokens = append(tokens, token{kind: tokenEquals, value: "=", offset: i})
 			i++
 			continue
 		case '@':
-			tokens = append(tokens, token{kind: tokenAt, value: "@"})
+			tokens = append(tokens, token{kind: tokenAt, value: "@", offset: i})
 			i++
 			continue
 		case '&':
-			tokens = append(tokens, token{kind: tokenAmp, value: "&"})
+			tokens = append(tokens, token{kind: tokenAmp, value: "&", offset: i})
 			i++
 			continue
 		case '|':
-			tokens = append(tokens, token{kind: tokenPipe, value: "|"})
+			tokens = append(tokens, token{kind: tokenPipe, value: "|", offset: i})
 			i++
 			continue
 		case '.':
 			if i+2 < n && input[i+1] == '.' && input[i+2] == '.' {
-				tokens = append(tokens, token{kind: tokenSpread, value: "..."})
+				tokens = append(tokens, token{kind: tokenSpread, value: "...", offset: i})
 				i += 3
 				continue
 			}
-			return nil, fmt.Errorf("unexpected character %q", '.')
+			return nil, newParseError(input, i, "unexpected character %q", '.')
 		case '"':
 			// Block string `"""..."""`?
 			if i+2 < n && input[i+1] == '"' && input[i+2] == '"' {
 				value, next, err := readBlockString(input, i)
 				if err != nil {
-					return nil, err
+					return nil, newParseError(input, i, "%s", err.Error())
 				}
-				tokens = append(tokens, token{kind: tokenString, value: value})
+				tokens = append(tokens, token{kind: tokenString, value: value, offset: i})
 				i = next
 				continue
 			}
 			value, next, err := readString(input, i)
 			if err != nil {
-				return nil, err
+				return nil, newParseError(input, i, "%s", err.Error())
 			}
-			tokens = append(tokens, token{kind: tokenString, value: value})
+			tokens = append(tokens, token{kind: tokenString, value: value, offset: i})
 			i = next
 			continue
 		}
@@ -529,7 +534,7 @@ func lex(input string) ([]token, error) {
 			for j < n && isNamePartByte(input[j]) {
 				j++
 			}
-			tokens = append(tokens, token{kind: tokenName, value: input[i:j]})
+			tokens = append(tokens, token{kind: tokenName, value: input[i:j], offset: i})
 			i = j
 			continue
 		}
@@ -538,9 +543,9 @@ func lex(input string) ([]token, error) {
 		if c == '-' || (c >= '0' && c <= '9') {
 			value, next, err := readNumber(input, i)
 			if err != nil {
-				return nil, err
+				return nil, newParseError(input, i, "%s", err.Error())
 			}
-			tokens = append(tokens, token{kind: tokenNumber, value: value})
+			tokens = append(tokens, token{kind: tokenNumber, value: value, offset: i})
 			i = next
 			continue
 		}
@@ -548,13 +553,70 @@ func lex(input string) ([]token, error) {
 		// Non-ASCII byte: decode and report a precise rune in the error.
 		if c >= 0x80 {
 			r, _ := utf8.DecodeRuneInString(input[i:])
-			return nil, fmt.Errorf("unexpected character %q", r)
+			return nil, newParseError(input, i, "unexpected character %q", r)
 		}
-		return nil, fmt.Errorf("unexpected character %q", rune(c))
+		return nil, newParseError(input, i, "unexpected character %q", rune(c))
 	}
 
-	tokens = append(tokens, token{kind: tokenEOF})
+	tokens = append(tokens, token{kind: tokenEOF, offset: len(input)})
 	return tokens, nil
+}
+
+type parseError struct {
+	message   string
+	locations []core.Location
+}
+
+func (e parseError) Error() string {
+	return e.message
+}
+
+func (e parseError) GraphQLLocations() []core.Location {
+	return e.locations
+}
+
+func normalizeSource(source string) string {
+	if len(source) >= 3 && source[0] == 0xEF && source[1] == 0xBB && source[2] == 0xBF {
+		return source[3:]
+	}
+	return source
+}
+
+func newParseError(source string, offset int, format string, args ...any) error {
+	location := locationForOffset(source, offset)
+	return parseError{
+		message:   fmt.Sprintf(format, args...),
+		locations: []core.Location{location},
+	}
+}
+
+func locationForOffset(source string, offset int) core.Location {
+	line := 1
+	column := 1
+	if offset < 0 {
+		offset = 0
+	}
+	if offset > len(source) {
+		offset = len(source)
+	}
+
+	for index := 0; index < offset; index++ {
+		switch source[index] {
+		case '\n':
+			line++
+			column = 1
+		case '\r':
+			line++
+			column = 1
+			if index+1 < offset && source[index+1] == '\n' {
+				index++
+			}
+		default:
+			column++
+		}
+	}
+
+	return core.Location{Line: line, Column: column}
 }
 
 // readString lexes a regular (non-block) string literal. The fast path returns

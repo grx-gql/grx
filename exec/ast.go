@@ -1,5 +1,7 @@
 package exec
 
+import "github.com/patrickkabwe/grx/core"
+
 type operationKind string
 
 const (
@@ -18,4 +20,5 @@ type selection struct {
 	Name       string
 	Arguments  map[string]any
 	Selections []selection
+	Location   core.Location
 }

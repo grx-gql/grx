@@ -57,7 +57,12 @@ func (Transport) Serve(w nethttp.ResponseWriter, r *nethttp.Request, executor co
 	body, err := core.DecodeGraphQLBody(r)
 	if err != nil {
 		core.WriteJSON(w, nethttp.StatusBadRequest, core.Response{
-			Errors: []core.Error{{Message: err.Error()}},
+			Errors: []core.Error{{
+				Message: err.Error(),
+				Extensions: map[string]any{
+					"classification": "request",
+				},
+			}},
 		})
 		return
 	}
