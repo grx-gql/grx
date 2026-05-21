@@ -230,7 +230,7 @@ func introspectionInputValues(inputValues []schema.InputValue) []any {
 		entry.Set("name", inputValue.Name)
 		entry.Set("description", nullableString(inputValue.Description))
 		entry.Set("type", introspectionTypeRef(inputValue.Type))
-		entry.Set("defaultValue", inputValue.DefaultValue)
+		entry.Set("defaultValue", formatDefaultValue(inputValue.DefaultValue))
 		values = append(values, entry)
 	}
 	return values
@@ -245,7 +245,7 @@ func introspectionInputFields(fields map[string]*schema.Field) []any {
 		entry.Set("name", field.Name)
 		entry.Set("description", nullableString(field.Description))
 		entry.Set("type", introspectionTypeRef(field.Type))
-		entry.Set("defaultValue", field.DefaultValue)
+		entry.Set("defaultValue", formatDefaultValue(field.DefaultValue))
 		values = append(values, entry)
 	}
 	return values
@@ -281,6 +281,13 @@ func introspectionEnumValues(values []schema.EnumValue, includeDeprecated bool) 
 		enumValues = append(enumValues, entry)
 	}
 	return enumValues
+}
+
+func formatDefaultValue(v any) any {
+	if s, ok := schema.FormatSDLDefault(v); ok {
+		return s
+	}
+	return nil
 }
 
 func nullableString(value string) any {
