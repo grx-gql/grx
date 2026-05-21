@@ -22,6 +22,39 @@ func WithMaxSelectionDepth(depth int) ExecutorOption {
 	}
 }
 
+// WithMaxSelectionCount limits the total selections in an operation. Zero
+// disables the limit.
+func WithMaxSelectionCount(count int) ExecutorOption {
+	return func(e *Executor) {
+		e.maxSelectionCount = count
+	}
+}
+
+// WithMaxAliasCount limits aliased fields in an operation. Zero disables the
+// limit.
+func WithMaxAliasCount(count int) ExecutorOption {
+	return func(e *Executor) {
+		e.maxAliasCount = count
+	}
+}
+
+// WithMaxRootFieldCount limits top-level fields in an operation. Zero disables
+// the limit.
+func WithMaxRootFieldCount(count int) ExecutorOption {
+	return func(e *Executor) {
+		e.maxRootFieldCount = count
+	}
+}
+
+// WithDocumentCache caches parsed documents for requests without variables.
+// Variable-bearing requests are intentionally not cached because variable
+// defaults and substitutions are currently applied during parsing.
+func WithDocumentCache(limit int) ExecutorOption {
+	return func(e *Executor) {
+		e.documentCacheLimit = limit
+	}
+}
+
 // WithClientErrorMasking replaces internal execution errors with message in
 // client-facing responses while preserving raw errors through plugin.Error.
 func WithClientErrorMasking(message string) ExecutorOption {

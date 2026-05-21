@@ -41,6 +41,12 @@ func boolArg(args map[string]any, key string) (bool, error) {
 	if !ok {
 		return false, fmt.Errorf("directive missing argument %q", key)
 	}
+	if ref, ok := v.(variableRef); ok {
+		if !ref.HasValue {
+			return false, fmt.Errorf("directive argument %q variable $%s is missing", key, ref.Name)
+		}
+		v = ref.Value
+	}
 	b, ok := v.(bool)
 	if !ok {
 		return false, fmt.Errorf("argument %q must be Boolean", key)

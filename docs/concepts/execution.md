@@ -30,17 +30,23 @@ The lexer recognises the full GraphQL October 2021 token set
 tokens. The parser builds an AST of operations and selection sets.
 
 Today the parser supports anonymous and named queries, mutations,
-subscriptions, list and object literal values, and scalar arguments. The
-[Roadmap](/roadmap)
-tracks the remaining grammar work (fragments, directives, full SDL, …).
+subscriptions, fragments (named spreads and inline), field aliases, list and
+object literal values, scalar arguments, and variable references. Variable
+references are tracked with source locations so validation can enforce GraphQL's
+variable rules after the request map is known. The
+[Roadmap](/roadmap) tracks remaining grammar and SDL work.
 
 ## Validation
 
 Validation runs before execution and is responsible for catching
 spec-defined errors at the request boundary so resolvers can assume their
-inputs are well-typed. The current set of validation rules is being filled
-in alongside the parser (see the
-[Roadmap](/roadmap)).
+inputs are well-typed. Current rules include (non-exhaustively): executable
+definitions, lone anonymous operation, unique operation names, fragment rules,
+directive locations and uniqueness, sibling field merge conflicts for the same
+response key, variable definitions vs `$` uses (every reference declared, every
+declaration used), required arguments on fields, and typed arguments on the
+built-in executable directives the runtime recognises (`@skip`, `@include`, and
+basic checks for `@defer` / `@stream`).
 
 ## Execute
 
@@ -61,6 +67,24 @@ source stream channel. Each value received from the channel is then
 treated as the source for a new field-execution pass and emitted to the
 transport.
 
+## Document shape limits and parse cache
+
+Beyond parse-time selection depth (`exec.WithMaxSelectionDepth` / server wiring),
+the executor can reject oversized operations before running resolvers:
+
+- **Total selections** — `exec.WithMaxSelectionCount` / `server.Config.MaxSelectionCount`
+- **Aliased fields** — `exec.WithMaxAliasCount` / `server.Config.MaxAliasCount`
+- **Top-level fields** — `exec.WithMaxRootFieldCount` / `server.Config.MaxRootFieldCount`
+
+Zero disables each limit. These are coarse guards against denial-of-service
+shapes; they are not a full GraphQL "cost" or complexity analysis.
+
+For **variable-free** requests, `exec.WithDocumentCache` /
+`server.Config.DocumentCacheSize` enables a bounded in-memory cache of parsed
+document bundles (eviction is FIFO by insertion order when full). Requests that
+supply a variable map skip the cache because variable defaults are still applied
+during parsing.
+
 ## Introspection
 
 `__schema` and `__type(name:)` are served by a fast-path implementation in
@@ -70,15 +94,11 @@ exposes introspection as normal schema fields is on the roadmap.
 
 ## What it doesn't do (yet)
 
-The most visible gaps in execution today:
+Notable gaps and follow-ups:
 
-- No fragment collection, inline fragments, or `@skip` / `@include`.
-- Field aliases are not yet honoured.
-- Non-null bubbling is not implemented; nulls in non-null positions can
-  leak through.
-- No serial-mutation guarantee or parallel-query field execution.
+- No incremental (`@defer` / `@stream`) execution over HTTP or in the executor response stream.
 - No request-scoped resolver cache (DataLoader-style batching is planned).
+- Variable and value validation is not yet complete vs the full GraphQL spec
+  (see the [Roadmap](/roadmap) validation section).
 
-These are all tracked on the [Roadmap](/roadmap) under "Execution".
-Each completed item there reflects real, tested behaviour in this
-package.
+Each completed roadmap item reflects behaviour covered by tests in the repository.

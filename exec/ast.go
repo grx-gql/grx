@@ -25,12 +25,24 @@ type fragmentDef struct {
 }
 
 type document struct {
-	Kind       operationKind
-	Name       string
-	Variables  []string
-	Selections []selection
+	Kind          operationKind
+	Name          string
+	Variables     []string
+	VariableTypes map[string]string
+	Selections    []selection
 	// Fragments holds fragment definitions in scope for this operation.
 	Fragments map[string]*fragmentDef
+}
+
+type variableUse struct {
+	Name     string
+	Location core.Location
+}
+
+type variableRef struct {
+	Name     string
+	Value    any
+	HasValue bool
 }
 
 type selection struct {

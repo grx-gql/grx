@@ -40,10 +40,10 @@ func TestValidatePostContentType(t *testing.T) {
 
 func TestNegotiateResponseContentType(t *testing.T) {
 	cases := []struct {
-		name    string
-		accept  []string
-		want    string
-		wantOK  bool
+		name   string
+		accept []string
+		want   string
+		wantOK bool
 	}{
 		{
 			name:   "missing accept defaults to legacy json",

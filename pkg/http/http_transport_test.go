@@ -416,7 +416,7 @@ func TestServeReturns500WhenExecutePanics(t *testing.T) {
 func TestServeWritesIncrementalDeliveryFields(t *testing.T) {
 	hasNext := true
 	executor := &stubExecutor{response: core.Response{
-		Data: map[string]any{"user": map[string]any{"id": "1"}},
+		Data:    map[string]any{"user": map[string]any{"id": "1"}},
 		HasNext: &hasNext,
 		Incremental: []core.IncrementalPayload{
 			{Label: "friends-stream", Path: []any{"user", "friends"}},

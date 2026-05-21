@@ -325,6 +325,41 @@ func TestExecutorRejectsInvalidScalarOutput(t *testing.T) {
 	}
 }
 
+func TestExecutorRejectsSelectionLimit(t *testing.T) {
+	schemaValue, err := schema.Build(schema.Config{Query: testQuery{}})
+	if err != nil {
+		t.Fatalf("build schema: %v", err)
+	}
+
+	executor := New(schemaValue, nil, WithMaxSelectionCount(1))
+	response := executor.Execute(context.Background(), core.Request{
+		Query: `{ user(id: "1") { id } }`,
+	})
+	if len(response.Errors) == 0 {
+		t.Fatal("expected selection limit error")
+	}
+}
+
+func TestExecutorCachesNoVariableDocuments(t *testing.T) {
+	schemaValue, err := schema.Build(schema.Config{Query: testQuery{}})
+	if err != nil {
+		t.Fatalf("build schema: %v", err)
+	}
+
+	executor := New(schemaValue, nil, WithDocumentCache(2))
+	for index := 0; index < 2; index++ {
+		response := executor.Execute(context.Background(), core.Request{
+			Query: `{ user(id: "1") { id } }`,
+		})
+		if len(response.Errors) != 0 {
+			t.Fatalf("unexpected errors: %#v", response.Errors)
+		}
+	}
+	if len(executor.documentCache) != 1 {
+		t.Fatalf("expected one cached document, got %d", len(executor.documentCache))
+	}
+}
+
 func TestExecutorHandlesSchemaIntrospectionQueryWithFragments(t *testing.T) {
 	schemaValue, err := schema.Build(schema.Config{Query: testQuery{}, Mutation: testMutation{}})
 	if err != nil {

@@ -405,11 +405,6 @@ func TestParseDocumentErrors(t *testing.T) {
 			contains: `unexpected value token`,
 		},
 		{
-			name:     "missing variable",
-			query:    `{ user(id: $id) { id } }`,
-			contains: `missing variable`,
-		},
-		{
 			name:     "variable without name",
 			query:    `{ user(id: $) { id } }`,
 			contains: `expected variable name after $`,

@@ -24,7 +24,8 @@ This file is the source of truth for feature parity tracking and roadmap sync in
 - [x] Timeout/deadline handling
 - [x] Persisted queries
 - [x] Automatic persisted queries
-- [ ] Query cost/depth/complexity limits
+- [x] Query cost/depth/complexity limits
+- [x] Optional bounded parsed-document cache for variable-free requests (`server.Config.DocumentCacheSize`)
 - [x] CORS configuration
 - [x] Response compression (gzip)
 - [ ] Response compression (brotli)
@@ -135,7 +136,7 @@ This file is the source of truth for feature parity tracking and roadmap sync in
 - [x] Field exists on parent type
 - [x] Leaf field selection rule
 - [x] Composite field selection rule
-- [ ] Field selection merging
+- [x] Field selection merging
 - [x] Argument exists on field/directive
 - [x] Argument uniqueness
 - [x] Required argument presence
@@ -155,9 +156,9 @@ This file is the source of truth for feature parity tracking and roadmap sync in
 - [x] Directive uniqueness where non-repeatable
 - [ ] Variable uniqueness
 - [ ] Variables are input types
-- [ ] Variable use is defined
+- [x] Variable use is defined
 - [ ] Variable use is allowed by location/type
-- [ ] Variables are used
+- [x] Variables are used
 - [x] Unknown operation name error
 - [x] Multiple operations require operation name
 - [ ] Oneof input object exactly-one-field rule
@@ -305,6 +306,7 @@ This file is the source of truth for feature parity tracking and roadmap sync in
 - [x] Redis pub/sub backend (`pkg/pubsub/redis`, separate Go module)
 - [x] Type-safe generic wrapper with pluggable codec (`pkg/pubsub.Typed`)
 - [x] Server-side filters / typed predicates on subscribe
+- [x] Configurable maximum concurrent SSE streams per transport (`sse.Config.MaxActiveSubscriptions`)
 
 ### WebSocket Transport (RFC 6455)
 
@@ -327,7 +329,7 @@ This file is the source of truth for feature parity tracking and roadmap sync in
       close code `1001`
 - [ ] permessage-deflate compression (RFC 7692)
 - [ ] Maximum concurrent connection limit
-- [ ] Maximum subscriptions-per-connection limit
+- [x] Maximum subscriptions-per-connection limit
 
 ### graphql-transport-ws Subprotocol
 

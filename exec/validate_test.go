@@ -141,6 +141,108 @@ func TestValidateUnknownDirective(t *testing.T) {
 	}
 }
 
+func TestValidateUndefinedVariable(t *testing.T) {
+	s := testSchemaForValidation(t)
+	bundle, err := parseDocumentBundle(`{ user(id: $id) { id } }`, nil, 0)
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	doc, err := selectOperation(bundle, "")
+	if err != nil {
+		t.Fatalf("select: %v", err)
+	}
+
+	errs := ValidateDocument(s, bundle, doc)
+	if len(errs) == 0 || !strings.Contains(errs[0].Error(), `Variable "$id" is not defined`) {
+		t.Fatalf("expected undefined variable error, got %#v", errs)
+	}
+}
+
+func TestValidateUnusedVariable(t *testing.T) {
+	s := testSchemaForValidation(t)
+	bundle, err := parseDocumentBundle(`query GetUser($id: String!) { __typename }`, map[string]any{"id": "1"}, 0)
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	doc, err := selectOperation(bundle, "GetUser")
+	if err != nil {
+		t.Fatalf("select: %v", err)
+	}
+
+	errs := ValidateDocument(s, bundle, doc)
+	if len(errs) == 0 || !strings.Contains(errs[0].Error(), `Variable "$id" is never used`) {
+		t.Fatalf("expected unused variable error, got %#v", errs)
+	}
+}
+
+func TestValidateVariableInAllowedPosition(t *testing.T) {
+	s := testSchemaForValidation(t)
+	bundle, err := parseDocumentBundle(`query GetUser($id: Int!) { user(id: $id) { id } }`, map[string]any{"id": 1}, 0)
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	doc, err := selectOperation(bundle, "GetUser")
+	if err != nil {
+		t.Fatalf("select: %v", err)
+	}
+
+	errs := ValidateDocument(s, bundle, doc)
+	if len(errs) == 0 || !strings.Contains(errs[0].Error(), `used in position expecting type "String!"`) {
+		t.Fatalf("expected variable position error, got %#v", errs)
+	}
+}
+
+func TestValidateNonNullVariableInNullablePosition(t *testing.T) {
+	s := testSchemaForValidation(t)
+	bundle, err := parseDocumentBundle(`query GetUser($id: String!) { user(id: $id) { id } }`, map[string]any{"id": "1"}, 0)
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	doc, err := selectOperation(bundle, "GetUser")
+	if err != nil {
+		t.Fatalf("select: %v", err)
+	}
+
+	errs := ValidateDocument(s, bundle, doc)
+	if len(errs) != 0 {
+		t.Fatalf("unexpected errors: %#v", errs)
+	}
+}
+
+func TestValidateFieldMergeConflict(t *testing.T) {
+	s := testSchemaForValidation(t)
+	bundle, err := parseDocumentBundle(`{ first: user(id: "1") { id } first: user(id: "2") { id } }`, nil, 0)
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	doc, err := selectOperation(bundle, "")
+	if err != nil {
+		t.Fatalf("select: %v", err)
+	}
+
+	errs := ValidateDocument(s, bundle, doc)
+	if len(errs) == 0 || !strings.Contains(errs[0].Error(), `Fields "first" conflict`) {
+		t.Fatalf("expected field merge conflict, got %#v", errs)
+	}
+}
+
+func TestValidateDirectiveArguments(t *testing.T) {
+	s := testSchemaForValidation(t)
+	bundle, err := parseDocumentBundle(`{ user(id: "1") @skip { id } }`, nil, 0)
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	doc, err := selectOperation(bundle, "")
+	if err != nil {
+		t.Fatalf("select: %v", err)
+	}
+
+	errs := ValidateDocument(s, bundle, doc)
+	if len(errs) == 0 || !strings.Contains(errs[0].Error(), `Directive "@skip" argument "if"`) {
+		t.Fatalf("expected directive argument error, got %#v", errs)
+	}
+}
+
 func TestExecutorReturnsValidationErrorsWithCode(t *testing.T) {
 	s := testSchemaForValidation(t)
 	executor := New(s, nil)
