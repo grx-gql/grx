@@ -24,6 +24,8 @@
 //	        sse.New(),
 //	    ),
 //	)
+//
+// For GraphQL-over-HTTP requests from Go code, use package pkg/client.
 package grx
 
 import (
