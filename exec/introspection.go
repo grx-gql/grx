@@ -416,6 +416,13 @@ func introspectionEnumValues(values []schema.EnumValue, includeDeprecated bool) 
 	return enumValues
 }
 
+func formatDefaultValue(v any) any {
+	if s, ok := schema.FormatSDLDefault(v); ok {
+		return s
+	}
+	return nil
+}
+
 func nullableString(value string) any {
 	if value == "" {
 		return nil
