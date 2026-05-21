@@ -105,7 +105,7 @@ These are restated from `README.md` because they constrain implementation choice
 
 ## HTTP Transport Conventions
 
-- The handler is a plain `http.Handler` returned by `server.New`. Do not add framework dependencies.
+- The handler is a plain `http.Handler` returned by `grx.NewServer` or `server.New`. Do not add framework dependencies.
 - The GraphiQL playground is served from CDN-hosted assets via an inlined HTML template. Keep it self-contained; no asset bundling.
 - `/favicon.ico` must continue to return 204 to avoid noisy logs.
 - New transports (SSE, WebSocket, custom HTTP variants) implement `core.Transport` and live in a subpackage under `core/`. Wire them in by appending to `server.Config.Transports`; the server consults transports in order and appends the default `pkg/http` transport last, so `POST /graphql` always has a handler. To override default HTTP behaviour, register your own POST-matching transport before the others.
@@ -134,6 +134,11 @@ These are restated from `README.md` because they constrain implementation choice
 - Do not change `server.Config` field semantics without updating `examples/basic` and any tests that construct it.
 - Do not mark a `README.md` checklist item complete unless it is fully implemented, tested, and reachable from the public API. Partial support stays unchecked.
 - Do not introduce third-party dependencies. The module is intentionally dependency-free; adding one requires explicit justification.
+
+## GitHub (issues and CI)
+
+- Issue forms live under `.github/ISSUE_TEMPLATE/`. CI validates them via `.github/workflows/issue-templates.yml` (`make validate-issue-templates` runs the same Ruby check locally).
+- High-level parity gaps are tracked as section issues created from `ROADMAP.md` using `python3 scripts/gh_roadmap_tracking_issues.py` (dry-run) or `... --apply` with the GitHub CLI authenticated. The wrapper `scripts/gh-roadmap-tracking-issues.sh` forwards the same flags.
 
 ## When in Doubt
 

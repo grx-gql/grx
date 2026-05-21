@@ -44,15 +44,49 @@ func DecodeGraphQLBody(r *http.Request) (GraphQLBody, error) {
 	return body, nil
 }
 
-// WriteJSON writes value as a JSON response with the given status. It is
-// shared by transports that need to surface request-level errors before any
-// streaming has started.
-func WriteJSON(w http.ResponseWriter, status int, value any) {
-	w.Header().Set("Content-Type", "application/json")
+// DecodeGraphQLRequest parses a GraphQL request from an HTTP request. POST
+// requests use a JSON body; GET requests use query, variables, and
+// operationName URL parameters per GraphQL-over-HTTP.
+func DecodeGraphQLRequest(r *http.Request) (GraphQLBody, error) {
+	switch r.Method {
+	case http.MethodPost:
+		return DecodeGraphQLBody(r)
+	case http.MethodGet:
+		q := r.URL.Query()
+		body := GraphQLBody{
+			Query:         q.Get("query"),
+			OperationName: q.Get("operationName"),
+		}
+		if body.Query == "" {
+			return body, fmt.Errorf("missing GraphQL query")
+		}
+		if raw := q.Get("variables"); raw != "" {
+			if err := json.Unmarshal([]byte(raw), &body.Variables); err != nil {
+				return body, fmt.Errorf("invalid GraphQL variables: %s", err.Error())
+			}
+		}
+		return body, nil
+	default:
+		return GraphQLBody{}, fmt.Errorf("unsupported HTTP method %s", r.Method)
+	}
+}
+
+// WriteGraphQLResponse writes value using the GraphQL-over-HTTP response
+// media type. charset=utf-8 is appended when not already present.
+func WriteGraphQLResponse(w http.ResponseWriter, status int, mediaType string, value any) {
+	if !strings.Contains(mediaType, "charset=") {
+		mediaType += "; charset=utf-8"
+	}
+	w.Header().Set("Content-Type", mediaType)
 	w.WriteHeader(status)
 	if err := json.NewEncoder(w).Encode(value); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
+}
+
+// WriteJSON writes value as a legacy application/json GraphQL response.
+func WriteJSON(w http.ResponseWriter, status int, value any) {
+	WriteGraphQLResponse(w, status, MediaTypeJSON, value)
 }
 
 // HeaderContains reports whether any of values contains needle as a

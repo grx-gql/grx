@@ -24,15 +24,20 @@ var ErrSubscriptionOperation = errors.New("subscription operations must use the 
 // notifies the registered plugins at each lifecycle phase. It satisfies
 // [core.Executor] and is safe for concurrent use.
 type Executor struct {
-	Schema  *schema.Schema
-	Plugins []plugin.Plugin
+	Schema               *schema.Schema
+	Plugins              []plugin.Plugin
+	disableIntrospection bool
 }
 
 // New returns an [Executor] bound to schemaValue and plugins. plugins
 // may be nil; an Executor with no plugins simply skips the lifecycle
 // notifications.
-func New(schemaValue *schema.Schema, plugins []plugin.Plugin) *Executor {
-	return &Executor{Schema: schemaValue, Plugins: plugins}
+func New(schemaValue *schema.Schema, plugins []plugin.Plugin, opts ...ExecutorOption) *Executor {
+	e := &Executor{Schema: schemaValue, Plugins: plugins}
+	for _, opt := range opts {
+		opt(e)
+	}
+	return e
 }
 
 // Execute runs a query or mutation operation and returns the completed
@@ -50,6 +55,9 @@ func (e *Executor) Execute(ctx context.Context, req core.Request) core.Response 
 	}
 
 	if isIntrospectionQuery(req.Query) {
+		if e.disableIntrospection {
+			return errorResponse(fmt.Errorf("introspection is disabled"))
+		}
 		return e.sendResponse(ctx, core.Response{Data: introspectionData(e.Schema, req)})
 	}
 

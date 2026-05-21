@@ -2,19 +2,26 @@ package server
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
+	"net"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
-	"github.com/patrickkabwe/grx/examples/basic/graph"
+	"github.com/patrickkabwe/grx/core"
+	subscriptiongraph "github.com/patrickkabwe/grx/examples/subscriptions/graph"
 	"github.com/patrickkabwe/grx/pkg/pubsub"
+	"github.com/patrickkabwe/grx/pkg/websocket"
+	"github.com/patrickkabwe/grx/plugin"
 )
 
 func TestServeHTTPServesPlaygroundAtConfiguredPath(t *testing.T) {
-	server := Server{playgroundPath: "/playground"}
+	server := Server{PlaygroundPath: "/playground"}
 	request := httptest.NewRequest(http.MethodGet, "/playground", nil)
 	response := httptest.NewRecorder()
 
@@ -28,7 +35,8 @@ func TestServeHTTPServesPlaygroundAtConfiguredPath(t *testing.T) {
 	expectedValues := []string{
 		"<title>GraphiQL</title>",
 		"https://esm.sh/graphiql@5.2.2",
-		`const endpoint = "/graphql";`,
+		`const httpEndpoint = "/graphql";`,
+		`const wsEndpoint = "/graphql";`,
 		`createWSClient({ url: subscriptionUrl.toString() })`,
 		`isSubscription(request) ? wsSubscribe(request) : httpFetch(request)`,
 	}
@@ -40,7 +48,7 @@ func TestServeHTTPServesPlaygroundAtConfiguredPath(t *testing.T) {
 }
 
 func TestServeHTTPDoesNotServePlaygroundAtGraphQLPathWhenConfiguredElsewhere(t *testing.T) {
-	server := Server{playgroundPath: "/playground"}
+	server := Server{PlaygroundPath: "/playground"}
 	request := httptest.NewRequest(http.MethodGet, "/graphql", nil)
 	response := httptest.NewRecorder()
 
@@ -54,7 +62,7 @@ func TestServeHTTPDoesNotServePlaygroundAtGraphQLPathWhenConfiguredElsewhere(t *
 func TestServeHTTPHandlesFavicon(t *testing.T) {
 	methods := []string{http.MethodGet, http.MethodHead}
 	for _, method := range methods {
-		server := Server{playgroundPath: "/playground"}
+		server := Server{PlaygroundPath: "/playground"}
 		request := httptest.NewRequest(method, "/favicon.ico", nil)
 		response := httptest.NewRecorder()
 
@@ -158,7 +166,7 @@ func newTestServer(t *testing.T) *Server {
 
 	bus := pubsub.NewMemory()
 	t.Cleanup(func() { _ = bus.Close() })
-	server, err := New(Config{Schema: graph.NewSchema(bus)})
+	server, err := New(Config{Schema: subscriptiongraph.New(subscriptiongraph.WithPubSub(bus))})
 	if err != nil {
 		t.Fatalf("new server: %v", err)
 	}
@@ -170,6 +178,20 @@ func executeGraphQL(t *testing.T, server *Server, body string) *httptest.Respons
 
 	request := httptest.NewRequest(http.MethodPost, "/graphql", bytes.NewBufferString(body))
 	request.Header.Set("Content-Type", "application/json")
+	response := httptest.NewRecorder()
+
+	server.ServeHTTP(response, request)
+	return response
+}
+
+func executeGraphQLHeaders(t *testing.T, server *Server, body string, headers map[string]string) *httptest.ResponseRecorder {
+	t.Helper()
+
+	request := httptest.NewRequest(http.MethodPost, "/graphql", bytes.NewBufferString(body))
+	request.Header.Set("Content-Type", "application/json")
+	for key, value := range headers {
+		request.Header.Set(key, value)
+	}
 	response := httptest.NewRecorder()
 
 	server.ServeHTTP(response, request)
@@ -275,5 +297,179 @@ func assertOrderedSubstring(t *testing.T, body string, earlier string, later str
 	}
 	if positions[0] >= positions[1] {
 		t.Fatalf("expected %q before %q in %q", earlier, later, body)
+	}
+}
+
+func readWebSocketHandshakeStatus(t *testing.T, baseURL string, requestPath string) string {
+	t.Helper()
+	parsed, err := url.Parse(baseURL)
+	if err != nil {
+		t.Fatalf("parse base url: %v", err)
+	}
+	conn, err := net.DialTimeout("tcp", parsed.Host, 5*time.Second)
+	if err != nil {
+		t.Fatalf("dial tcp: %v", err)
+	}
+	defer conn.Close()
+
+	req := "GET " + requestPath + " HTTP/1.1\r\n" +
+		"Host: " + parsed.Host + "\r\n" +
+		"Upgrade: websocket\r\n" +
+		"Connection: Upgrade\r\n" +
+		"Sec-WebSocket-Version: 13\r\n" +
+		"Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n" +
+		"Sec-WebSocket-Protocol: " + websocket.Subprotocol + "\r\n\r\n"
+	if _, err := conn.Write([]byte(req)); err != nil {
+		t.Fatalf("send handshake: %v", err)
+	}
+	buf := make([]byte, 2048)
+	n, err := conn.Read(buf)
+	if err != nil {
+		t.Fatalf("read response: %v", err)
+	}
+	raw := string(buf[:n])
+	return strings.TrimSpace(strings.Split(raw, "\n")[0])
+}
+
+func TestSeparateSubscriptionPathWebSocketRouting(t *testing.T) {
+	bus := pubsub.NewMemory()
+	t.Cleanup(func() { _ = bus.Close() })
+	srv, err := New(Config{
+		Schema:           subscriptiongraph.New(subscriptiongraph.WithPubSub(bus)),
+		SubscriptionPath: "/graphql/ws",
+		Transports:       []core.Transport{websocket.New()},
+	})
+	if err != nil {
+		t.Fatalf("new server: %v", err)
+	}
+	ts := httptest.NewServer(srv)
+	defer ts.Close()
+
+	status := readWebSocketHandshakeStatus(t, ts.URL, "/graphql")
+	if strings.Contains(status, "101") {
+		t.Fatalf("unexpected 101 switching protocols on /graphql, got %q", status)
+	}
+
+	conn := dialWebSocketAt(t, ts.URL, "/graphql/ws", websocket.Subprotocol)
+	_ = conn.Close()
+}
+
+func TestSubscriptionPathSeparateWithoutStreamingTransportErrors(t *testing.T) {
+	bus := pubsub.NewMemory()
+	t.Cleanup(func() { _ = bus.Close() })
+	_, err := New(Config{
+		Schema:           subscriptiongraph.New(subscriptiongraph.WithPubSub(bus)),
+		SubscriptionPath: "/subs",
+		Transports:       nil,
+	})
+	if err == nil {
+		t.Fatal("expected error when SubscriptionPath is split but no WebSocket/SSE transport supplied")
+	}
+}
+
+func TestGraphQLOptionsReturnsAllow(t *testing.T) {
+	server := newTestServer(t)
+	response := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodOptions, "/graphql", nil)
+
+	server.ServeHTTP(response, request)
+
+	if response.Code != http.StatusNoContent {
+		t.Fatalf("expected status %d, got %d", http.StatusNoContent, response.Code)
+	}
+	if got := response.Header().Get("Allow"); got != "GET, POST, OPTIONS" {
+		t.Fatalf("Allow = %q", got)
+	}
+}
+
+func TestDisableIntrospectionRejectsSchemaQuery(t *testing.T) {
+	bus := pubsub.NewMemory()
+	t.Cleanup(func() { _ = bus.Close() })
+	srv, err := New(Config{
+		Schema:               subscriptiongraph.New(subscriptiongraph.WithPubSub(bus)),
+		DisableIntrospection: true,
+	})
+	if err != nil {
+		t.Fatalf("new server: %v", err)
+	}
+
+	response := executeGraphQL(t, srv, `{"query":"{ __schema { queryType { name } } }"}`)
+	body := graphQLResponseBody(t, response)
+	errors := graphQLErrors(t, body)
+	if len(errors) != 1 {
+		t.Fatalf("expected one error, got %#v", errors)
+	}
+	msg := graphQLError(t, errors, 0)["message"].(string)
+	if !strings.Contains(msg, "introspection is disabled") {
+		t.Fatalf("unexpected message %q", msg)
+	}
+}
+
+type blockPlugin struct {
+	plugin.Base
+}
+
+func (blockPlugin) ValidationStart(ctx context.Context, req core.Request) error {
+	<-ctx.Done()
+	return ctx.Err()
+}
+
+func TestRequestTimeoutStopsSlowValidation(t *testing.T) {
+	bus := pubsub.NewMemory()
+	t.Cleanup(func() { _ = bus.Close() })
+	srv, err := New(Config{
+		Schema:         subscriptiongraph.New(subscriptiongraph.WithPubSub(bus)),
+		Plugins:        []plugin.Plugin{blockPlugin{}},
+		RequestTimeout: 50 * time.Millisecond,
+	})
+	if err != nil {
+		t.Fatalf("new server: %v", err)
+	}
+
+	response := executeGraphQL(t, srv, `{"query":"{ __typename }"}`)
+	body := graphQLResponseBody(t, response)
+	errors := graphQLErrors(t, body)
+	if len(errors) != 1 {
+		t.Fatalf("expected one error, got %#v", body)
+	}
+	msg := graphQLError(t, errors, 0)["message"].(string)
+	if !strings.Contains(msg, "context deadline exceeded") && !strings.Contains(msg, "canceled") {
+		t.Fatalf("unexpected error message %q", msg)
+	}
+}
+
+type ridPlugin struct {
+	plugin.Base
+	t *testing.T
+}
+
+func (p *ridPlugin) ParsingStart(ctx context.Context, req core.Request) error {
+	if core.RequestIDFromContext(ctx) == "" {
+		p.t.Fatal("expected request id in context")
+	}
+	return nil
+}
+
+func TestRequestIDMiddlewarePropagatesContext(t *testing.T) {
+	bus := pubsub.NewMemory()
+	t.Cleanup(func() { _ = bus.Close() })
+	p := &ridPlugin{t: t}
+	srv, err := New(Config{
+		Schema:     subscriptiongraph.New(subscriptiongraph.WithPubSub(bus)),
+		Plugins:    []plugin.Plugin{p},
+		Middleware: []Middleware{RequestID("X-Request-Id")},
+	})
+	if err != nil {
+		t.Fatalf("new server: %v", err)
+	}
+
+	response := executeGraphQLHeaders(t, srv, `{"query":"{ __typename }"}`, map[string]string{
+		"X-Request-Id": "upstream-1",
+	})
+	if response.Code != http.StatusOK {
+		t.Fatalf("status = %d", response.Code)
+	}
+	if got := response.Header().Get("X-Request-Id"); got != "upstream-1" {
+		t.Fatalf("response X-Request-Id = %q", got)
 	}
 }

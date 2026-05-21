@@ -5,16 +5,24 @@
 package server
 
 import (
+	"context"
+	"errors"
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/patrickkabwe/grx/core"
 	"github.com/patrickkabwe/grx/exec"
 	grxhttp "github.com/patrickkabwe/grx/pkg/http"
+	"github.com/patrickkabwe/grx/pkg/sse"
+	"github.com/patrickkabwe/grx/pkg/websocket"
 	"github.com/patrickkabwe/grx/plugin"
 	"github.com/patrickkabwe/grx/schema"
 )
+
+// Middleware wraps the HTTP handler exposed by Server.
+type Middleware func(http.Handler) http.Handler
 
 // Config tunes a [Server]. Schema is required; the remaining fields have
 // safe zero-value defaults.
@@ -34,29 +42,87 @@ type Config struct {
 	// playground.
 	PlaygroundPath string
 
+	// GraphQLPath is the URL path for query and mutation traffic (always
+	// HTTP: JSON POST plus any user transports retained on this path).
+	// The empty string defaults to "/graphql".
+	GraphQLPath string
+
+	// SubscriptionPath, when empty, uses GraphQLPath for subscription
+	// transports (WebSocket + SSE)—the conventional single-endpoint
+	// deployment for graphql-transport-ws alongside POST /graphql.
+	//
+	// When non-empty (and normalized not equal to GraphQLPath), WebSocket and
+	// SSE transports registered in Transports are moved to SubscriptionPath so
+	// queries/mutations stay on GraphQLPath.
+	SubscriptionPath string
+
 	// Transports registers protocol handlers (WebSocket, SSE, ...) that
-	// the server consults to handle requests on the GraphQL endpoint. Each
-	// request is offered to the transports in order; the first one whose
-	// Match returns true takes ownership of the response. A default
-	// HTTP+JSON transport ([pkg/http.Transport]) is appended to the chain
-	// automatically, so plain `POST /graphql` requests always work; to
-	// customise its behaviour, register a [pkg/http.Transport] (or a
-	// custom transport that matches POST) explicitly before any others.
+	// the server consults. Each request on the routed path is offered to the
+	// relevant chain in order; the first one whose Match returns true takes
+	// ownership of the response. For GraphQLPath, a default HTTP+JSON
+	// transport ([pkg/http.Transport]) is appended automatically, so plain
+	// POST to GraphQLPath always works unless you customise that transport.
+	//
+	// When SubscriptionPath is split from GraphQLPath, bundled *websocket and
+	// *sse transports are routed only to SubscriptionPath; other transports
+	// stay on GraphQLPath.
 	Transports []core.Transport
+
+	// Middleware wraps the final HTTP handler. Middleware is applied in the
+	// order supplied, so the first middleware sees each request first.
+	Middleware []Middleware
+
+	// RequestTimeout, when non-zero, applies a deadline to the context of each
+	// GraphQL request handled by the built-in transports.
+	RequestTimeout time.Duration
+
+	// DisableIntrospection rejects __schema / __type introspection documents.
+	DisableIntrospection bool
+
+	// MaxHTTPRequestBytes limits the default GraphQL HTTP transport (POST body
+	// and GET query parameters). Zero leaves the transport unlimited.
+	MaxHTTPRequestBytes int64
+
+	// EnableResponseGzip enables gzip compression for JSON GraphQL responses
+	// when the client advertises Accept-Encoding: gzip.
+	EnableResponseGzip bool
 }
 
 // Server is an http.Handler that exposes a GraphQL endpoint and an
 // optional GraphiQL playground. Construct one with [New].
 type Server struct {
-	executor       core.Executor
-	playgroundPath string
-	transports     []core.Transport
+	executor         core.Executor
+	PlaygroundPath   string
+	GraphqlPath      string // normalized; persisted from New
+	SubscriptionPath string // pathname passed to graphql-ws in playground (canonical subscription URL)
+
+	separateSubs   bool             // graphqlPath != subscriptionPath routing
+	mainChain      []core.Transport // graphqlPath
+	subChain       []core.Transport // subscriptionPath; empty when combined endpoint
+	handler        http.Handler
+	requestTimeout time.Duration
 }
 
-const (
-	graphQLPath = "/graphql"
-	faviconPath = "/favicon.ico"
-)
+const faviconPath = "/favicon.ico"
+
+// pathRestricted restricts core.Transport.Match to requests whose URL path
+// equals path (after server-level routing passes them through—this is extra
+// safety for partitioned endpoints).
+type pathRestricted struct {
+	path string
+	core.Transport
+}
+
+func (p pathRestricted) Match(r *http.Request) bool {
+	if r.URL.Path != p.path {
+		return false
+	}
+	return p.Transport.Match(r)
+}
+
+func (p pathRestricted) Serve(w http.ResponseWriter, r *http.Request, executor core.Executor) {
+	p.Transport.Serve(w, r, executor)
+}
 
 // New builds a [Server] from cfg. It returns an error when the supplied
 // schema cannot be reflected into a valid GraphQL schema.
@@ -66,63 +132,178 @@ func New(config Config) (*Server, error) {
 		return nil, err
 	}
 
-	executor := exec.New(schemaValue, config.Plugins)
+	var execOpts []exec.ExecutorOption
+	if config.DisableIntrospection {
+		execOpts = append(execOpts, exec.WithDisableIntrospection())
+	}
+	executor := exec.New(schemaValue, config.Plugins, execOpts...)
 
-	// All network handling flows through transports. The user-supplied
-	// chain is consulted first; a default HTTP+JSON transport is appended
-	// so the canonical `POST /graphql` request continues to work out of
-	// the box without any explicit registration.
-	transports := make([]core.Transport, 0, len(config.Transports)+1)
-	transports = append(transports, config.Transports...)
-	transports = append(transports, grxhttp.New())
+	graphqlPath := normalizePath(config.GraphQLPath, "/graphql")
+	subPath := graphqlPath
+	if strings.TrimSpace(config.SubscriptionPath) != "" {
+		subPath = normalizePath(config.SubscriptionPath, "/ws")
+	}
+	if subPath == "" {
+		return nil, errors.New("server: SubscriptionPath is invalid")
+	}
+	separate := subPath != graphqlPath
 
-	return &Server{
-		executor:       executor,
-		playgroundPath: config.PlaygroundPath,
-		transports:     transports,
-	}, nil
+	var main []core.Transport
+	var sub []core.Transport
+
+	if separate {
+		for _, transport := range config.Transports {
+			switch transport.(type) {
+			case *websocket.Transport, *sse.Transport:
+				sub = append(sub, pathRestricted{path: subPath, Transport: transport})
+			default:
+				main = append(main, transport)
+			}
+		}
+		if len(sub) == 0 {
+			return nil, errors.New(`server: SubscriptionPath differs from GraphQLPath but no *websocket.Transport or *sse.Transport was registered`)
+		}
+	} else {
+		main = append(main, config.Transports...)
+	}
+
+	httpTransportCfg := grxhttp.Config{Path: graphqlPath}
+	if config.MaxHTTPRequestBytes != 0 {
+		httpTransportCfg.MaxRequestBytes = config.MaxHTTPRequestBytes
+	}
+	if config.EnableResponseGzip {
+		httpTransportCfg.EnableGzip = true
+	}
+	main = append(main, grxhttp.New(httpTransportCfg))
+
+	srv := &Server{
+		executor:         executor,
+		PlaygroundPath:   config.PlaygroundPath,
+		GraphqlPath:      graphqlPath,
+		SubscriptionPath: subPath,
+		separateSubs:     separate,
+		mainChain:        main,
+		subChain:         sub,
+		requestTimeout:   config.RequestTimeout,
+	}
+	srv.handler = applyMiddleware(http.HandlerFunc(srv.serveHTTP), config.Middleware)
+	return srv, nil
+}
+
+func applyMiddleware(handler http.Handler, middleware []Middleware) http.Handler {
+	for i := len(middleware) - 1; i >= 0; i-- {
+		handler = middleware[i](handler)
+	}
+	return handler
+}
+
+func normalizePath(path string, defaultPath string) string {
+	path = strings.TrimSpace(path)
+	if path == "" {
+		return defaultPath
+	}
+	if !strings.HasPrefix(path, "/") {
+		return "/" + path
+	}
+	return path
+}
+
+func (s *Server) canonicalGraphQLPath() string {
+	if s.GraphqlPath != "" {
+		return s.GraphqlPath
+	}
+	return "/graphql"
+}
+
+func (s *Server) canonicalWSPath() string {
+	if s.SubscriptionPath != "" {
+		return s.SubscriptionPath
+	}
+	return s.canonicalGraphQLPath()
 }
 
 // ServeHTTP routes incoming HTTP traffic. It serves GraphiQL on GET to the
 // configured playground path, returns 204 for /favicon.ico, and dispatches
-// every /graphql request through the registered transports. Requests that
-// no transport claims receive a 404.
+// GraphQL traffic through the registered transports. Requests that no
+// transport claims receive a 404.
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	if s.handler != nil {
+		s.handler.ServeHTTP(w, r)
+		return
+	}
+	s.serveHTTP(w, r)
+}
+
+func (s *Server) serveHTTP(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Path == faviconPath && (r.Method == http.MethodGet || r.Method == http.MethodHead) {
 		w.WriteHeader(http.StatusNoContent)
 		return
 	}
 
-	if r.Method == http.MethodGet && r.URL.Path == s.playgroundPath {
-		servePlayground(w)
+	if r.Method == http.MethodGet && r.URL.Path == s.PlaygroundPath {
+		servePlayground(w, s.canonicalGraphQLPath(), s.canonicalWSPath())
 		return
 	}
 
-	if r.URL.Path != graphQLPath {
+	gqlPath := s.canonicalGraphQLPath()
+	wsPath := s.canonicalWSPath()
+
+	if r.Method == http.MethodOptions && r.URL.Path == gqlPath {
+		w.Header().Set("Allow", "GET, POST, OPTIONS")
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+
+	if s.separateSubs && len(s.subChain) > 0 && r.URL.Path == wsPath {
+		for _, transport := range s.subChain {
+			if transport.Match(r) {
+				req, cancel := s.withRequestDeadline(r)
+				transport.Serve(w, req, s.executor)
+				cancel()
+				return
+			}
+		}
 		http.NotFound(w, r)
 		return
 	}
 
-	for _, transport := range s.transports {
-		if transport.Match(r) {
-			transport.Serve(w, r, s.executor)
-			return
+	if r.URL.Path == gqlPath {
+		for _, transport := range s.mainChain {
+			if transport.Match(r) {
+				req, cancel := s.withRequestDeadline(r)
+				transport.Serve(w, req, s.executor)
+				cancel()
+				return
+			}
 		}
+		http.NotFound(w, r)
+		return
 	}
 
 	http.NotFound(w, r)
 }
 
-func servePlayground(w http.ResponseWriter) {
+func (s *Server) withRequestDeadline(r *http.Request) (*http.Request, context.CancelFunc) {
+	if s.requestTimeout <= 0 {
+		return r, func() {}
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), s.requestTimeout)
+	return r.WithContext(ctx), cancel
+}
+
+func servePlayground(w http.ResponseWriter, httpPath string, wsPath string) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store")
-	if _, err := w.Write([]byte(playgroundHTML(graphQLPath))); err != nil {
+	if _, err := w.Write([]byte(playgroundHTML(httpPath, wsPath))); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
 }
 
-func playgroundHTML(endpoint string) string {
-	replacer := strings.NewReplacer("{{ENDPOINT}}", strconv.Quote(endpoint))
+func playgroundHTML(httpPath string, wsPath string) string {
+	replacer := strings.NewReplacer(
+		"{{HTTP_ENDPOINT}}", strconv.Quote(httpPath),
+		"{{WS_ENDPOINT}}", strconv.Quote(wsPath),
+	)
 	return replacer.Replace(`<!doctype html>
 <html lang="en">
 	<head>
@@ -170,9 +351,10 @@ func playgroundHTML(endpoint string) string {
 			import { parse } from "graphql";
 			import "graphiql/setup-workers/esm.sh";
 
-			const endpoint = {{ENDPOINT}};
-			const url = new URL(endpoint, window.location.href);
-			const subscriptionUrl = new URL(endpoint, window.location.href);
+			const httpEndpoint = {{HTTP_ENDPOINT}};
+			const wsEndpoint = {{WS_ENDPOINT}};
+			const url = new URL(httpEndpoint, window.location.href);
+			const subscriptionUrl = new URL(wsEndpoint, window.location.href);
 			subscriptionUrl.protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
 			const wsClient = createWSClient({ url: subscriptionUrl.toString() });
 
@@ -193,7 +375,7 @@ func playgroundHTML(endpoint string) string {
 			const httpFetch = async (request) => {
 				const response = await fetch(url.toString(), {
 					method: "POST",
-					headers: { "content-type": "application/json", accept: "application/json" },
+					headers: { "content-type": "application/json", accept: "application/graphql-response+json, application/json;q=0.9" },
 					body: JSON.stringify(request),
 				});
 				return response.json();

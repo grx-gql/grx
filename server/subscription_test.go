@@ -85,9 +85,13 @@ func newSubscriptionServer(t *testing.T, transports ...core.Transport) (*Server,
 	t.Helper()
 	executor := newStreamingExecutor(t)
 	return &Server{
-		executor:       executor,
-		playgroundPath: "/playground",
-		transports:     transports,
+		executor:         executor,
+		PlaygroundPath:   "/playground",
+		GraphqlPath:      "/graphql",
+		SubscriptionPath: "/graphql",
+		separateSubs:     false,
+		mainChain:        transports,
+		subChain:         nil,
 	}, executor
 }
 
@@ -429,8 +433,8 @@ func TestNewServerBuildsSubscriptionRoot(t *testing.T) {
 	}
 	// The server appends a default HTTP+JSON transport to the chain, so
 	// the user-supplied two transports become three after construction.
-	if len(srv.transports) != 3 {
-		t.Fatalf("expected 3 transports (websocket, sse, default http), got %d", len(srv.transports))
+	if len(srv.mainChain) != 3 {
+		t.Fatalf("expected 3 transports (websocket, sse, default http), got %d", len(srv.mainChain))
 	}
 }
 
@@ -515,6 +519,10 @@ func nestedValue(t *testing.T, value map[string]any, keys ...string) any {
 }
 
 func dialWebSocket(t *testing.T, baseURL string, subprotocol string) net.Conn {
+	return dialWebSocketAt(t, baseURL, "/graphql", subprotocol)
+}
+
+func dialWebSocketAt(t *testing.T, baseURL string, requestPath string, subprotocol string) net.Conn {
 	t.Helper()
 
 	parsed, err := url.Parse(baseURL)
@@ -533,7 +541,7 @@ func dialWebSocket(t *testing.T, baseURL string, subprotocol string) net.Conn {
 	key := base64.StdEncoding.EncodeToString(keyBytes)
 
 	request := strings.Join([]string{
-		"GET /graphql HTTP/1.1",
+		"GET " + requestPath + " HTTP/1.1",
 		"Host: " + parsed.Host,
 		"Upgrade: websocket",
 		"Connection: Upgrade",
