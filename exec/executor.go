@@ -6,14 +6,14 @@ package exec
 
 import (
 	"context"
-		"crypto/sha256"
-		"encoding/hex"
-		"errors"
-		"fmt"
-		"reflect"
-		"runtime/debug"
-		"strings"
-		"sync"
+	"crypto/sha256"
+	"encoding/hex"
+	"errors"
+	"fmt"
+	"reflect"
+	"runtime/debug"
+	"strings"
+	"sync"
 
 	"github.com/patrickkabwe/grx/core"
 	"github.com/patrickkabwe/grx/plugin"
@@ -24,6 +24,11 @@ import (
 // document defines a subscription operation. Subscriptions must be run
 // through [Executor.Subscribe] so callers receive a streaming channel.
 var ErrSubscriptionOperation = errors.New("subscription operations must use the streaming Subscribe entry point")
+
+const (
+	parallelFieldThreshold       = 2
+	maxConcurrentFieldGoroutines = 64
+)
 
 // Executor runs GraphQL operations against a built [schema.Schema] and
 // notifies the registered plugins at each lifecycle phase. It satisfies
@@ -136,20 +141,7 @@ func (e *Executor) Execute(ctx context.Context, req core.Request) (response core
 // can call it cheaply to decide whether to dispatch a request to Execute
 // or Subscribe.
 func (e *Executor) OperationKind(req core.Request) (core.OperationKind, error) {
-	doc, err := parseDocumentNamed(req.Query, req.Variables, req.OperationName, e.maxSelectionDepth)
-	if err != nil {
-		return "", err
-	}
-	switch doc.Kind {
-	case operationQuery:
-		return core.OperationQuery, nil
-	case operationMutation:
-		return core.OperationMutation, nil
-	case operationSubscription:
-		return core.OperationSubscription, nil
-	default:
-		return "", fmt.Errorf("unknown operation kind %q", doc.Kind)
-	}
+	return parseOperationKind(req.Query, req.OperationName)
 }
 
 // Subscribe parses a subscription operation, invokes the source-stream resolver,
@@ -317,7 +309,7 @@ func (e *Executor) executeSelectionSet(ctx context.Context, object *schema.Objec
 	errors := append([]core.Error{}, flatErrs...)
 
 	data := core.NewOrderedObject(len(flat))
-	if fieldExecutionSerial(ctx) {
+	if fieldExecutionSerial(ctx) || len(path) > 0 || len(flat) < parallelFieldThreshold {
 		for _, selected := range flat {
 			key, value, fieldErrors, ok := e.resolveSelectedField(ctx, object, source, selected, fragments, path)
 			if len(fieldErrors) > 0 {
@@ -341,10 +333,19 @@ func (e *Executor) executeSelectionSet(ctx context.Context, object *schema.Objec
 
 	results := make([]resolvedField, len(flat))
 	var wg sync.WaitGroup
+	limit := maxConcurrentFieldGoroutines
+	if len(flat) < limit {
+		limit = len(flat)
+	}
+	sem := make(chan struct{}, limit)
 	for index, selected := range flat {
 		wg.Add(1)
+		sem <- struct{}{}
 		go func(index int, selected selection) {
-			defer wg.Done()
+			defer func() {
+				<-sem
+				wg.Done()
+			}()
 			key, value, fieldErrors, ok := e.resolveSelectedField(ctx, object, source, selected, fragments, path)
 			results[index] = resolvedField{index: index, key: key, value: value, errors: fieldErrors, ok: ok}
 		}(index, selected)
@@ -371,14 +372,6 @@ func (e *Executor) resolveSelectedField(ctx context.Context, object *schema.Obje
 	key := selected.responseKey()
 	if selected.Name == "__typename" {
 		return key, object.Name(), nil, true
-	}
-
-	skip, include, derr := evalSkipInclude(selected.Directives)
-	if derr != nil {
-		return key, nil, []core.Error{newFieldError(derr.Error(), appendPath(path, key), selected.Location)}, false
-	}
-	if skip || !include {
-		return key, nil, nil, false
 	}
 
 	field, ok := object.Fields[selected.Name]
@@ -408,7 +401,13 @@ func (e *Executor) resolveSelectedField(ctx context.Context, object *schema.Obje
 		}
 	}
 
-	value, err := field.Resolver(ctx, schema.ResolveParams{Source: source, Args: selected.Arguments})
+	args, err := coerceArguments(field.Args, selected.Arguments)
+	if err != nil {
+		e.notifyError(ctx, err)
+		return key, nil, []core.Error{newFieldError(e.maskError(err, false).Error(), fieldPath, selected.Location)}, false
+	}
+
+	value, err := field.Resolver(ctx, schema.ResolveParams{Source: source, Args: args})
 	if err != nil {
 		e.notifyError(ctx, err)
 		return key, nil, []core.Error{newFieldError(e.maskError(err, true).Error(), fieldPath, selected.Location)}, false
@@ -417,7 +416,6 @@ func (e *Executor) resolveSelectedField(ctx context.Context, object *schema.Obje
 	resolved, nestedErrors := e.completeValue(ctx, field.Type, value, selected.Selections, fragments, fieldPath)
 	return key, resolved, nestedErrors, true
 }
-
 
 func (e *Executor) completeValue(ctx context.Context, fieldType schema.Type, value any, selections []selection, fragments map[string]*fragmentDef, path []any) (any, []core.Error) {
 	if err := ctx.Err(); err != nil {

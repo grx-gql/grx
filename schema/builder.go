@@ -485,18 +485,6 @@ func (b *Builder) setValue(target reflect.Value, raw any) error {
 		return nil
 	}
 
-	rawValue := reflect.ValueOf(raw)
-	if rawValue.IsValid() {
-		if rawValue.Type().AssignableTo(target.Type()) {
-			target.Set(rawValue)
-			return nil
-		}
-		if rawValue.Type().ConvertibleTo(target.Type()) {
-			target.Set(rawValue.Convert(target.Type()))
-			return nil
-		}
-	}
-
 	if enumType, ok := b.enums[target.Type()]; ok {
 		value, err := enumType.Parse(raw)
 		if err != nil {
@@ -506,20 +494,36 @@ func (b *Builder) setValue(target reflect.Value, raw any) error {
 		return nil
 	}
 	if scalar, ok := b.scalars[target.Type()]; ok {
+		rawValue := reflect.ValueOf(raw)
+		if rawValue.IsValid() && rawValue.Type().AssignableTo(target.Type()) {
+			target.Set(rawValue)
+			return nil
+		}
 		value, err := scalar.parse(raw)
 		if err != nil {
 			return err
 		}
-		rawValue := reflect.ValueOf(value)
-		if !rawValue.Type().AssignableTo(target.Type()) && !rawValue.Type().ConvertibleTo(target.Type()) {
+		parsedValue := reflect.ValueOf(value)
+		if !parsedValue.Type().AssignableTo(target.Type()) && !parsedValue.Type().ConvertibleTo(target.Type()) {
 			return fmt.Errorf("cannot assign %T to %s", value, target.Type().String())
 		}
+		if parsedValue.Type().AssignableTo(target.Type()) {
+			target.Set(parsedValue)
+			return nil
+		}
+		target.Set(parsedValue.Convert(target.Type()))
+		return nil
+	}
+
+	rawValue := reflect.ValueOf(raw)
+	if rawValue.IsValid() {
 		if rawValue.Type().AssignableTo(target.Type()) {
 			target.Set(rawValue)
 			return nil
 		}
-		target.Set(rawValue.Convert(target.Type()))
-		return nil
+		if setScalarValue(target, rawValue) {
+			return nil
+		}
 	}
 
 	if target.Kind() == reflect.Slice || target.Kind() == reflect.Array {
@@ -554,6 +558,59 @@ func (b *Builder) setValue(target reflect.Value, raw any) error {
 	}
 
 	return fmt.Errorf("cannot assign %T to %s", raw, target.Type().String())
+}
+
+func setScalarValue(target reflect.Value, raw reflect.Value) bool {
+	switch target.Kind() {
+	case reflect.String:
+		if raw.Kind() != reflect.String {
+			return false
+		}
+		target.SetString(raw.String())
+		return true
+	case reflect.Bool:
+		if raw.Kind() != reflect.Bool {
+			return false
+		}
+		target.SetBool(raw.Bool())
+		return true
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		if !isSignedIntegerKind(raw.Kind()) {
+			return false
+		}
+		value := raw.Int()
+		if target.OverflowInt(value) {
+			return false
+		}
+		target.SetInt(value)
+		return true
+	case reflect.Float32, reflect.Float64:
+		switch raw.Kind() {
+		case reflect.Float32, reflect.Float64:
+			value := raw.Float()
+			if target.OverflowFloat(value) {
+				return false
+			}
+			target.SetFloat(value)
+			return true
+		case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+			target.SetFloat(float64(raw.Int()))
+			return true
+		default:
+			return false
+		}
+	default:
+		return false
+	}
+}
+
+func isSignedIntegerKind(kind reflect.Kind) bool {
+	switch kind {
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		return true
+	default:
+		return false
+	}
 }
 
 func (b *Builder) graphQLArgs(argsType reflect.Type) ([]InputValue, error) {

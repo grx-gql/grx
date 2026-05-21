@@ -70,6 +70,15 @@ func (e *Executor) flattenSelections(object *schema.Object, selections []selecti
 	var out []selection
 	var errs []core.Error
 	for _, s := range selections {
+		skip, include, err := evalSkipInclude(s.Directives)
+		if err != nil {
+			errs = append(errs, newFieldError(err.Error(), nil, s.Location))
+			continue
+		}
+		if skip || !include {
+			continue
+		}
+
 		switch {
 		case s.isFragmentSpread():
 			fd := fragments[s.FragmentSpread]
@@ -82,19 +91,38 @@ func (e *Executor) flattenSelections(object *schema.Object, selections []selecti
 			}
 			inner, e2 := e.flattenSelections(object, fd.Selections, fragments)
 			errs = append(errs, e2...)
-			out = append(out, inner...)
+			out = appendMergedSelections(out, inner)
 		case s.isInlineFragment():
-			if !fragmentTypeMatches(object, s.InlineFragmentOn) {
+			if s.InlineFragmentOn != "" && !fragmentTypeMatches(object, s.InlineFragmentOn) {
 				continue
 			}
 			inner, e2 := e.flattenSelections(object, s.Selections, fragments)
 			errs = append(errs, e2...)
-			out = append(out, inner...)
+			out = appendMergedSelections(out, inner)
 		case s.isField():
-			out = append(out, s)
+			out = appendMergedSelection(out, s)
 		default:
 			errs = append(errs, newFieldError("invalid selection", nil, s.Location))
 		}
 	}
 	return out, errs
+}
+
+func appendMergedSelections(base []selection, values []selection) []selection {
+	for _, value := range values {
+		base = appendMergedSelection(base, value)
+	}
+	return base
+}
+
+func appendMergedSelection(values []selection, next selection) []selection {
+	key := next.responseKey()
+	for index := range values {
+		if values[index].responseKey() != key {
+			continue
+		}
+		values[index].Selections = append(values[index].Selections, next.Selections...)
+		return values
+	}
+	return append(values, next)
 }

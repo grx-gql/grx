@@ -179,7 +179,17 @@ func (p *parser) parseSelectionSet(depth int) ([]selection, error) {
 
 func (p *parser) parseSelection(depth int) (selection, error) {
 	if p.peek().kind == tokenSpread {
-		p.next() // ...
+		spread := p.next() // ...
+		if p.peek().kind == tokenBraceOpen {
+			nested, err := p.parseSelectionSet(depth + 1)
+			if err != nil {
+				return selection{}, err
+			}
+			return selection{
+				Selections: nested,
+				Location:   locationForOffset(p.source, spread.offset),
+			}, nil
+		}
 		if p.peek().kind == tokenName && p.peek().value == "on" {
 			p.next() // on
 			typeName := p.next()
@@ -339,6 +349,9 @@ func (p *parser) parseArguments() (map[string]any, error) {
 		if err := p.expect(tokenColon); err != nil {
 			return nil, err
 		}
+		if _, exists := args[name.value]; exists {
+			return nil, newParseError(p.source, name.offset, `There can be only one argument named "%s".`, name.value)
+		}
 		value, err := p.parseValue()
 		if err != nil {
 			return nil, err
@@ -416,6 +429,9 @@ func (p *parser) parseObjectLiteral() (map[string]any, error) {
 		}
 		if err := p.expect(tokenColon); err != nil {
 			return nil, err
+		}
+		if _, exists := object[name.value]; exists {
+			return nil, newParseError(p.source, name.offset, `There can be only one input field named "%s".`, name.value)
 		}
 		value, err := p.parseValue()
 		if err != nil {
@@ -575,6 +591,9 @@ func (p *parser) parseConstObjectLiteral() (map[string]any, error) {
 		}
 		if err := p.expect(tokenColon); err != nil {
 			return nil, err
+		}
+		if _, exists := obj[name.value]; exists {
+			return nil, newParseError(p.source, name.offset, `There can be only one input field named "%s".`, name.value)
 		}
 		val, err := p.parseConstValue()
 		if err != nil {

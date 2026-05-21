@@ -49,6 +49,38 @@ func TestIntrospectionBuiltinDirectives(t *testing.T) {
 	}
 }
 
+func TestIntrospectionDefaultValuesAreGraphQLLiterals(t *testing.T) {
+	schemaValue, err := schema.Build(schema.Config{Query: introQuery{}})
+	if err != nil {
+		t.Fatalf("build schema: %v", err)
+	}
+
+	executor := New(schemaValue, nil)
+	response := executor.Execute(context.Background(), core.Request{
+		Query: `{ __schema { directives { name args { name defaultValue } } } }`,
+	})
+	if len(response.Errors) != 0 {
+		t.Fatalf("unexpected errors: %#v", response.Errors)
+	}
+
+	data := responseObject(t, response.Data)
+	schemaData := responseObject(t, data["__schema"])
+	directives := schemaData["directives"].([]any)
+	for _, rawDirective := range directives {
+		directive := responseObject(t, rawDirective)
+		if directive["name"] != "deprecated" {
+			continue
+		}
+		args := directive["args"].([]any)
+		reason := responseObject(t, args[0])
+		if reason["defaultValue"] != `"No longer supported"` {
+			t.Fatalf("expected quoted GraphQL literal, got %#v", reason["defaultValue"])
+		}
+		return
+	}
+	t.Fatal("expected deprecated directive")
+}
+
 func TestIntrospectionOmitsDeprecatedFieldsByDefault(t *testing.T) {
 	schemaValue, err := schema.Build(schema.Config{Query: introQuery{}})
 	if err != nil {
@@ -157,8 +189,8 @@ func TestIntrospectionScalarSpecifiedByURL(t *testing.T) {
 		Query: introQuery{},
 		Scalars: []schema.ScalarConfig{
 			{
-				Type:          testDate{},
-				Name:          "Date",
+				Type:           testDate{},
+				Name:           "Date",
 				SpecifiedByURL: "https://example.com/date",
 				Parse: func(input any) (any, error) {
 					return testDate{Raw: input.(string)}, nil
