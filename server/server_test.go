@@ -2,7 +2,10 @@ package server
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"io"
 	"net"
 	"net/http"
@@ -15,6 +18,7 @@ import (
 
 	"github.com/patrickkabwe/grx/core"
 	subscriptiongraph "github.com/patrickkabwe/grx/examples/subscriptions/graph"
+	"github.com/patrickkabwe/grx/exec"
 	grxclient "github.com/patrickkabwe/grx/pkg/client"
 	"github.com/patrickkabwe/grx/pkg/pubsub"
 	"github.com/patrickkabwe/grx/pkg/websocket"
@@ -445,7 +449,6 @@ func TestDisableIntrospectionRejectsSchemaQuery(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new server: %v", err)
 	}
-
 	h := wrapServerInHarness(t, srv)
 	body := responseToMap(t, execGraphQL(t, h, &grxclient.Request{
 		Query: "{ __schema { queryType { name } } }",
@@ -480,7 +483,6 @@ func TestRequestTimeoutStopsSlowValidation(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new server: %v", err)
 	}
-
 	h := wrapServerInHarness(t, srv)
 	body := responseToMap(t, execGraphQL(t, h, &grxclient.Request{Query: "{ __typename }"}))
 	errors := graphQLErrors(t, body)
@@ -517,7 +519,6 @@ func TestRequestIDMiddlewarePropagatesContext(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new server: %v", err)
 	}
-
 	h := wrapServerInHarness(t, srv)
 	httpResp, _ := execGraphQLHTTP(t, h, &grxclient.Request{Query: "{ __typename }"}, map[string]string{
 		"X-Request-Id": "upstream-1",
@@ -527,6 +528,165 @@ func TestRequestIDMiddlewarePropagatesContext(t *testing.T) {
 	}
 	if got := httpResp.Header.Get("X-Request-Id"); got != "upstream-1" {
 		t.Fatalf("response X-Request-Id = %q", got)
+	}
+}
+
+type errorRecorder struct {
+	plugin.Base
+	errors []error
+}
+
+func (r *errorRecorder) Error(ctx context.Context, err error) {
+	r.errors = append(r.errors, err)
+}
+
+func TestSecurityMasksResolverErrorsAndPreservesRawError(t *testing.T) {
+	bus := pubsub.NewMemory()
+	t.Cleanup(func() { _ = bus.Close() })
+	recorder := &errorRecorder{}
+	srv, err := New(Config{
+		Schema:             subscriptiongraph.New(subscriptiongraph.WithPubSub(bus)),
+		Plugins:            []plugin.Plugin{recorder},
+		MaskInternalErrors: true,
+		ClientErrorMessage: "hidden",
+	})
+	if err != nil {
+		t.Fatalf("new server: %v", err)
+	}
+	h := wrapServerInHarness(t, srv)
+	body := responseToMap(t, execGraphQL(t, h, &grxclient.Request{
+		Query: "query ExampleError { errorExample }",
+	}))
+	errors := graphQLErrors(t, body)
+	msg := graphQLError(t, errors, 0)["message"].(string)
+	if msg != "hidden" {
+		t.Fatalf("expected masked error, got %q", msg)
+	}
+	if len(recorder.errors) != 1 || !strings.Contains(recorder.errors[0].Error(), "example error from basic server") {
+		t.Fatalf("expected raw error to be preserved, got %#v", recorder.errors)
+	}
+}
+
+func TestSecurityOperationAuthorizerRejectsOperation(t *testing.T) {
+	bus := pubsub.NewMemory()
+	t.Cleanup(func() { _ = bus.Close() })
+	srv, err := New(Config{
+		Schema: subscriptiongraph.New(subscriptiongraph.WithPubSub(bus)),
+		OperationAuthorizer: func(ctx context.Context, operation exec.OperationContext) error {
+			if operation.Kind == core.OperationMutation {
+				return errors.New("mutation denied")
+			}
+			return nil
+		},
+	})
+	if err != nil {
+		t.Fatalf("new server: %v", err)
+	}
+	h := wrapServerInHarness(t, srv)
+	body := responseToMap(t, execGraphQL(t, h, &grxclient.Request{
+		Query: `mutation CreatePost { createPost(input: {title: "x", body: "y"}) { post { id } } }`,
+	}))
+	errors := graphQLErrors(t, body)
+	msg := graphQLError(t, errors, 0)["message"].(string)
+	if msg != "mutation denied" {
+		t.Fatalf("unexpected error message %q", msg)
+	}
+}
+
+func TestSecurityFieldAuthorizerRejectsField(t *testing.T) {
+	bus := pubsub.NewMemory()
+	t.Cleanup(func() { _ = bus.Close() })
+	srv, err := New(Config{
+		Schema: subscriptiongraph.New(subscriptiongraph.WithPubSub(bus)),
+		FieldAuthorizer: func(ctx context.Context, field exec.FieldAuthorizationContext) error {
+			if field.ParentType == "User" && field.FieldName == "email" {
+				return errors.New("email denied")
+			}
+			return nil
+		},
+	})
+	if err != nil {
+		t.Fatalf("new server: %v", err)
+	}
+	h := wrapServerInHarness(t, srv)
+	body := responseToMap(t, execGraphQL(t, h, &grxclient.Request{
+		Query:     "query GetUser($id: String!) { user(id: $id) { id email } }",
+		Variables: map[string]any{"id": "user_42"},
+	}))
+	errors := graphQLErrors(t, body)
+	errorValue := graphQLError(t, errors, 0)
+	if errorValue["message"] != "email denied" {
+		t.Fatalf("unexpected error: %#v", errorValue)
+	}
+	path, ok := errorValue["path"].([]any)
+	if !ok || len(path) != 2 || path[0] != "user" || path[1] != "email" {
+		t.Fatalf("unexpected path: %#v", errorValue["path"])
+	}
+}
+
+func TestSecurityRateLimiterRejectsOperation(t *testing.T) {
+	bus := pubsub.NewMemory()
+	t.Cleanup(func() { _ = bus.Close() })
+	srv, err := New(Config{
+		Schema: subscriptiongraph.New(subscriptiongraph.WithPubSub(bus)),
+		RateLimiter: func(ctx context.Context, operation exec.OperationContext) error {
+			return errors.New("rate limited")
+		},
+	})
+	if err != nil {
+		t.Fatalf("new server: %v", err)
+	}
+	h := wrapServerInHarness(t, srv)
+	body := responseToMap(t, execGraphQL(t, h, &grxclient.Request{Query: "{ __typename }"}))
+	errors := graphQLErrors(t, body)
+	if graphQLError(t, errors, 0)["message"] != "rate limited" {
+		t.Fatalf("unexpected errors: %#v", errors)
+	}
+}
+
+func TestSecurityTrustedDocumentsRejectsUnknownQuery(t *testing.T) {
+	query := "{ __typename }"
+	sum := sha256.Sum256([]byte(query))
+	hash := hex.EncodeToString(sum[:])
+	bus := pubsub.NewMemory()
+	t.Cleanup(func() { _ = bus.Close() })
+	srv, err := New(Config{
+		Schema:           subscriptiongraph.New(subscriptiongraph.WithPubSub(bus)),
+		TrustedDocuments: map[string]string{hash: query},
+	})
+	if err != nil {
+		t.Fatalf("new server: %v", err)
+	}
+	h := wrapServerInHarness(t, srv)
+	allowed := responseToMap(t, execGraphQL(t, h, &grxclient.Request{Query: "{ __typename }"}))
+	assertNoErrors(t, allowed)
+
+	rejected := responseToMap(t, execGraphQL(t, h, &grxclient.Request{Query: "{ posts { id } }"}))
+	body := rejected
+	errors := graphQLErrors(t, body)
+	if graphQLError(t, errors, 0)["message"] != "operation is not trusted" {
+		t.Fatalf("unexpected errors: %#v", errors)
+	}
+}
+
+func TestSecurityRejectsUnknownVariables(t *testing.T) {
+	bus := pubsub.NewMemory()
+	t.Cleanup(func() { _ = bus.Close() })
+	srv, err := New(Config{
+		Schema:                 subscriptiongraph.New(subscriptiongraph.WithPubSub(bus)),
+		RejectUnknownVariables: true,
+	})
+	if err != nil {
+		t.Fatalf("new server: %v", err)
+	}
+	h := wrapServerInHarness(t, srv)
+	body := responseToMap(t, execGraphQL(t, h, &grxclient.Request{
+		Query:     "query GetUser($id: String!) { user(id: $id) { id } }",
+		Variables: map[string]any{"id": "user_42", "extra": "x"},
+	}))
+	errors := graphQLErrors(t, body)
+	if graphQLError(t, errors, 0)["message"] != `unknown variable "extra"` {
+		t.Fatalf("unexpected errors: %#v", errors)
 	}
 }
 

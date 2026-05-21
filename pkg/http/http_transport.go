@@ -50,6 +50,18 @@ type Config struct {
 	// GraphQL query strings for automatic persisted query (APQ) requests that
 	// send an empty "query" and a hash under extensions.persistedQuery.
 	PersistedQueries map[string]string
+	// RequirePersistedQuery rejects requests that do not include
+	// extensions.persistedQuery.sha256Hash.
+	RequirePersistedQuery bool
+	// StrictPersistedQueries verifies the APQ version and, when a query is sent
+	// with a hash, checks that the SHA-256 hash matches the query bytes.
+	StrictPersistedQueries bool
+	// MaxVariableBytes limits the JSON-encoded variables payload. Zero disables
+	// the limit.
+	MaxVariableBytes int64
+	// PanicErrorMessage is returned for transport-boundary panics. Empty uses a
+	// generic message.
+	PanicErrorMessage string
 }
 
 func (c Config) maxRequestBytes() int64 {
@@ -111,7 +123,10 @@ func (t *Transport) Serve(w nethttp.ResponseWriter, r *nethttp.Request, executor
 	responseType := core.MediaTypeJSON
 	defer func() {
 		if rec := recover(); rec != nil {
-			msg := fmt.Sprintf("panic: %v", rec)
+			msg := strings.TrimSpace(t.config.PanicErrorMessage)
+			if msg == "" {
+				msg = "internal server error"
+			}
 			core.WriteGraphQLResponse(w, nethttp.StatusInternalServerError, responseType, core.Response{
 				Errors: []core.Error{{
 					Message: msg,
@@ -143,7 +158,7 @@ func (t *Transport) Serve(w nethttp.ResponseWriter, r *nethttp.Request, executor
 		}
 	}
 
-	bodies, err := decodeGraphQLHTTP(r, t.config.PersistedQueries)
+	bodies, err := decodeGraphQLHTTP(r, t.config)
 	if err != nil {
 		status := nethttp.StatusBadRequest
 		if t.config.maxRequestBytes() > 0 && requestBodyTooLarge(err) {

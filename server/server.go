@@ -92,6 +92,44 @@ type Config struct {
 	// HTTP transport.
 	PersistedQueries map[string]string
 
+	// RequirePersistedQuery rejects HTTP requests that do not include an APQ
+	// sha256Hash under extensions.persistedQuery.
+	RequirePersistedQuery bool
+
+	// StrictPersistedQueries validates APQ metadata and verifies query/hash
+	// matches when a request includes both.
+	StrictPersistedQueries bool
+
+	// MaxVariableBytes limits the JSON-encoded variables payload. Zero leaves
+	// variables unlimited.
+	MaxVariableBytes int64
+
+	// MaskInternalErrors replaces internal resolver, hook, and panic errors in
+	// client-facing GraphQL responses. Raw errors still reach plugin.Error.
+	MaskInternalErrors bool
+
+	// ClientErrorMessage is used when MaskInternalErrors is enabled. Empty uses
+	// "internal server error".
+	ClientErrorMessage string
+
+	// OperationAuthorizer authorizes a parsed operation before execution.
+	OperationAuthorizer exec.OperationAuthorizer
+
+	// FieldAuthorizer authorizes a field before its resolver runs.
+	FieldAuthorizer exec.FieldAuthorizer
+
+	// RateLimiter can reject an operation based on context and operation
+	// metadata before execution starts.
+	RateLimiter exec.RateLimiter
+
+	// TrustedDocuments maps SHA-256 query hashes to exact trusted query strings.
+	// Empty disables the safelist.
+	TrustedDocuments map[string]string
+
+	// RejectUnknownVariables rejects variables not declared by the selected
+	// operation.
+	RejectUnknownVariables bool
+
 	// SchemaSDLPath enables GET export of a minimal SDL document at this path
 	// (for example "/schema.graphql"). The empty string disables the endpoint.
 	SchemaSDLPath string
@@ -147,6 +185,24 @@ func New(config Config) (*Server, error) {
 	if config.DisableIntrospection {
 		execOpts = append(execOpts, exec.WithDisableIntrospection())
 	}
+	if config.MaskInternalErrors {
+		execOpts = append(execOpts, exec.WithClientErrorMasking(config.ClientErrorMessage))
+	}
+	if config.OperationAuthorizer != nil {
+		execOpts = append(execOpts, exec.WithOperationAuthorizer(config.OperationAuthorizer))
+	}
+	if config.FieldAuthorizer != nil {
+		execOpts = append(execOpts, exec.WithFieldAuthorizer(config.FieldAuthorizer))
+	}
+	if config.RateLimiter != nil {
+		execOpts = append(execOpts, exec.WithRateLimiter(config.RateLimiter))
+	}
+	if len(config.TrustedDocuments) > 0 {
+		execOpts = append(execOpts, exec.WithTrustedDocuments(config.TrustedDocuments))
+	}
+	if config.RejectUnknownVariables {
+		execOpts = append(execOpts, exec.WithRejectUnknownVariables())
+	}
 	executor := exec.New(schemaValue, config.Plugins, execOpts...)
 
 	graphqlPath := normalizePath(config.GraphQLPath, "/graphql")
@@ -187,6 +243,18 @@ func New(config Config) (*Server, error) {
 	}
 	if len(config.PersistedQueries) > 0 {
 		httpTransportCfg.PersistedQueries = config.PersistedQueries
+	}
+	if config.RequirePersistedQuery {
+		httpTransportCfg.RequirePersistedQuery = true
+	}
+	if config.StrictPersistedQueries {
+		httpTransportCfg.StrictPersistedQueries = true
+	}
+	if config.MaxVariableBytes != 0 {
+		httpTransportCfg.MaxVariableBytes = config.MaxVariableBytes
+	}
+	if config.ClientErrorMessage != "" {
+		httpTransportCfg.PanicErrorMessage = config.ClientErrorMessage
 	}
 	main = append(main, grxhttp.New(httpTransportCfg))
 

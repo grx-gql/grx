@@ -17,7 +17,7 @@ import (
 
 func TestParsePostGraphQLJSONBatch(t *testing.T) {
 	raw := []byte(`[{"query":"{a}"},{"query":"{b}"}]`)
-	bodies, err := parsePostGraphQLJSON(raw, nil)
+	bodies, err := parsePostGraphQLJSON(raw, Config{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -33,7 +33,7 @@ func TestParsePostGraphQLJSONPersistedQuery(t *testing.T) {
 	reg := map[string]string{strings.ToLower(hash): q}
 
 	raw := []byte(`{"extensions":{"persistedQuery":{"version":1,"sha256Hash":"` + hash + `"}}}`)
-	bodies, err := parsePostGraphQLJSON(raw, reg)
+	bodies, err := parsePostGraphQLJSON(raw, Config{PersistedQueries: reg})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -43,10 +43,34 @@ func TestParsePostGraphQLJSONPersistedQuery(t *testing.T) {
 }
 
 func TestParsePostGraphQLJSONPersistedQueryUnknown(t *testing.T) {
-	raw := []byte(`{"extensions":{"persistedQuery":{"version":1,"sha256Hash":"abcd"}}}`)
-	_, err := parsePostGraphQLJSON(raw, map[string]string{"dead": "query"})
+	raw := []byte(`{"extensions":{"persistedQuery":{"version":1,"sha256Hash":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}}}`)
+	_, err := parsePostGraphQLJSON(raw, Config{PersistedQueries: map[string]string{"dead": "query"}})
 	if err == nil || !strings.Contains(err.Error(), "unknown persisted query") {
 		t.Fatalf("expected unknown persisted query error, got %v", err)
+	}
+}
+
+func TestParsePostGraphQLJSONStrictPersistedQueryRejectsHashMismatch(t *testing.T) {
+	raw := []byte(`{"query":"{__typename}","extensions":{"persistedQuery":{"version":1,"sha256Hash":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}}}`)
+	_, err := parsePostGraphQLJSON(raw, Config{StrictPersistedQueries: true})
+	if err == nil || !strings.Contains(err.Error(), "does not match") {
+		t.Fatalf("expected hash mismatch error, got %v", err)
+	}
+}
+
+func TestParsePostGraphQLJSONRequiresPersistedQuery(t *testing.T) {
+	raw := []byte(`{"query":"{__typename}"}`)
+	_, err := parsePostGraphQLJSON(raw, Config{RequirePersistedQuery: true})
+	if err == nil || !strings.Contains(err.Error(), "persisted query is required") {
+		t.Fatalf("expected required persisted query error, got %v", err)
+	}
+}
+
+func TestParsePostGraphQLJSONRejectsOversizedVariables(t *testing.T) {
+	raw := []byte(`{"query":"query($name: String!) { hello }","variables":{"name":"abcdef"}}`)
+	_, err := parsePostGraphQLJSON(raw, Config{MaxVariableBytes: 8})
+	if err == nil || !strings.Contains(err.Error(), "variables exceed") {
+		t.Fatalf("expected variable size error, got %v", err)
 	}
 }
 

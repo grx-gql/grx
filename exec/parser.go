@@ -130,7 +130,7 @@ func parseDocumentNamed(query string, variables map[string]any, operationName st
 			continue
 		}
 
-		kind, name, err := p.parseOperationHeader()
+		kind, name, variables, err := p.parseOperationHeader()
 		if err != nil {
 			return document{}, err
 		}
@@ -141,6 +141,7 @@ func parseDocumentNamed(query string, variables map[string]any, operationName st
 		operations = append(operations, document{
 			Kind:       kind,
 			Name:       name,
+			Variables:  variables,
 			Selections: selections,
 			Fragments:  fragments,
 		})
@@ -167,12 +168,12 @@ func parseDocumentNamed(query string, variables map[string]any, operationName st
 
 // parseOperationHeader consumes the optional operation type, name, variable
 // definitions, and operation directives, leaving the parser positioned at the
-// top-level selection set. It returns the operation kind and (possibly empty)
-// operation name.
-func (p *parser) parseOperationHeader() (operationKind, string, error) {
+// top-level selection set. It returns the operation kind, operation name, and
+// declared variable names.
+func (p *parser) parseOperationHeader() (operationKind, string, []string, error) {
 	kind := operationQuery
 	if p.peek().kind != tokenName {
-		return kind, "", nil
+		return kind, "", nil, nil
 	}
 
 	switch p.peek().value {
@@ -185,22 +186,25 @@ func (p *parser) parseOperationHeader() (operationKind, string, error) {
 		p.next()
 		kind = operationSubscription
 	default:
-		return kind, "", newParseError(p.source, p.peek().offset, "unexpected token %q at top of operation", p.peek().value)
+		return kind, "", nil, newParseError(p.source, p.peek().offset, "unexpected token %q at top of operation", p.peek().value)
 	}
 
 	var name string
 	if p.peek().kind == tokenName {
 		name = p.next().value
 	}
+	var variables []string
 	if p.peek().kind == tokenParenOpen {
-		if err := p.skipBalancedParens(); err != nil {
-			return kind, name, err
+		parsed, err := p.skipVariableDefinitions()
+		if err != nil {
+			return kind, name, nil, err
 		}
+		variables = parsed
 	}
 	if _, err := p.parseDirectives(); err != nil {
-		return kind, name, err
+		return kind, name, nil, err
 	}
-	return kind, name, nil
+	return kind, name, variables, nil
 }
 
 func (p *parser) parseSelectionSet(depth int) ([]selection, error) {
@@ -478,10 +482,10 @@ func (p *parser) parseListLiteral() ([]any, error) {
 	return list, nil
 }
 
-// skipBalancedParens consumes a parenthesised section without interpreting it.
-// Used to drop variable definition lists in the operation header until full
-// variable validation lands.
-func (p *parser) skipBalancedParens() error {
+// skipVariableDefinitions consumes a parenthesised variable definition list
+// and returns the declared variable names without doing full type coercion.
+func (p *parser) skipVariableDefinitions() ([]string, error) {
+	variables := make([]string, 0, 4)
 	depth := 0
 	for {
 		current := p.next()
@@ -491,10 +495,18 @@ func (p *parser) skipBalancedParens() error {
 		case tokenParenClose:
 			depth--
 			if depth == 0 {
-				return nil
+				return variables, nil
+			}
+		case tokenDollar:
+			if depth == 1 {
+				name := p.next()
+				if name.kind != tokenName {
+					return nil, newParseError(p.source, current.offset, "expected variable name after $")
+				}
+				variables = append(variables, name.value)
 			}
 		case tokenEOF:
-			return newParseError(p.source, current.offset, "unexpected end of query inside operation variables")
+			return nil, newParseError(p.source, current.offset, "unexpected end of query inside operation variables")
 		}
 	}
 }
