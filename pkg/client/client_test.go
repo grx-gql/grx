@@ -13,7 +13,7 @@ import (
 	"github.com/patrickkabwe/grx/pkg/pubsub"
 )
 
-func TestClientExecuteQueryAgainstServer(t *testing.T) {
+func TestClientExecQueryAgainstServer(t *testing.T) {
 	bus := pubsub.NewMemory()
 	t.Cleanup(func() { _ = bus.Close() })
 
@@ -27,17 +27,15 @@ func TestClientExecuteQueryAgainstServer(t *testing.T) {
 	t.Cleanup(ts.Close)
 
 	c := client.New(ts.URL + srv.GraphqlPath)
-	gql, httpResp, err := c.Execute(context.Background(), client.FromCore(core.Request{
+	req := client.Request{
 		Query: `query Q($id: String!) { user(id: $id) { id name } }`,
 		Variables: map[string]any{
 			"id": "user_42",
 		},
-	}))
-	if err != nil {
-		t.Fatalf("execute: %v", err)
 	}
-	if httpResp.StatusCode != http.StatusOK {
-		t.Fatalf("http status = %d", httpResp.StatusCode)
+	gql, err := c.Exec(context.Background(), &req)
+	if err != nil {
+		t.Fatalf("exec: %v", err)
 	}
 	if len(gql.Errors) != 0 {
 		t.Fatalf("unexpected errors: %#v", gql.Errors)
@@ -55,6 +53,14 @@ func TestClientExecuteQueryAgainstServer(t *testing.T) {
 	}
 }
 
+func TestClientExecNilRequest(t *testing.T) {
+	c := client.New("http://example.com/graphql")
+	_, err := c.Exec(context.Background(), nil)
+	if err == nil {
+		t.Fatal("expected error for nil request")
+	}
+}
+
 func TestClientRequestHeaderOption(t *testing.T) {
 	var saw string
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -66,9 +72,8 @@ func TestClientRequestHeaderOption(t *testing.T) {
 	t.Cleanup(ts.Close)
 
 	c := client.New(ts.URL)
-	_, _, err := c.Execute(context.Background(), client.Request{Query: `{ __typename }`},
-		client.WithRequestHeader("X-Test", "alpha"),
-	)
+	req := client.Request{Query: `{ __typename }`}
+	_, err := c.Exec(context.Background(), &req, client.WithRequestHeader("X-Test", "alpha"))
 	if err != nil {
 		t.Fatal(err)
 	}

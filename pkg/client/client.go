@@ -20,6 +20,9 @@ import (
 // application/graphql-response+json per GraphQL-over-HTTP.
 const DefaultAccept = "application/graphql-response+json, application/json;q=0.9"
 
+// Response is a GraphQL response envelope.
+type Response = core.Response
+
 // RequestOption mutates an outgoing HTTP request before it is sent.
 type RequestOption func(*http.Request)
 
@@ -79,37 +82,33 @@ type Request struct {
 	Extensions    map[string]any `json:"extensions,omitempty"`
 }
 
-// FromCore maps a transport-level [core.Request] into a wire request.
-func FromCore(req core.Request) Request {
-	return Request{
-		Query:         req.Query,
-		OperationName: req.OperationName,
-		Variables:     req.Variables,
+// Exec marshals req as JSON, POSTs it, and decodes a single [Response].
+// Field and request-level GraphQL failures are returned in resp.Errors; err
+// is reserved for transport, HTTP, and JSON decode failures.
+func (c *Client) Exec(ctx context.Context, req *Request, opts ...RequestOption) (Response, error) {
+	if req == nil {
+		return Response{}, fmt.Errorf("client: nil request")
 	}
-}
-
-// Execute marshals req as JSON, POSTs it, and decodes a single [core.Response].
-func (c *Client) Execute(ctx context.Context, req Request, opts ...RequestOption) (core.Response, *http.Response, error) {
 	payload, err := json.Marshal(req)
 	if err != nil {
-		return core.Response{}, nil, err
+		return Response{}, err
 	}
 	httpResp, err := c.PostGraphQL(ctx, payload, opts...)
 	if err != nil {
-		return core.Response{}, httpResp, err
+		return Response{}, err
 	}
 	defer httpResp.Body.Close()
 
 	body, err := io.ReadAll(httpResp.Body)
 	if err != nil {
-		return core.Response{}, httpResp, err
+		return Response{}, err
 	}
 
-	var gql core.Response
+	var gql Response
 	if err := json.Unmarshal(body, &gql); err != nil {
-		return core.Response{}, httpResp, fmt.Errorf("decode GraphQL response: %w", err)
+		return Response{}, fmt.Errorf("decode GraphQL response (http %d): %w", httpResp.StatusCode, err)
 	}
-	return gql, httpResp, nil
+	return gql, nil
 }
 
 // PostGraphQL sends a raw JSON body (a single object or batched array) with

@@ -1,9 +1,9 @@
 package server
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
+	"io"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -15,6 +15,7 @@ import (
 
 	"github.com/patrickkabwe/grx/core"
 	subscriptiongraph "github.com/patrickkabwe/grx/examples/subscriptions/graph"
+	grxclient "github.com/patrickkabwe/grx/pkg/client"
 	"github.com/patrickkabwe/grx/pkg/pubsub"
 	"github.com/patrickkabwe/grx/pkg/websocket"
 	"github.com/patrickkabwe/grx/plugin"
@@ -76,14 +77,14 @@ func TestServeHTTPHandlesFavicon(t *testing.T) {
 }
 
 func TestServeHTTPReturnsBadRequestForMalformedJSON(t *testing.T) {
-	server := newTestServer(t)
-	response := executeGraphQL(t, server, `{"query":`)
+	h := newTestHarness(t)
+	status, raw := postGraphQLRaw(t, h, []byte(`{"query":`))
 
-	if response.Code != http.StatusBadRequest {
-		t.Fatalf("expected status %d, got %d", http.StatusBadRequest, response.Code)
+	if status != http.StatusBadRequest {
+		t.Fatalf("expected status %d, got %d", http.StatusBadRequest, status)
 	}
 
-	body := graphQLResponseBody(t, response)
+	body := decodeGraphQLResponseMap(t, raw)
 	errors := graphQLErrors(t, body)
 	if len(errors) != 1 {
 		t.Fatalf("expected one error, got %#v", errors)
@@ -99,14 +100,14 @@ func TestServeHTTPReturnsBadRequestForMalformedJSON(t *testing.T) {
 }
 
 func TestServeHTTPReturnsBadRequestForMissingQuery(t *testing.T) {
-	server := newTestServer(t)
-	response := executeGraphQL(t, server, `{"variables":{"id":"user_42"}}`)
+	h := newTestHarness(t)
+	status, raw := postGraphQLRaw(t, h, []byte(`{"variables":{"id":"user_42"}}`))
 
-	if response.Code != http.StatusBadRequest {
-		t.Fatalf("expected status %d, got %d", http.StatusBadRequest, response.Code)
+	if status != http.StatusBadRequest {
+		t.Fatalf("expected status %d, got %d", http.StatusBadRequest, status)
 	}
 
-	body := graphQLResponseBody(t, response)
+	body := decodeGraphQLResponseMap(t, raw)
 	errors := graphQLErrors(t, body)
 	if len(errors) != 1 {
 		t.Fatalf("expected one error, got %#v", errors)
@@ -122,14 +123,10 @@ func TestServeHTTPReturnsBadRequestForMissingQuery(t *testing.T) {
 }
 
 func TestServeHTTPReturnsRequestErrorLocationsForInvalidQuery(t *testing.T) {
-	server := newTestServer(t)
-	response := executeGraphQL(t, server, `{"query":"query Broken { user(id: ) { id } }"}`)
-
-	if response.Code != http.StatusOK {
-		t.Fatalf("expected status %d, got %d", http.StatusOK, response.Code)
-	}
-
-	body := graphQLResponseBody(t, response)
+	h := newTestHarness(t)
+	body := responseToMap(t, execGraphQL(t, h, &grxclient.Request{
+		Query: "query Broken { user(id: ) { id } }",
+	}))
 	if _, exists := body["data"]; exists {
 		t.Fatalf("expected invalid query error to omit data, got %#v", body["data"])
 	}
@@ -145,18 +142,20 @@ func TestServeHTTPReturnsRequestErrorLocationsForInvalidQuery(t *testing.T) {
 }
 
 func TestServeHTTPPreservesSelectionOrderInJSONResponse(t *testing.T) {
-	server := newTestServer(t)
-	response := executeGraphQL(
-		t,
-		server,
-		`{"query":"query Ordered($id: String!) { user(id: $id) { name id email } __typename }","variables":{"id":"user_42"}}`,
-	)
-
-	if response.Code != http.StatusOK {
-		t.Fatalf("expected status %d, got %d", http.StatusOK, response.Code)
+	h := newTestHarness(t)
+	payload, err := json.Marshal(grxclient.Request{
+		Query:     "query Ordered($id: String!) { user(id: $id) { name id email } __typename }",
+		Variables: map[string]any{"id": "user_42"},
+	})
+	if err != nil {
+		t.Fatalf("marshal request: %v", err)
+	}
+	status, raw := postGraphQLRaw(t, h, payload)
+	if status != http.StatusOK {
+		t.Fatalf("expected status %d, got %d", http.StatusOK, status)
 	}
 
-	body := response.Body.String()
+	body := string(raw)
 	assertOrderedSubstring(t, body, `"data":{"user":{`, `"__typename":"Query"`)
 	assertOrderedSubstring(t, body, `"name":"Ada Lovelace"`, `"id":"user_42"`)
 	assertOrderedSubstring(t, body, `"id":"user_42"`, `"email":"ada@example.com"`)
@@ -174,36 +173,89 @@ func newTestServer(t *testing.T) *Server {
 	return server
 }
 
-func executeGraphQL(t *testing.T, server *Server, body string) *httptest.ResponseRecorder {
-	t.Helper()
-
-	request := httptest.NewRequest(http.MethodPost, "/graphql", bytes.NewBufferString(body))
-	request.Header.Set("Content-Type", "application/json")
-	response := httptest.NewRecorder()
-
-	server.ServeHTTP(response, request)
-	return response
+// testHarness runs GraphQL requests through pkg/client against a real HTTP server.
+// The client is created inside [wrapServerInHarness] via grxclient.New.
+type testHarness struct {
+	*Server
+	HTTP   *httptest.Server
+	Client *grxclient.Client
 }
 
-func executeGraphQLHeaders(t *testing.T, server *Server, body string, headers map[string]string) *httptest.ResponseRecorder {
+func newTestHarness(t *testing.T) *testHarness {
 	t.Helper()
+	return wrapServerInHarness(t, newTestServer(t))
+}
 
-	request := httptest.NewRequest(http.MethodPost, "/graphql", bytes.NewBufferString(body))
-	request.Header.Set("Content-Type", "application/json")
-	for key, value := range headers {
-		request.Header.Set(key, value)
+func wrapServerInHarness(t *testing.T, srv *Server) *testHarness {
+	t.Helper()
+	ts := httptest.NewServer(srv)
+	t.Cleanup(ts.Close)
+	c := grxclient.New(ts.URL + srv.GraphqlPath)
+	return &testHarness{Server: srv, HTTP: ts, Client: c}
+}
+
+func execGraphQL(t *testing.T, h *testHarness, req *grxclient.Request, opts ...grxclient.RequestOption) grxclient.Response {
+	t.Helper()
+	resp, err := h.Client.Exec(context.Background(), req, opts...)
+	if err != nil {
+		t.Fatalf("exec: %v", err)
 	}
-	response := httptest.NewRecorder()
-
-	server.ServeHTTP(response, request)
-	return response
+	return resp
 }
 
-func graphQLResponseBody(t *testing.T, response *httptest.ResponseRecorder) map[string]any {
+func execGraphQLHTTP(t *testing.T, h *testHarness, req *grxclient.Request, headers map[string]string) (*http.Response, grxclient.Response) {
 	t.Helper()
+	payload, err := json.Marshal(req)
+	if err != nil {
+		t.Fatalf("marshal request: %v", err)
+	}
+	var opts []grxclient.RequestOption
+	for key, value := range headers {
+		opts = append(opts, grxclient.WithRequestHeader(key, value))
+	}
+	httpResp, err := h.Client.PostGraphQL(context.Background(), payload, opts...)
+	if err != nil {
+		t.Fatalf("post graphql: %v", err)
+	}
+	body, err := io.ReadAll(httpResp.Body)
+	_ = httpResp.Body.Close()
+	if err != nil {
+		t.Fatalf("read response body: %v", err)
+	}
+	var gql grxclient.Response
+	if err := json.Unmarshal(body, &gql); err != nil {
+		t.Fatalf("decode GraphQL response (http %d): %v", httpResp.StatusCode, err)
+	}
+	return httpResp, gql
+}
 
+func postGraphQLRaw(t *testing.T, h *testHarness, body []byte, opts ...grxclient.RequestOption) (int, []byte) {
+	t.Helper()
+	httpResp, err := h.Client.PostGraphQL(context.Background(), body, opts...)
+	if err != nil {
+		t.Fatalf("post graphql: %v", err)
+	}
+	raw, err := io.ReadAll(httpResp.Body)
+	_ = httpResp.Body.Close()
+	if err != nil {
+		t.Fatalf("read response body: %v", err)
+	}
+	return httpResp.StatusCode, raw
+}
+
+func responseToMap(t *testing.T, resp grxclient.Response) map[string]any {
+	t.Helper()
+	raw, err := json.Marshal(resp)
+	if err != nil {
+		t.Fatalf("marshal response: %v", err)
+	}
+	return decodeGraphQLResponseMap(t, raw)
+}
+
+func decodeGraphQLResponseMap(t *testing.T, raw []byte) map[string]any {
+	t.Helper()
 	var body map[string]any
-	if err := json.NewDecoder(response.Body).Decode(&body); err != nil {
+	if err := json.Unmarshal(raw, &body); err != nil {
 		t.Fatalf("decode response body: %v", err)
 	}
 	return body
@@ -394,8 +446,10 @@ func TestDisableIntrospectionRejectsSchemaQuery(t *testing.T) {
 		t.Fatalf("new server: %v", err)
 	}
 
-	response := executeGraphQL(t, srv, `{"query":"{ __schema { queryType { name } } }"}`)
-	body := graphQLResponseBody(t, response)
+	h := wrapServerInHarness(t, srv)
+	body := responseToMap(t, execGraphQL(t, h, &grxclient.Request{
+		Query: "{ __schema { queryType { name } } }",
+	}))
 	errors := graphQLErrors(t, body)
 	if len(errors) != 1 {
 		t.Fatalf("expected one error, got %#v", errors)
@@ -427,8 +481,8 @@ func TestRequestTimeoutStopsSlowValidation(t *testing.T) {
 		t.Fatalf("new server: %v", err)
 	}
 
-	response := executeGraphQL(t, srv, `{"query":"{ __typename }"}`)
-	body := graphQLResponseBody(t, response)
+	h := wrapServerInHarness(t, srv)
+	body := responseToMap(t, execGraphQL(t, h, &grxclient.Request{Query: "{ __typename }"}))
 	errors := graphQLErrors(t, body)
 	if len(errors) != 1 {
 		t.Fatalf("expected one error, got %#v", body)
@@ -464,13 +518,14 @@ func TestRequestIDMiddlewarePropagatesContext(t *testing.T) {
 		t.Fatalf("new server: %v", err)
 	}
 
-	response := executeGraphQLHeaders(t, srv, `{"query":"{ __typename }"}`, map[string]string{
+	h := wrapServerInHarness(t, srv)
+	httpResp, _ := execGraphQLHTTP(t, h, &grxclient.Request{Query: "{ __typename }"}, map[string]string{
 		"X-Request-Id": "upstream-1",
 	})
-	if response.Code != http.StatusOK {
-		t.Fatalf("status = %d", response.Code)
+	if httpResp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d", httpResp.StatusCode)
 	}
-	if got := response.Header().Get("X-Request-Id"); got != "upstream-1" {
+	if got := httpResp.Header.Get("X-Request-Id"); got != "upstream-1" {
 		t.Fatalf("response X-Request-Id = %q", got)
 	}
 }
