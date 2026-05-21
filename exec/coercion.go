@@ -4,22 +4,37 @@ import (
 	"fmt"
 	"math"
 	"reflect"
-	"strconv"
 )
 
 func coerceBuiltInScalar(typeName string, value any) (any, error) {
 	if value == nil {
 		return nil, nil
 	}
+	raw := reflect.ValueOf(value)
+	for raw.IsValid() && raw.Kind() == reflect.Pointer {
+		if raw.IsNil() {
+			return nil, nil
+		}
+		value = raw.Elem().Interface()
+		raw = reflect.ValueOf(value)
+	}
 	switch typeName {
 	case "Int":
-		return coerceInt(value)
+		return coerceIntOutput(value)
 	case "Float":
-		return coerceFloat(value)
+		return coerceFloatOutput(value)
 	case "Boolean":
-		return coerceBoolean(value)
-	case "String", "ID":
-		return coerceString(value)
+		if typed, ok := value.(bool); ok {
+			return typed, nil
+		}
+		return nil, fmt.Errorf("cannot serialize %T as Boolean", value)
+	case "String":
+		if typed, ok := value.(string); ok {
+			return typed, nil
+		}
+		return nil, fmt.Errorf("cannot serialize %T as String", value)
+	case "ID":
+		return coerceIDOutput(value)
 	default:
 		return value, nil
 	}
@@ -34,9 +49,12 @@ func coerceBuiltInScalarOutput(value any) (any, error) {
 	}
 }
 
-func coerceInt(value any) (any, error) {
+func coerceIntOutput(value any) (any, error) {
 	switch typed := value.(type) {
 	case int:
+		if typed < math.MinInt32 || typed > math.MaxInt32 {
+			return nil, fmt.Errorf("integer overflow")
+		}
 		return typed, nil
 	case int8:
 		return int(typed), nil
@@ -45,78 +63,48 @@ func coerceInt(value any) (any, error) {
 	case int32:
 		return int(typed), nil
 	case int64:
-		if typed < math.MinInt || typed > math.MaxInt {
+		if typed < math.MinInt32 || typed > math.MaxInt32 {
 			return nil, fmt.Errorf("integer overflow")
 		}
 		return int(typed), nil
 	case uint, uint8, uint16, uint32, uint64:
 		raw := reflect.ValueOf(value).Uint()
-		if raw > uint64(math.MaxInt) {
+		if raw > uint64(math.MaxInt32) {
 			return nil, fmt.Errorf("integer overflow")
 		}
 		return int(raw), nil
-	case float32:
-		if float32(int(typed)) != typed {
-			return nil, fmt.Errorf("expected integer value")
-		}
-		return int(typed), nil
-	case float64:
-		if float64(int(typed)) != typed {
-			return nil, fmt.Errorf("expected integer value")
-		}
-		return int(typed), nil
-	case string:
-		parsed, err := strconv.ParseInt(typed, 10, 64)
-		if err != nil {
-			return nil, err
-		}
-		if parsed < math.MinInt || parsed > math.MaxInt {
-			return nil, fmt.Errorf("integer overflow")
-		}
-		return int(parsed), nil
 	default:
-		return nil, fmt.Errorf("cannot coerce %T to Int", value)
+		return nil, fmt.Errorf("cannot serialize %T as Int", value)
 	}
 }
 
-func coerceFloat(value any) (any, error) {
+func coerceFloatOutput(value any) (any, error) {
 	switch typed := value.(type) {
 	case float32:
 		return float64(typed), nil
 	case float64:
+		if math.IsNaN(typed) || math.IsInf(typed, 0) {
+			return nil, fmt.Errorf("Float value must be finite")
+		}
 		return typed, nil
 	case int, int8, int16, int32, int64:
 		return float64(reflect.ValueOf(value).Int()), nil
 	case uint, uint8, uint16, uint32, uint64:
 		return float64(reflect.ValueOf(value).Uint()), nil
-	case string:
-		return strconv.ParseFloat(typed, 64)
 	default:
-		return nil, fmt.Errorf("cannot coerce %T to Float", value)
+		return nil, fmt.Errorf("cannot serialize %T as Float", value)
 	}
 }
 
-func coerceBoolean(value any) (any, error) {
-	switch typed := value.(type) {
-	case bool:
-		return typed, nil
-	case string:
-		return strconv.ParseBool(typed)
-	default:
-		return nil, fmt.Errorf("cannot coerce %T to Boolean", value)
-	}
-}
-
-func coerceString(value any) (any, error) {
+func coerceIDOutput(value any) (any, error) {
 	switch typed := value.(type) {
 	case string:
 		return typed, nil
-	case *string:
-		if typed == nil {
-			return nil, nil
-		}
-		return *typed, nil
+	case int, int8, int16, int32, int64:
+		return fmt.Sprint(reflect.ValueOf(value).Int()), nil
+	case uint, uint8, uint16, uint32, uint64:
+		return fmt.Sprint(reflect.ValueOf(value).Uint()), nil
 	default:
-		return fmt.Sprint(value), nil
+		return nil, fmt.Errorf("cannot serialize %T as ID", value)
 	}
 }

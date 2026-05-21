@@ -80,6 +80,30 @@ func TestParseDocumentMutation(t *testing.T) {
 	}
 }
 
+func TestParseDocumentRejectsDuplicateArguments(t *testing.T) {
+	_, err := parseDocument(`{ user(id: "1", id: "2") { id } }`, nil)
+	if err == nil {
+		t.Fatal("expected duplicate argument error")
+	}
+	if !strings.Contains(err.Error(), `There can be only one argument named "id".`) {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestParseDocumentInlineFragmentWithoutTypeCondition(t *testing.T) {
+	doc, err := parseDocument(`{ user(id: "1") { ... { id } } }`, nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	fragment := doc.Selections[0].Selections[0]
+	if !fragment.isInlineFragment() {
+		t.Fatalf("expected inline fragment, got %#v", fragment)
+	}
+	if fragment.InlineFragmentOn != "" {
+		t.Fatalf("expected empty type condition, got %q", fragment.InlineFragmentOn)
+	}
+}
+
 func TestParseDocumentMutationWithoutName(t *testing.T) {
 	doc, err := parseDocument(`mutation { createUser { id } }`, nil)
 	if err != nil {

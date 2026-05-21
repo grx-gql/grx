@@ -142,6 +142,9 @@ func (e *Enum) Kind() Kind {
 func (e *Enum) Parse(input any) (any, error) {
 	name, ok := input.(string)
 	if !ok {
+		if _, exists := e.nameByValue[enumValueKey(input)]; exists {
+			return input, nil
+		}
 		return nil, fmt.Errorf("expected enum %s input to be string, got %T", e.TypeName, input)
 	}
 	value, ok := e.valueByName[name]

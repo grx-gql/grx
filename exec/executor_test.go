@@ -59,6 +59,12 @@ type testAdvancedQuery struct {
 	testQuery
 }
 
+type testCountingQuery struct {
+	count *int
+}
+
+type testInvalidOutputQuery struct{}
+
 type testMutation struct{}
 
 type testUserCreateInput struct {
@@ -82,6 +88,17 @@ func (testQuery) User(ctx context.Context, args struct {
 	ID string `gql:"id,nonNull"`
 }) (*testUser, error) {
 	return &testUser{ID: args.ID, Name: "Ada"}, nil
+}
+
+func (q testCountingQuery) User(ctx context.Context, args struct {
+	ID string `gql:"id,nonNull"`
+}) (*testUser, error) {
+	*q.count = *q.count + 1
+	return &testUser{ID: args.ID, Name: "Ada"}, nil
+}
+
+func (testInvalidOutputQuery) Count(ctx context.Context) (int, error) {
+	return 65, nil
 }
 
 func (testAdvancedQuery) User(ctx context.Context, args struct {
@@ -220,6 +237,91 @@ func TestExecutorBindsInlineInputObjectLiteral(t *testing.T) {
 	user := responseObject(t, payload["user"])
 	if user["name"] != "test" {
 		t.Fatalf("expected name test, got %#v", user["name"])
+	}
+}
+
+func TestExecutorMergesDuplicateResponseFields(t *testing.T) {
+	count := 0
+	schemaValue, err := schema.Build(schema.Config{Query: testCountingQuery{count: &count}})
+	if err != nil {
+		t.Fatalf("build schema: %v", err)
+	}
+
+	executor := New(schemaValue, nil)
+	response := executor.Execute(context.Background(), core.Request{
+		Query: `{ user(id: "1") { id } user(id: "1") { name } }`,
+	})
+	if len(response.Errors) != 0 {
+		t.Fatalf("unexpected errors: %#v", response.Errors)
+	}
+	if count != 1 {
+		t.Fatalf("expected one resolver call, got %d", count)
+	}
+
+	data := responseObject(t, response.Data)
+	user := responseObject(t, data["user"])
+	if user["id"] != "1" || user["name"] != "Ada" {
+		t.Fatalf("expected merged user fields, got %#v", user)
+	}
+}
+
+func TestExecutorSupportsInlineFragmentWithoutTypeCondition(t *testing.T) {
+	schemaValue, err := schema.Build(schema.Config{Query: testQuery{}})
+	if err != nil {
+		t.Fatalf("build schema: %v", err)
+	}
+
+	executor := New(schemaValue, nil)
+	response := executor.Execute(context.Background(), core.Request{
+		Query: `{ user(id: "1") { ... { id name } } }`,
+	})
+	if len(response.Errors) != 0 {
+		t.Fatalf("unexpected errors: %#v", response.Errors)
+	}
+
+	data := responseObject(t, response.Data)
+	user := responseObject(t, data["user"])
+	if user["id"] != "1" || user["name"] != "Ada" {
+		t.Fatalf("unexpected user: %#v", user)
+	}
+}
+
+func TestExecutorRejectsInvalidScalarInputBeforeResolver(t *testing.T) {
+	called := false
+	query := testCountingQuery{count: new(int)}
+	schemaValue, err := schema.Build(schema.Config{Query: query})
+	if err != nil {
+		t.Fatalf("build schema: %v", err)
+	}
+	schemaValue.Query.Fields["user"].Resolver = func(ctx context.Context, params schema.ResolveParams) (any, error) {
+		called = true
+		return &testUser{ID: "bad", Name: "bad"}, nil
+	}
+
+	executor := New(schemaValue, nil)
+	response := executor.Execute(context.Background(), core.Request{
+		Query:     `query($id: String!) { user(id: $id) { id } }`,
+		Variables: map[string]any{"id": 65},
+	})
+	if len(response.Errors) == 0 {
+		t.Fatal("expected scalar input error")
+	}
+	if called {
+		t.Fatal("resolver should not be called for invalid input")
+	}
+}
+
+func TestExecutorRejectsInvalidScalarOutput(t *testing.T) {
+	schemaValue, err := schema.Build(schema.Config{Query: testInvalidOutputQuery{}})
+	if err != nil {
+		t.Fatalf("build schema: %v", err)
+	}
+	schemaValue.Query.Fields["count"].Type = &schema.Scalar{TypeName: "String"}
+
+	executor := New(schemaValue, nil)
+	response := executor.Execute(context.Background(), core.Request{Query: `{ count }`})
+	if len(response.Errors) == 0 {
+		t.Fatal("expected scalar output error")
 	}
 }
 

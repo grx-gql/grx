@@ -60,5 +60,5 @@ func (s selection) isFragmentSpread() bool {
 }
 
 func (s selection) isInlineFragment() bool {
-	return s.InlineFragmentOn != ""
+	return s.Name == "" && s.FragmentSpread == "" && len(s.Selections) > 0
 }
