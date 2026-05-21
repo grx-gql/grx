@@ -51,6 +51,8 @@ jobs:
   build:
     name: Build site
     runs-on: ubuntu-latest
+    outputs:
+      pause_deploy: ${{ env.PAUSE_DOCS_DEPLOY }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -94,7 +96,7 @@ jobs:
 
   deploy:
     name: Deploy to GitHub Pages
-    if: github.event_name != 'pull_request' && env.PAUSE_DOCS_DEPLOY != 'true'
+    if: github.event_name != 'pull_request' && needs.build.outputs.pause_deploy != 'true'
     needs: build
     runs-on: ubuntu-latest
     environment:
