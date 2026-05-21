@@ -27,6 +27,7 @@ type fragmentDef struct {
 type document struct {
 	Kind       operationKind
 	Name       string
+	Variables  []string
 	Selections []selection
 	// Fragments holds fragment definitions in scope for this operation.
 	Fragments map[string]*fragmentDef
