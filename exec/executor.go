@@ -6,13 +6,14 @@ package exec
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
-	"errors"
-	"fmt"
-	"reflect"
-	"runtime/debug"
-	"strings"
+		"crypto/sha256"
+		"encoding/hex"
+		"errors"
+		"fmt"
+		"reflect"
+		"runtime/debug"
+		"strings"
+		"sync"
 
 	"github.com/patrickkabwe/grx/core"
 	"github.com/patrickkabwe/grx/plugin"
@@ -113,6 +114,8 @@ func (e *Executor) Execute(ctx context.Context, req core.Request) (response core
 	if err := e.notifyExecution(ctx, req); err != nil {
 		return e.failResponse(ctx, err)
 	}
+
+	ctx = withFieldExecutionMode(ctx, doc.Kind == operationMutation)
 
 	root, err := e.rootObject(doc.Kind)
 	if err != nil {
@@ -223,6 +226,8 @@ func (e *Executor) Subscribe(ctx context.Context, req core.Request) (responses <
 		return nil, err
 	}
 
+	ctx = withFieldExecutionMode(ctx, true)
+
 	source, err := field.Resolver(ctx, schema.ResolveParams{Args: rootField.Arguments})
 	if err != nil {
 		e.notifyError(ctx, err)
@@ -312,76 +317,107 @@ func (e *Executor) executeSelectionSet(ctx context.Context, object *schema.Objec
 	errors := append([]core.Error{}, flatErrs...)
 
 	data := core.NewOrderedObject(len(flat))
-	for _, selected := range flat {
-		if err := ctx.Err(); err != nil {
-			errors = append(errors, newFieldError(err.Error(), path, core.Location{}))
-			return data, errors
-		}
-
-		key := selected.responseKey()
-		if selected.Name == "__typename" {
-			data.Set(key, object.Name())
-			continue
-		}
-
-		skip, include, derr := evalSkipInclude(selected.Directives)
-		if derr != nil {
-			errors = append(errors, newFieldError(derr.Error(), appendPath(path, key), selected.Location))
-			continue
-		}
-		if skip || !include {
-			continue
-		}
-
-		field, ok := object.Fields[selected.Name]
-		if !ok {
-			errors = append(errors, newFieldError(
-				fmt.Sprintf(`Cannot query field "%s" on type "%s".`, selected.Name, object.Name()),
-				appendPath(path, key), selected.Location))
-			continue
-		}
-
-		fieldPath := appendPath(path, key)
-		if e.fieldAuthorizer != nil {
-			err := e.fieldAuthorizer(ctx, FieldAuthorizationContext{
-				ParentType: object.Name(),
-				FieldName:  selected.Name,
-				Path:       pathStrings(fieldPath),
-			})
-			if err != nil {
-				e.notifyError(ctx, err)
-				errors = append(errors, newFieldError(e.maskError(err, false).Error(), fieldPath, selected.Location))
+	if fieldExecutionSerial(ctx) {
+		for _, selected := range flat {
+			key, value, fieldErrors, ok := e.resolveSelectedField(ctx, object, source, selected, fragments, path)
+			if len(fieldErrors) > 0 {
+				errors = append(errors, fieldErrors...)
+			}
+			if !ok {
 				continue
 			}
+			data.Set(key, value)
 		}
-
-		blocked := false
-		for _, hook := range e.Plugins {
-			if err := hook.FieldResolveStart(ctx, plugin.FieldContext{Path: pathStrings(fieldPath), FieldName: selected.Name}); err != nil {
-				e.notifyError(ctx, err)
-				errors = append(errors, newFieldError(e.maskError(err, false).Error(), fieldPath, selected.Location))
-				blocked = true
-				break
-			}
-		}
-		if blocked {
-			continue
-		}
-
-		value, err := field.Resolver(ctx, schema.ResolveParams{Source: source, Args: selected.Arguments})
-		if err != nil {
-			e.notifyError(ctx, err)
-			errors = append(errors, newFieldError(e.maskError(err, true).Error(), fieldPath, selected.Location))
-			continue
-		}
-
-		resolved, nestedErrors := e.completeValue(ctx, field.Type, value, selected.Selections, fragments, fieldPath)
-		data.Set(key, resolved)
-		errors = append(errors, nestedErrors...)
+		return data, errors
 	}
 
+	type resolvedField struct {
+		index  int
+		key    string
+		value  any
+		errors []core.Error
+		ok     bool
+	}
+
+	results := make([]resolvedField, len(flat))
+	var wg sync.WaitGroup
+	for index, selected := range flat {
+		wg.Add(1)
+		go func(index int, selected selection) {
+			defer wg.Done()
+			key, value, fieldErrors, ok := e.resolveSelectedField(ctx, object, source, selected, fragments, path)
+			results[index] = resolvedField{index: index, key: key, value: value, errors: fieldErrors, ok: ok}
+		}(index, selected)
+	}
+	wg.Wait()
+
+	for _, result := range results {
+		if len(result.errors) > 0 {
+			errors = append(errors, result.errors...)
+		}
+		if !result.ok {
+			continue
+		}
+		data.Set(result.key, result.value)
+	}
 	return data, errors
 }
+
+func (e *Executor) resolveSelectedField(ctx context.Context, object *schema.Object, source any, selected selection, fragments map[string]*fragmentDef, path []any) (string, any, []core.Error, bool) {
+	if err := ctx.Err(); err != nil {
+		return "", nil, []core.Error{newFieldError(err.Error(), path, core.Location{})}, false
+	}
+
+	key := selected.responseKey()
+	if selected.Name == "__typename" {
+		return key, object.Name(), nil, true
+	}
+
+	skip, include, derr := evalSkipInclude(selected.Directives)
+	if derr != nil {
+		return key, nil, []core.Error{newFieldError(derr.Error(), appendPath(path, key), selected.Location)}, false
+	}
+	if skip || !include {
+		return key, nil, nil, false
+	}
+
+	field, ok := object.Fields[selected.Name]
+	if !ok {
+		return key, nil, []core.Error{newFieldError(
+			fmt.Sprintf(`Cannot query field "%s" on type "%s".`, selected.Name, object.Name()),
+			appendPath(path, key), selected.Location)}, false
+	}
+
+	fieldPath := appendPath(path, key)
+	if e.fieldAuthorizer != nil {
+		err := e.fieldAuthorizer(ctx, FieldAuthorizationContext{
+			ParentType: object.Name(),
+			FieldName:  selected.Name,
+			Path:       pathStrings(fieldPath),
+		})
+		if err != nil {
+			e.notifyError(ctx, err)
+			return key, nil, []core.Error{newFieldError(e.maskError(err, false).Error(), fieldPath, selected.Location)}, false
+		}
+	}
+
+	for _, hook := range e.Plugins {
+		if err := hook.FieldResolveStart(ctx, plugin.FieldContext{Path: pathStrings(fieldPath), FieldName: selected.Name}); err != nil {
+			e.notifyError(ctx, err)
+			return key, nil, []core.Error{newFieldError(e.maskError(err, false).Error(), fieldPath, selected.Location)}, false
+		}
+	}
+
+	value, err := field.Resolver(ctx, schema.ResolveParams{Source: source, Args: selected.Arguments})
+	if err != nil {
+		e.notifyError(ctx, err)
+		return key, nil, []core.Error{newFieldError(e.maskError(err, true).Error(), fieldPath, selected.Location)}, false
+	}
+
+	resolved, nestedErrors := e.completeValue(ctx, field.Type, value, selected.Selections, fragments, fieldPath)
+	return key, resolved, nestedErrors, true
+}
+
 
 func (e *Executor) completeValue(ctx context.Context, fieldType schema.Type, value any, selections []selection, fragments map[string]*fragmentDef, path []any) (any, []core.Error) {
 	if err := ctx.Err(); err != nil {
@@ -435,9 +471,19 @@ func (e *Executor) completeValue(ctx context.Context, fieldType schema.Type, val
 			e.notifyError(ctx, err)
 			return nil, []core.Error{newFieldError(e.maskError(err, true).Error(), path, core.Location{})}
 		}
-		return serialized, nil
+		coerced, err := coerceBuiltInScalar(typed.TypeName, serialized)
+		if err != nil {
+			e.notifyError(ctx, err)
+			return nil, []core.Error{newFieldError(e.maskError(err, true).Error(), path, core.Location{})}
+		}
+		return coerced, nil
 	default:
-		return value, nil
+		coerced, err := coerceBuiltInScalarOutput(value)
+		if err != nil {
+			e.notifyError(ctx, err)
+			return nil, []core.Error{newFieldError(e.maskError(err, true).Error(), path, core.Location{})}
+		}
+		return coerced, nil
 	}
 }
 

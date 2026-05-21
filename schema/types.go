@@ -40,8 +40,9 @@ type Type interface {
 // Scalar represents a GraphQL scalar type such as String, Int, Float,
 // Boolean, ID, or a custom user-defined scalar.
 type Scalar struct {
-	TypeName    string
-	serializeFn func(any) (any, error)
+	TypeName       string
+	SpecifiedByURL string
+	serializeFn    func(any) (any, error)
 }
 
 // Name returns the scalar type name.
@@ -95,7 +96,10 @@ func (n *NonNull) Kind() Kind {
 
 // EnumValue describes one legal enum member.
 type EnumValue struct {
-	Name string
+	Name              string
+	Description       string
+	IsDeprecated      bool
+	DeprecationReason *string
 }
 
 // Enum represents a GraphQL enum type.
@@ -154,19 +158,25 @@ type ResolveParams struct {
 // Field describes a single field on an object, interface, or input
 // object. Args is empty when the field takes no arguments.
 type Field struct {
-	Name         string
-	Type         Type
-	Args         []InputValue
-	Resolver     Resolver
-	DefaultValue any
+	Name              string
+	Description       string
+	Type              Type
+	Args              []InputValue
+	Resolver          Resolver
+	DefaultValue      any
+	IsDeprecated      bool
+	DeprecationReason *string
 }
 
 // InputValue describes a single argument or input-object field.
 // DefaultValue is nil when the input has no default.
 type InputValue struct {
-	Name         string
-	Type         Type
-	DefaultValue any
+	Name              string
+	Description       string
+	Type              Type
+	DefaultValue      any
+	IsDeprecated      bool
+	DeprecationReason *string
 }
 
 // Object describes a GraphQL object type. Fields is keyed by GraphQL
