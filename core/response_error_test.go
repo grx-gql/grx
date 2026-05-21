@@ -1,0 +1,48 @@
+package core
+
+import (
+	"errors"
+	"testing"
+)
+
+type locationErr struct {
+	msg string
+	loc Location
+}
+
+func (e locationErr) Error() string { return e.msg }
+
+func (e locationErr) GraphQLLocations() []Location { return []Location{e.loc} }
+
+func TestNewRequestErrorIncludesClassification(t *testing.T) {
+	err := NewRequestError(errors.New("bad request"))
+	if err.Message != "bad request" {
+		t.Fatalf("message = %q", err.Message)
+	}
+	if err.Extensions["classification"] != "request" {
+		t.Fatalf("classification = %#v", err.Extensions["classification"])
+	}
+}
+
+func TestNewRequestErrorIncludesLocations(t *testing.T) {
+	err := NewRequestError(locationErr{
+		msg: "syntax error",
+		loc: Location{Line: 2, Column: 5},
+	})
+	if len(err.Locations) != 1 || err.Locations[0].Line != 2 || err.Locations[0].Column != 5 {
+		t.Fatalf("locations = %#v", err.Locations)
+	}
+}
+
+func TestNewFieldErrorIncludesClassificationAndLocations(t *testing.T) {
+	err := NewFieldError("resolver failed", []any{"user", "email"}, Location{Line: 3, Column: 7})
+	if err.Extensions["classification"] != "field" {
+		t.Fatalf("extensions = %#v", err.Extensions)
+	}
+	if len(err.Path) != 2 || err.Path[0] != "user" || err.Path[1] != "email" {
+		t.Fatalf("path = %#v", err.Path)
+	}
+	if len(err.Locations) != 1 || err.Locations[0].Line != 3 {
+		t.Fatalf("locations = %#v", err.Locations)
+	}
+}
