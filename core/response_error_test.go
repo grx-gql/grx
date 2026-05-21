@@ -34,6 +34,13 @@ func TestNewRequestErrorIncludesLocations(t *testing.T) {
 	}
 }
 
+func TestNewValidationErrorIncludesCode(t *testing.T) {
+	err := NewValidationError(locationErr{msg: "bad", loc: Location{Line: 1, Column: 1}})
+	if err.Extensions["code"] != ErrorCodeValidationFailed {
+		t.Fatalf("code = %#v", err.Extensions["code"])
+	}
+}
+
 func TestNewFieldErrorIncludesClassificationAndLocations(t *testing.T) {
 	err := NewFieldError("resolver failed", []any{"user", "email"}, Location{Line: 3, Column: 7})
 	if err.Extensions["classification"] != "field" {

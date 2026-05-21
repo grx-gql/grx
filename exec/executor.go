@@ -84,10 +84,18 @@ func (e *Executor) Execute(ctx context.Context, req core.Request) (response core
 		return e.sendResponse(ctx, core.Response{Data: introspectionData(e.Schema, req)})
 	}
 
-	doc, err := parseDocumentNamed(req.Query, req.Variables, req.OperationName, e.maxSelectionDepth)
+	bundle, err := parseDocumentBundle(req.Query, req.Variables, e.maxSelectionDepth)
 	if err != nil {
 		e.notifyError(ctx, err)
 		return e.failResponse(ctx, err)
+	}
+	doc, err := selectOperation(bundle, req.OperationName)
+	if err != nil {
+		e.notifyError(ctx, err)
+		return e.failResponse(ctx, err)
+	}
+	if verrs := ValidateDocument(e.Schema, bundle, doc); len(verrs) > 0 {
+		return e.validationFailResponse(ctx, verrs)
 	}
 	if err := e.validateDocumentSecurity(ctx, req, doc); err != nil {
 		e.notifyError(ctx, err)
@@ -162,10 +170,18 @@ func (e *Executor) Subscribe(ctx context.Context, req core.Request) (responses <
 		return nil, e.maskError(err, false)
 	}
 
-	doc, err := parseDocumentNamed(req.Query, req.Variables, req.OperationName, e.maxSelectionDepth)
+	bundle, err := parseDocumentBundle(req.Query, req.Variables, e.maxSelectionDepth)
 	if err != nil {
 		e.notifyError(ctx, err)
 		return nil, err
+	}
+	doc, err := selectOperation(bundle, req.OperationName)
+	if err != nil {
+		e.notifyError(ctx, err)
+		return nil, err
+	}
+	if verrs := ValidateDocument(e.Schema, bundle, doc); len(verrs) > 0 {
+		return nil, verrs[0]
 	}
 	if err := e.validateDocumentSecurity(ctx, req, doc); err != nil {
 		e.notifyError(ctx, err)
@@ -319,7 +335,9 @@ func (e *Executor) executeSelectionSet(ctx context.Context, object *schema.Objec
 
 		field, ok := object.Fields[selected.Name]
 		if !ok {
-			errors = append(errors, newFieldError(fmt.Sprintf("unknown field %q on %s", selected.Name, object.Name()), appendPath(path, key), selected.Location))
+			errors = append(errors, newFieldError(
+				fmt.Sprintf(`Cannot query field "%s" on type "%s".`, selected.Name, object.Name()),
+				appendPath(path, key), selected.Location))
 			continue
 		}
 
@@ -600,6 +618,10 @@ func (e *Executor) failResponse(ctx context.Context, err error) core.Response {
 		core.Response{Errors: []core.Error{core.NewRequestError(err)}},
 		core.RequestIDFromContext(ctx),
 	)
+}
+
+func (e *Executor) validationFailResponse(ctx context.Context, errs []validationError) core.Response {
+	return core.AttachRequestIDExtension(validationResponse(errs), core.RequestIDFromContext(ctx))
 }
 
 func newFieldError(message string, path []any, location core.Location) core.Error {

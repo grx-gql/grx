@@ -93,7 +93,7 @@ func TestExecutorSubscribeRequiresSingleRootField(t *testing.T) {
 	if err == nil {
 		t.Fatalf("expected error, got nil")
 	}
-	if !strings.Contains(err.Error(), "exactly one root field") {
+	if !strings.Contains(err.Error(), "must select only one top level field") {
 		t.Fatalf("expected single-root-field error, got %v", err)
 	}
 }

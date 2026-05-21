@@ -64,7 +64,7 @@ func TestServeHTTPExecutesMutationWithInlineInputObject(t *testing.T) {
 	}
 }
 
-func TestServeHTTPReturnsMutationFieldErrorsWithPartialData(t *testing.T) {
+func TestServeHTTPReturnsMutationValidationErrorForUnknownField(t *testing.T) {
 	h := newTestHarness(t)
 	body := responseToMap(t, execGraphQL(t, h, &grxclient.Request{
 		Query: "mutation CreateUser($input: UserCreateInput!) { __typename missing createUser(input: $input) { user { id name } } }",
@@ -74,14 +74,8 @@ func TestServeHTTPReturnsMutationFieldErrorsWithPartialData(t *testing.T) {
 			},
 		},
 	}))
-	data := nestedMap(t, body, "data")
-	if data["__typename"] != "Mutation" {
-		t.Fatalf("expected root typename Mutation, got %#v", data["__typename"])
-	}
-	createUser := nestedMap(t, data, "createUser")
-	user := nestedMap(t, createUser, "user")
-	if user["name"] != "Grace Hopper" {
-		t.Fatalf("expected name Grace Hopper, got %#v", user["name"])
+	if _, exists := body["data"]; exists {
+		t.Fatalf("expected validation error to omit data, got %#v", body["data"])
 	}
 
 	errors := graphQLErrors(t, body)
@@ -89,13 +83,8 @@ func TestServeHTTPReturnsMutationFieldErrorsWithPartialData(t *testing.T) {
 		t.Fatalf("expected one error, got %#v", errors)
 	}
 	errorValue := graphQLError(t, errors, 0)
-	if errorValue["message"] != `unknown field "missing" on Mutation` {
+	if errorValue["message"] != `Cannot query field "missing" on type "Mutation".` {
 		t.Fatalf("unexpected error message: %#v", errorValue["message"])
 	}
-	assertErrorClassification(t, errorValue, "field")
 	assertErrorLocations(t, errorValue, 1, 60)
-	path, ok := errorValue["path"].([]any)
-	if !ok || len(path) != 1 || path[0] != "missing" {
-		t.Fatalf("expected missing error path, got %#v", errorValue["path"])
-	}
 }

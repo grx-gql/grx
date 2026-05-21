@@ -9,7 +9,7 @@ docs/yarn.lock
 docs/pnpm-lock.yaml
 
 # Example build artifacts
-examples/basic/tmp/
+examples/**/tmp/
 
 # Editor / OS noise
 .DS_Store

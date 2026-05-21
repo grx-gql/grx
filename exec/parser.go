@@ -106,64 +106,11 @@ func parseDocument(query string, variables map[string]any) (document, error) {
 // document defines exactly one operation (matching the GraphQL spec rule for
 // "GetOperation"). maxDepth limits nested selection set depth (0 = unlimited).
 func parseDocumentNamed(query string, variables map[string]any, operationName string, maxDepth int) (document, error) {
-	source := normalizeSource(query)
-	tokens, err := lex(source)
+	bundle, err := parseDocumentBundle(query, variables, maxDepth)
 	if err != nil {
 		return document{}, err
 	}
-
-	p := parser{tokens: tokens, vars: variables, source: source, maxDepth: maxDepth}
-
-	fragments := make(map[string]*fragmentDef)
-	var operations []document
-
-	for p.peek().kind != tokenEOF {
-		if p.peek().kind == tokenName && p.peek().value == "fragment" {
-			fd, err := p.parseFragmentDefinition()
-			if err != nil {
-				return document{}, err
-			}
-			if _, dup := fragments[fd.Name]; dup {
-				return document{}, newParseError(p.source, fd.NameOffset, "duplicate fragment %q", fd.Name)
-			}
-			fragments[fd.Name] = fd
-			continue
-		}
-
-		kind, name, variables, err := p.parseOperationHeader()
-		if err != nil {
-			return document{}, err
-		}
-		selections, err := p.parseSelectionSet(1)
-		if err != nil {
-			return document{}, err
-		}
-		operations = append(operations, document{
-			Kind:       kind,
-			Name:       name,
-			Variables:  variables,
-			Selections: selections,
-			Fragments:  fragments,
-		})
-	}
-
-	if len(operations) == 0 {
-		return document{}, newParseError(source, 0, "document contains no operations")
-	}
-
-	if operationName != "" {
-		for _, op := range operations {
-			if op.Name == operationName {
-				return op, nil
-			}
-		}
-		return document{}, newParseError(source, 0, "operation %q not found in document", operationName)
-	}
-
-	if len(operations) > 1 {
-		return document{}, newParseError(source, 0, "must provide operationName when document contains multiple operations")
-	}
-	return operations[0], nil
+	return selectOperation(bundle, operationName)
 }
 
 // parseOperationHeader consumes the optional operation type, name, variable

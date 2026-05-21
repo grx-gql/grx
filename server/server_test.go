@@ -661,7 +661,9 @@ func TestSecurityTrustedDocumentsRejectsUnknownQuery(t *testing.T) {
 	allowed := responseToMap(t, execGraphQL(t, h, &grxclient.Request{Query: "{ __typename }"}))
 	assertNoErrors(t, allowed)
 
-	rejected := responseToMap(t, execGraphQL(t, h, &grxclient.Request{Query: "{ posts { id } }"}))
+	rejected := responseToMap(t, execGraphQL(t, h, &grxclient.Request{
+		Query: `query Untrusted { user(id: "user_42") { id } }`,
+	}))
 	body := rejected
 	errors := graphQLErrors(t, body)
 	if graphQLError(t, errors, 0)["message"] != "operation is not trusted" {
