@@ -183,16 +183,16 @@ This file is the source of truth for feature parity tracking and roadmap sync in
 - [x] Inline fragment type-condition matching
 - [x] `@skip(if:)`
 - [x] `@include(if:)`
-- [ ] Serial mutation field execution guarantee
-- [ ] Parallel query field execution where safe
+- [x] Serial mutation field execution guarantee
+- [x] Parallel query field execution where safe
 - [x] Operation selection by `operationName`
 - [x] Variable default value coercion
 - [x] Argument default value coercion
 - [x] Input object default value coercion
-- [ ] Scalar result coercion
+- [x] Scalar result coercion
 - [x] Enum result coercion
-- [ ] List input coercion
-- [ ] Non-null error bubbling
+- [x] List input coercion
+- [x] Non-null error bubbling
 - [x] Error path for aliased fields
 - [x] Error locations
 - [x] Interface concrete type resolution
@@ -204,7 +204,7 @@ This file is the source of truth for feature parity tracking and roadmap sync in
 - [ ] Incremental execution for `@defer`
 - [ ] Incremental execution for `@stream`
 - [x] Resolver panic recovery
-- [ ] Concurrent non-mutation field resolution with deterministic ordering
+- [x] Concurrent non-mutation field resolution with deterministic ordering
 - [ ] Per-request resolver cache / request-scoped memoization
 - [ ] Deferred resolver values (thunk/promise-style futures)
 - [ ] Abstract type runtime resolution hook
@@ -221,21 +221,21 @@ This file is the source of truth for feature parity tracking and roadmap sync in
 - [x] Input object field metadata
 - [x] Basic type reference metadata
 - [ ] Full introspection through normal execution
-- [ ] Complete `__Schema` fields
-- [ ] Complete `__Type` fields
-- [ ] Complete `__Field` fields
-- [ ] Complete `__InputValue` fields
-- [ ] Complete `__EnumValue` fields
-- [ ] Complete `__Directive` fields
-- [ ] `__TypeKind` enum
-- [ ] `__DirectiveLocation` enum
-- [ ] Built-in directive introspection
-- [ ] Deprecated field filtering through `includeDeprecated`
-- [ ] Deprecated enum filtering through `includeDeprecated`
-- [ ] Description metadata
+- [x] Complete `__Schema` fields
+- [x] Complete `__Type` fields
+- [x] Complete `__Field` fields
+- [x] Complete `__InputValue` fields
+- [x] Complete `__EnumValue` fields
+- [x] Complete `__Directive` fields
+- [x] `__TypeKind` enum
+- [x] `__DirectiveLocation` enum
+- [x] Built-in directive introspection
+- [x] Deprecated field filtering through `includeDeprecated`
+- [x] Deprecated enum filtering through `includeDeprecated`
+- [x] Description metadata
 - [x] Default value string rendering
-- [ ] Custom scalar `specifiedByURL`
-- [ ] Correct introspection type registration in schema
+- [x] Custom scalar `specifiedByURL`
+- [x] Correct introspection type registration in schema
 
 ### Built-in Directives
 

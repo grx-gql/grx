@@ -12,27 +12,57 @@ func isIntrospectionQuery(query string) bool {
 	return strings.Contains(query, "__schema") || strings.Contains(query, "__type(")
 }
 
+func introspectionIncludeDeprecated(query string) bool {
+	return strings.Contains(query, "includeDeprecated: true")
+}
+
 func introspectionData(schemaValue *schema.Schema, req core.Request) *core.OrderedObject {
+	includeDeprecated := introspectionIncludeDeprecated(req.Query)
 	data := core.NewOrderedObject(2)
 	if strings.Contains(req.Query, "__schema") {
-		data.Set("__schema", introspectionSchema(schemaValue))
+		data.Set("__schema", introspectionSchema(schemaValue, includeDeprecated))
 	}
 
 	if strings.Contains(req.Query, "__type(") {
-		data.Set("__type", introspectionNamedType(schemaValue, req))
+		data.Set("__type", introspectionNamedType(schemaValue, req, includeDeprecated))
 	}
 
 	return data
 }
 
-func introspectionSchema(schemaValue *schema.Schema) *core.OrderedObject {
+func introspectionSchema(schemaValue *schema.Schema, includeDeprecated bool) *core.OrderedObject {
 	result := core.NewOrderedObject(5)
 	result.Set("queryType", introspectionRootType(schemaValue.Query))
 	result.Set("mutationType", introspectionRootType(schemaValue.Mutation))
 	result.Set("subscriptionType", introspectionRootType(schemaValue.Subscription))
-	result.Set("types", introspectionTypes(schemaValue))
-	result.Set("directives", []any{})
+	result.Set("types", introspectionTypes(schemaValue, includeDeprecated))
+	result.Set("directives", introspectionBuiltinDirectives())
 	return result
+}
+
+func introspectionBuiltinDirectives() []any {
+	return []any{
+		introspectionDirective("skip", []string{"FIELD", "FRAGMENT_SPREAD", "INLINE_FRAGMENT"}, []schema.InputValue{
+			{Name: "if", Type: &schema.NonNull{OfType: booleanScalar()}},
+		}),
+		introspectionDirective("include", []string{"FIELD", "FRAGMENT_SPREAD", "INLINE_FRAGMENT"}, []schema.InputValue{
+			{Name: "if", Type: &schema.NonNull{OfType: booleanScalar()}},
+		}),
+	}
+}
+
+func booleanScalar() schema.Type {
+	return &schema.Scalar{TypeName: "Boolean"}
+}
+
+func introspectionDirective(name string, locations []string, args []schema.InputValue) *core.OrderedObject {
+	entry := core.NewOrderedObject(5)
+	entry.Set("name", name)
+	entry.Set("description", nil)
+	entry.Set("locations", locations)
+	entry.Set("args", introspectionInputValues(args))
+	entry.Set("isRepeatable", false)
+	return entry
 }
 
 func introspectionRootType(object *schema.Object) any {
@@ -45,7 +75,7 @@ func introspectionRootType(object *schema.Object) any {
 	return result
 }
 
-func introspectionTypes(schemaValue *schema.Schema) []any {
+func introspectionTypes(schemaValue *schema.Schema, includeDeprecated bool) []any {
 	names := make([]string, 0, len(schemaValue.Types))
 	for name := range schemaValue.Types {
 		names = append(names, name)
@@ -54,12 +84,12 @@ func introspectionTypes(schemaValue *schema.Schema) []any {
 
 	types := make([]any, 0, len(names))
 	for _, name := range names {
-		types = append(types, introspectionType(schemaValue.Types[name]))
+		types = append(types, introspectionType(schemaValue.Types[name], includeDeprecated))
 	}
 	return types
 }
 
-func introspectionNamedType(schemaValue *schema.Schema, req core.Request) any {
+func introspectionNamedType(schemaValue *schema.Schema, req core.Request, includeDeprecated bool) any {
 	name, ok := introspectionTypeName(req)
 	if !ok {
 		return nil
@@ -69,7 +99,7 @@ func introspectionNamedType(schemaValue *schema.Schema, req core.Request) any {
 	if !ok {
 		return nil
 	}
-	return introspectionType(typeValue)
+	return introspectionType(typeValue, includeDeprecated)
 }
 
 func introspectionTypeName(req core.Request) (string, bool) {
@@ -98,8 +128,8 @@ func introspectionTypeName(req core.Request) (string, bool) {
 	return value[:end], true
 }
 
-func introspectionType(typeValue schema.Type) *core.OrderedObject {
-	result := core.NewOrderedObject(8)
+func introspectionType(typeValue schema.Type, includeDeprecated bool) *core.OrderedObject {
+	result := core.NewOrderedObject(9)
 	result.Set("kind", typeValue.Kind())
 	result.Set("name", typeValue.Name())
 	result.Set("description", nil)
@@ -108,37 +138,45 @@ func introspectionType(typeValue schema.Type) *core.OrderedObject {
 	result.Set("interfaces", []any{})
 	result.Set("enumValues", nil)
 	result.Set("possibleTypes", nil)
+	result.Set("specifiedByURL", nil)
 
 	switch typed := typeValue.(type) {
+	case *schema.Scalar:
+		if typed.SpecifiedByURL != "" {
+			result.Set("specifiedByURL", typed.SpecifiedByURL)
+		}
 	case *schema.Object:
-		result.Set("fields", introspectionFields(typed.Fields))
+		result.Set("fields", introspectionFields(typed.Fields, includeDeprecated))
 		result.Set("interfaces", introspectionInterfaces(typed.Interfaces))
 	case *schema.Interface:
-		result.Set("fields", introspectionFields(typed.Fields))
+		result.Set("fields", introspectionFields(typed.Fields, includeDeprecated))
 		result.Set("possibleTypes", introspectionPossibleTypes(typed.PossibleTypes))
 	case *schema.InputObject:
 		result.Set("inputFields", introspectionInputFields(typed.Fields))
 	case *schema.Union:
 		result.Set("possibleTypes", introspectionPossibleTypes(typed.Types))
 	case *schema.Enum:
-		result.Set("enumValues", introspectionEnumValues(typed.Values))
+		result.Set("enumValues", introspectionEnumValues(typed.Values, includeDeprecated))
 	}
 
 	return result
 }
 
-func introspectionFields(fields map[string]*schema.Field) []any {
+func introspectionFields(fields map[string]*schema.Field, includeDeprecated bool) []any {
 	names := sortedFieldNames(fields)
 	values := make([]any, 0, len(names))
 	for _, name := range names {
 		field := fields[name]
+		if field.IsDeprecated && !includeDeprecated {
+			continue
+		}
 		entry := core.NewOrderedObject(6)
 		entry.Set("name", field.Name)
-		entry.Set("description", nil)
+		entry.Set("description", nullableString(field.Description))
 		entry.Set("args", introspectionInputValues(field.Args))
 		entry.Set("type", introspectionTypeRef(field.Type))
-		entry.Set("isDeprecated", false)
-		entry.Set("deprecationReason", nil)
+		entry.Set("isDeprecated", field.IsDeprecated)
+		entry.Set("deprecationReason", field.DeprecationReason)
 		values = append(values, entry)
 	}
 	return values
@@ -149,7 +187,7 @@ func introspectionInputValues(inputValues []schema.InputValue) []any {
 	for _, inputValue := range inputValues {
 		entry := core.NewOrderedObject(4)
 		entry.Set("name", inputValue.Name)
-		entry.Set("description", nil)
+		entry.Set("description", nullableString(inputValue.Description))
 		entry.Set("type", introspectionTypeRef(inputValue.Type))
 		entry.Set("defaultValue", inputValue.DefaultValue)
 		values = append(values, entry)
@@ -164,7 +202,7 @@ func introspectionInputFields(fields map[string]*schema.Field) []any {
 		field := fields[name]
 		entry := core.NewOrderedObject(4)
 		entry.Set("name", field.Name)
-		entry.Set("description", nil)
+		entry.Set("description", nullableString(field.Description))
 		entry.Set("type", introspectionTypeRef(field.Type))
 		entry.Set("defaultValue", field.DefaultValue)
 		values = append(values, entry)
@@ -188,17 +226,27 @@ func introspectionPossibleTypes(types []*schema.Object) []any {
 	return values
 }
 
-func introspectionEnumValues(values []schema.EnumValue) []any {
+func introspectionEnumValues(values []schema.EnumValue, includeDeprecated bool) []any {
 	enumValues := make([]any, 0, len(values))
 	for _, value := range values {
+		if value.IsDeprecated && !includeDeprecated {
+			continue
+		}
 		entry := core.NewOrderedObject(4)
 		entry.Set("name", value.Name)
-		entry.Set("description", nil)
-		entry.Set("isDeprecated", false)
-		entry.Set("deprecationReason", nil)
+		entry.Set("description", nullableString(value.Description))
+		entry.Set("isDeprecated", value.IsDeprecated)
+		entry.Set("deprecationReason", value.DeprecationReason)
 		enumValues = append(enumValues, entry)
 	}
 	return enumValues
+}
+
+func nullableString(value string) any {
+	if value == "" {
+		return nil
+	}
+	return value
 }
 
 func sortedFieldNames(fields map[string]*schema.Field) []string {

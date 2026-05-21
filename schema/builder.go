@@ -19,10 +19,11 @@ var (
 
 // ScalarConfig registers a custom scalar for a Go type.
 type ScalarConfig struct {
-	Type      any
-	Name      string
-	Parse     func(input any) (any, error)
-	Serialize func(value any) (any, error)
+	Type           any
+	Name           string
+	SpecifiedByURL string
+	Parse          func(input any) (any, error)
+	Serialize      func(value any) (any, error)
 }
 
 // EnumValueConfig registers one GraphQL enum member and its Go value.
@@ -90,10 +91,13 @@ type Builder struct {
 }
 
 type tagOptions struct {
-	name         string
-	required     bool
-	hasDefault   bool
-	defaultValue string
+	name              string
+	required          bool
+	hasDefault        bool
+	defaultValue      string
+	deprecated        bool
+	deprecationReason string
+	description       string
 }
 
 // Build reflects the supplied resolver values into a runtime [Schema].
@@ -136,6 +140,7 @@ func Build(config Config) (*Schema, error) {
 		return nil, errors.New("schema requires a query root")
 	}
 
+	registerIntrospectionTypes(builder.types)
 	return result, nil
 }
 
@@ -187,7 +192,11 @@ func (b *Builder) registerScalars(configs []ScalarConfig) error {
 		if config.Parse == nil {
 			return fmt.Errorf("scalar %q must define Parse", config.Name)
 		}
-		scalar := &Scalar{TypeName: config.Name, serializeFn: config.Serialize}
+		scalar := &Scalar{
+			TypeName:       config.Name,
+			SpecifiedByURL: config.SpecifiedByURL,
+			serializeFn:    config.Serialize,
+		}
 		b.types[config.Name] = scalar
 		b.scalars[goType] = customScalar{scalar: scalar, parse: config.Parse}
 	}
@@ -510,6 +519,24 @@ func (b *Builder) setValue(target reflect.Value, raw any) error {
 			return nil
 		}
 		target.Set(rawValue.Convert(target.Type()))
+		return nil
+	}
+
+	if target.Kind() == reflect.Slice || target.Kind() == reflect.Array {
+		list, ok := raw.([]any)
+		if !ok {
+			return fmt.Errorf("cannot assign %T to %s", raw, target.Type().String())
+		}
+		elemType := target.Type().Elem()
+		slice := reflect.MakeSlice(target.Type(), len(list), len(list))
+		for index, item := range list {
+			elem := reflect.New(elemType).Elem()
+			if err := b.setValue(elem, item); err != nil {
+				return err
+			}
+			slice.Index(index).Set(elem)
+		}
+		target.Set(slice)
 		return nil
 	}
 
@@ -903,6 +930,19 @@ func parseTag(field reflect.StructField) tagOptions {
 		if strings.HasPrefix(trimmed, "default=") {
 			options.hasDefault = true
 			options.defaultValue = strings.TrimPrefix(trimmed, "default=")
+			continue
+		}
+		if trimmed == "deprecated" {
+			options.deprecated = true
+			continue
+		}
+		if strings.HasPrefix(trimmed, "deprecated=") {
+			options.deprecated = true
+			options.deprecationReason = strings.TrimPrefix(trimmed, "deprecated=")
+			continue
+		}
+		if strings.HasPrefix(trimmed, "description=") {
+			options.description = strings.TrimPrefix(trimmed, "description=")
 		}
 	}
 
