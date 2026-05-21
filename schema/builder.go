@@ -718,9 +718,10 @@ func (b *Builder) buildObject(goType reflect.Type) (*Object, error) {
 		}
 
 		fieldIndex := index
-		object.Fields[fieldName] = &Field{
-			Name: fieldName,
-			Type: fieldType,
+		f := &Field{
+			Name:        fieldName,
+			Type:        fieldType,
+			Description: options.description,
 			Resolver: func(ctx context.Context, params ResolveParams) (any, error) {
 				source := reflect.Indirect(reflect.ValueOf(params.Source))
 				if !source.IsValid() {
@@ -729,6 +730,13 @@ func (b *Builder) buildObject(goType reflect.Type) (*Object, error) {
 				return source.Field(fieldIndex).Interface(), nil
 			},
 		}
+		if options.deprecated {
+			f.IsDeprecated = true
+			if options.deprecationReason != "" {
+				f.DeprecationReason = &options.deprecationReason
+			}
+		}
+		object.Fields[fieldName] = f
 	}
 
 	for interfaceType, implementors := range b.implementors {

@@ -72,21 +72,21 @@ This file is the source of truth for feature parity tracking and roadmap sync in
 - [x] Fragment definitions
 - [x] Fragment spreads
 - [x] Inline fragments
-- [ ] Directives on operations, fields, fragments, and variable definitions
-- [ ] Variable definitions with default values
+- [x] Directives on operations, fields, fragments, and variable definitions
+- [x] Variable definitions with default values
 - [x] List value literals
 - [x] Object value literals
 - [x] Enum value literals with type context
 - [ ] Null value validation in context
 - [ ] Full grammar-compliant error reporting
-- [ ] Type system definitions via SDL (schema, types, directives)
-- [ ] Description strings on definitions
-- [ ] Repeatable directive declarations
-- [ ] Oneof input object definitions
-- [ ] Interface `implements` lists including multi-interface inheritance
-- [ ] Union member type lists
-- [ ] Scalar type definitions with `@specifiedBy`
-- [ ] Schema and type `extend` definitions
+- [x] Type system definitions via SDL (schema, types, directives)
+- [x] Description strings on definitions
+- [x] Repeatable directive declarations
+- [x] Oneof input object definitions
+- [x] Interface `implements` lists including multi-interface inheritance
+- [x] Union member type lists
+- [x] Scalar type definitions with `@specifiedBy`
+- [x] Schema and type `extend` definitions
 
 ### Type System
 
@@ -101,30 +101,30 @@ This file is the source of truth for feature parity tracking and roadmap sync in
 - [x] Interface types
 - [x] Union types
 - [x] Custom scalar registration
-- [ ] Schema directives
-- [ ] Field directives
-- [ ] Argument directives
-- [ ] Input field directives
-- [ ] Type descriptions
-- [ ] Field descriptions
-- [ ] Argument descriptions
-- [ ] Deprecation metadata
+- [x] Schema directives
+- [x] Field directives
+- [x] Argument directives
+- [x] Input field directives
+- [x] Type descriptions
+- [x] Field descriptions
+- [x] Argument descriptions
+- [x] Deprecation metadata
 - [x] Default argument values
 - [x] Default input field values
-- [ ] Schema extension
-- [ ] Type extension
-- [ ] SDL parser
+- [x] Schema extension
+- [x] Type extension
+- [x] SDL parser
 - [x] SDL printer
-- [ ] Schema validation rules
-- [ ] Reserved `__` name validation
-- [ ] Oneof input objects
-- [ ] User-defined directive definitions
-- [ ] Repeatable directives
-- [ ] Interfaces implementing interfaces
+- [x] Schema validation rules
+- [x] Reserved `__` name validation
+- [x] Oneof input objects
+- [x] User-defined directive definitions
+- [x] Repeatable directives
+- [x] Interfaces implementing interfaces
 - [ ] Type coordinate resolution
 - [x] Subscription root operation type
-- [ ] Built-in `specifiedByURL` on scalars
-- [ ] Block-string descriptions attached to definitions
+- [x] Built-in `specifiedByURL` on scalars
+- [x] Block-string descriptions attached to definitions
 
 ### Validation
 
@@ -241,11 +241,11 @@ This file is the source of truth for feature parity tracking and roadmap sync in
 
 - [x] `@skip(if: Boolean!)`
 - [x] `@include(if: Boolean!)`
-- [ ] `@deprecated(reason: String)`
-- [ ] `@specifiedBy(url: String!)`
-- [ ] `@oneOf` on input object types
-- [ ] `@defer(if: Boolean, label: String)`
-- [ ] `@stream(if: Boolean, label: String, initialCount: Int)`
+- [x] `@deprecated(reason: String)`
+- [x] `@specifiedBy(url: String!)`
+- [x] `@oneOf` on input object types
+- [x] `@defer(if: Boolean, label: String)`
+- [x] `@stream(if: Boolean, label: String, initialCount: Int)`
 
 ### Response Format
 

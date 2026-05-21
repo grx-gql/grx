@@ -345,26 +345,40 @@ func validateArguments(sel selection, field *schema.Field, parentType string) []
 	return errs
 }
 
+// executableDirectiveLocations maps built-in directives that are valid on
+// executable documents to the location(s) where they may appear.
+var executableDirectiveLocations = map[string]map[string]bool{
+	"skip":    {"FIELD": true, "FRAGMENT_SPREAD": true, "INLINE_FRAGMENT": true},
+	"include": {"FIELD": true, "FRAGMENT_SPREAD": true, "INLINE_FRAGMENT": true},
+	"defer":   {"FIELD": true, "FRAGMENT_SPREAD": true},
+	"stream":  {"FIELD": true},
+}
+
+// repeatableExecutableDirectives lists directives that may appear more than
+// once on the same location in an executable document.
+var repeatableExecutableDirectives = map[string]bool{}
+
 func validateDirectives(sel selection, location string) []validationError {
 	var errs []validationError
 	seen := make(map[string]bool)
 	for _, d := range sel.Directives {
-		if seen[d.Name] {
+		allowedLocs, known := executableDirectiveLocations[d.Name]
+		if !known {
+			errs = append(errs, newValidationError(sel.Location, `Unknown directive "@%s".`, d.Name))
+			continue
+		}
+
+		isRepeatable := repeatableExecutableDirectives[d.Name]
+		if seen[d.Name] && !isRepeatable {
 			errs = append(errs, newValidationError(sel.Location,
 				`Directive "@%s" may not be used more than once at this location.`, d.Name))
 			continue
 		}
 		seen[d.Name] = true
 
-		switch d.Name {
-		case "skip", "include":
-			allowed := map[string]bool{"FIELD": true, "FRAGMENT_SPREAD": true, "INLINE_FRAGMENT": true}
-			if !allowed[location] {
-				errs = append(errs, newValidationError(sel.Location,
-					`Directive "@%s" may not be used on %s.`, d.Name, location))
-			}
-		default:
-			errs = append(errs, newValidationError(sel.Location, `Unknown directive "@%s".`, d.Name))
+		if !allowedLocs[location] {
+			errs = append(errs, newValidationError(sel.Location,
+				`Directive "@%s" may not be used on %s.`, d.Name, location))
 		}
 	}
 	return errs

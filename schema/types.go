@@ -37,10 +37,27 @@ type Type interface {
 	Kind() Kind
 }
 
+// AppliedDirective represents a directive applied to a schema element with its arguments.
+type AppliedDirective struct {
+	Name string
+	Args map[string]any
+}
+
+// DirectiveDefinition describes a directive definition in the schema
+// (both built-in and user-defined).
+type DirectiveDefinition struct {
+	Name         string
+	Description  string
+	Locations    []string
+	Args         []InputValue
+	IsRepeatable bool
+}
+
 // Scalar represents a GraphQL scalar type such as String, Int, Float,
 // Boolean, ID, or a custom user-defined scalar.
 type Scalar struct {
 	TypeName       string
+	Description    string
 	SpecifiedByURL string
 	serializeFn    func(any) (any, error)
 }
@@ -105,6 +122,7 @@ type EnumValue struct {
 // Enum represents a GraphQL enum type.
 type Enum struct {
 	TypeName    string
+	Description string
 	Values      []EnumValue
 	valueByName map[string]any
 	nameByValue map[string]string
@@ -166,6 +184,7 @@ type Field struct {
 	DefaultValue      any
 	IsDeprecated      bool
 	DeprecationReason *string
+	Directives        []AppliedDirective
 }
 
 // InputValue describes a single argument or input-object field.
@@ -182,10 +201,12 @@ type InputValue struct {
 // Object describes a GraphQL object type. Fields is keyed by GraphQL
 // field name (already lowercased from the originating Go method name).
 type Object struct {
-	TypeName   string
-	Fields     map[string]*Field
-	Interfaces []*Interface
-	goType     reflect.Type
+	TypeName    string
+	Description string
+	Fields      map[string]*Field
+	Interfaces  []*Interface
+	Directives  []AppliedDirective
+	goType      reflect.Type
 }
 
 // Name returns the object type name.
@@ -201,8 +222,11 @@ func (o *Object) Kind() Kind {
 // Interface describes a GraphQL interface type.
 type Interface struct {
 	TypeName      string
+	Description   string
 	Fields        map[string]*Field
+	Interfaces    []*Interface // interfaces this interface implements
 	PossibleTypes []*Object
+	Directives    []AppliedDirective
 }
 
 // Name returns the interface type name.
@@ -223,8 +247,10 @@ func (i *Interface) Resolve(value any) (*Object, error) {
 // Union describes a GraphQL union type as the set of object types it
 // can resolve to.
 type Union struct {
-	TypeName string
-	Types    []*Object
+	TypeName    string
+	Description string
+	Types       []*Object
+	Directives  []AppliedDirective
 }
 
 // Name returns the union type name.
@@ -245,8 +271,11 @@ func (u *Union) Resolve(value any) (*Object, error) {
 // InputObject describes a GraphQL input object type. The Resolver field
 // of each entry in Fields is unused; only Name and Type are meaningful.
 type InputObject struct {
-	TypeName string
-	Fields   map[string]*Field
+	TypeName    string
+	Description string
+	IsOneOf     bool // @oneOf: exactly one field must be provided
+	Fields      map[string]*Field
+	Directives  []AppliedDirective
 }
 
 // Name returns the input object type name.
@@ -264,10 +293,12 @@ func (i *InputObject) Kind() Kind {
 // supply the corresponding root. Types is the type registry keyed by
 // GraphQL type name and is used by the introspection fast-path.
 type Schema struct {
-	Query        *Object
-	Mutation     *Object
-	Subscription *Object
-	Types        map[string]Type
+	Query                *Object
+	Mutation             *Object
+	Subscription         *Object
+	Types                map[string]Type
+	Directives           []AppliedDirective
+	DirectiveDefinitions map[string]*DirectiveDefinition
 }
 
 func enumValueKey(value any) string {

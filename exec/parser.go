@@ -142,7 +142,7 @@ func (p *parser) parseOperationHeader() (operationKind, string, []string, error)
 	}
 	var variables []string
 	if p.peek().kind == tokenParenOpen {
-		parsed, err := p.skipVariableDefinitions()
+		parsed, err := p.parseVariableDefinitions()
 		if err != nil {
 			return kind, name, nil, err
 		}
@@ -186,12 +186,17 @@ func (p *parser) parseSelection(depth int) (selection, error) {
 			if typeName.kind != tokenName {
 				return selection{}, newParseError(p.source, typeName.offset, "expected type name after \"on\", got %q", typeName.value)
 			}
+			dirs, err := p.parseDirectives()
+			if err != nil {
+				return selection{}, err
+			}
 			nested, err := p.parseSelectionSet(depth + 1)
 			if err != nil {
 				return selection{}, err
 			}
 			return selection{
 				InlineFragmentOn: typeName.value,
+				Directives:       dirs,
 				Selections:       nested,
 				Location:         locationForOffset(p.source, typeName.offset),
 			}, nil
@@ -200,8 +205,13 @@ func (p *parser) parseSelection(depth int) (selection, error) {
 		if fragName.kind != tokenName {
 			return selection{}, newParseError(p.source, fragName.offset, "expected fragment name, got %q", fragName.value)
 		}
+		dirs, err := p.parseDirectives()
+		if err != nil {
+			return selection{}, err
+		}
 		return selection{
 			FragmentSpread: fragName.value,
+			Directives:     dirs,
 			Location:       locationForOffset(p.source, fragName.offset),
 		}, nil
 	}
@@ -277,6 +287,10 @@ func (p *parser) parseFragmentDefinition() (*fragmentDef, error) {
 	typeTok := p.next()
 	if typeTok.kind != tokenName {
 		return nil, newParseError(p.source, typeTok.offset, "expected type condition name, got %q", typeTok.value)
+	}
+	// Directives on fragment definitions are parsed and discarded.
+	if _, err := p.parseDirectives(); err != nil {
+		return nil, err
 	}
 	sel, err := p.parseSelectionSet(1)
 	if err != nil {
@@ -429,33 +443,163 @@ func (p *parser) parseListLiteral() ([]any, error) {
 	return list, nil
 }
 
-// skipVariableDefinitions consumes a parenthesised variable definition list
-// and returns the declared variable names without doing full type coercion.
-func (p *parser) skipVariableDefinitions() ([]string, error) {
-	variables := make([]string, 0, 4)
-	depth := 0
-	for {
-		current := p.next()
-		switch current.kind {
-		case tokenParenOpen:
-			depth++
-		case tokenParenClose:
-			depth--
-			if depth == 0 {
-				return variables, nil
-			}
-		case tokenDollar:
-			if depth == 1 {
-				name := p.next()
-				if name.kind != tokenName {
-					return nil, newParseError(p.source, current.offset, "expected variable name after $")
-				}
-				variables = append(variables, name.value)
-			}
-		case tokenEOF:
-			return nil, newParseError(p.source, current.offset, "unexpected end of query inside operation variables")
-		}
+// parseVariableDefinitions parses a parenthesised variable definition list,
+// captures default values, and injects them into p.vars for any variable that
+// is not already present. It returns the list of declared variable names.
+func (p *parser) parseVariableDefinitions() ([]string, error) {
+	if err := p.expect(tokenParenOpen); err != nil {
+		return nil, err
 	}
+	variables := make([]string, 0, 4)
+	for p.peek().kind != tokenParenClose {
+		if p.peek().kind == tokenEOF {
+			return nil, newParseError(p.source, p.peek().offset, "unexpected end of query inside operation variables")
+		}
+		// $varName
+		if p.peek().kind != tokenDollar {
+			return nil, newParseError(p.source, p.peek().offset, "expected variable definition, got %q", p.peek().value)
+		}
+		p.next() // consume $
+		name := p.next()
+		if name.kind != tokenName {
+			return nil, newParseError(p.source, name.offset, "expected variable name after $")
+		}
+		// : TypeRef
+		if err := p.expect(tokenColon); err != nil {
+			return nil, err
+		}
+		if err := p.skipTypeRef(); err != nil {
+			return nil, err
+		}
+		// optional = DefaultValue (constant, no variable references allowed)
+		if p.peek().kind == tokenEquals {
+			p.next() // consume =
+			defaultVal, err := p.parseConstValue()
+			if err != nil {
+				return nil, err
+			}
+			// Only use the default when the caller did not supply the variable.
+			if _, exists := p.vars[name.value]; !exists {
+				if p.vars == nil {
+					p.vars = make(map[string]any)
+				}
+				p.vars[name.value] = defaultVal
+			}
+		}
+		// optional directives on the variable definition (parse and discard)
+		if _, err := p.parseDirectives(); err != nil {
+			return nil, err
+		}
+		variables = append(variables, name.value)
+	}
+	p.next() // consume )
+	return variables, nil
+}
+
+// skipTypeRef advances past a GraphQL type reference such as
+// ID!, [String!]!, or Boolean.
+func (p *parser) skipTypeRef() error {
+	switch p.peek().kind {
+	case tokenBracketOpen:
+		p.next() // consume [
+		if err := p.skipTypeRef(); err != nil {
+			return err
+		}
+		if err := p.expect(tokenBracketClose); err != nil {
+			return err
+		}
+	case tokenName:
+		p.next() // consume the named type
+	default:
+		return newParseError(p.source, p.peek().offset, "expected type reference, got %q", p.peek().value)
+	}
+	if p.peek().kind == tokenBang {
+		p.next() // consume !
+	}
+	return nil
+}
+
+// parseConstValue parses a constant GraphQL value (no variable references).
+// Used for default values in variable definitions.
+func (p *parser) parseConstValue() (any, error) {
+	current := p.next()
+	switch current.kind {
+	case tokenString:
+		return current.value, nil
+	case tokenNumber:
+		if strings.ContainsAny(current.value, ".eE") {
+			f, err := strconv.ParseFloat(current.value, 64)
+			if err != nil {
+				return nil, newParseError(p.source, current.offset, "invalid float literal %q", current.value)
+			}
+			return f, nil
+		}
+		i, err := strconv.Atoi(current.value)
+		if err == nil {
+			return i, nil
+		}
+		i64, err64 := strconv.ParseInt(current.value, 10, 64)
+		if err64 != nil {
+			return nil, newParseError(p.source, current.offset, "invalid integer literal %q", current.value)
+		}
+		return i64, nil
+	case tokenName:
+		switch current.value {
+		case "true":
+			return true, nil
+		case "false":
+			return false, nil
+		case "null":
+			return nil, nil
+		default:
+			return current.value, nil // enum value
+		}
+	case tokenBraceOpen:
+		return p.parseConstObjectLiteral()
+	case tokenBracketOpen:
+		return p.parseConstListLiteral()
+	default:
+		return nil, newParseError(p.source, current.offset, "unexpected token %q in constant value", current.value)
+	}
+}
+
+func (p *parser) parseConstObjectLiteral() (map[string]any, error) {
+	obj := make(map[string]any, 4)
+	for p.peek().kind != tokenBraceClose {
+		if p.peek().kind == tokenEOF {
+			return nil, newParseError(p.source, p.peek().offset, "unexpected end of query inside object literal")
+		}
+		name := p.next()
+		if name.kind != tokenName {
+			return nil, newParseError(p.source, name.offset, "expected field name, got %q", name.value)
+		}
+		if err := p.expect(tokenColon); err != nil {
+			return nil, err
+		}
+		val, err := p.parseConstValue()
+		if err != nil {
+			return nil, err
+		}
+		obj[name.value] = val
+	}
+	p.next() // consume }
+	return obj, nil
+}
+
+func (p *parser) parseConstListLiteral() ([]any, error) {
+	list := make([]any, 0, 4)
+	for p.peek().kind != tokenBracketClose {
+		if p.peek().kind == tokenEOF {
+			return nil, newParseError(p.source, p.peek().offset, "unexpected end of query inside list literal")
+		}
+		val, err := p.parseConstValue()
+		if err != nil {
+			return nil, err
+		}
+		list = append(list, val)
+	}
+	p.next() // consume ]
+	return list, nil
 }
 
 func (p *parser) expect(kind tokenKind) error {

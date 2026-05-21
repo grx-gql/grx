@@ -26,16 +26,33 @@ func PrintSDL(s *Schema) string {
 		t := s.Types[name]
 		switch typed := t.(type) {
 		case *Scalar:
-			fmt.Fprintf(&b, "scalar %s\n\n", typed.Name())
+			writeDescription(&b, typed.Description)
+			fmt.Fprintf(&b, "scalar %s", typed.Name())
+			if typed.SpecifiedByURL != "" {
+				fmt.Fprintf(&b, " @specifiedBy(url: %s)", strconv.Quote(typed.SpecifiedByURL))
+			}
+			b.WriteString("\n\n")
 		case *Enum:
+			writeDescription(&b, typed.Description)
 			fmt.Fprintf(&b, "enum %s {\n", typed.Name())
 			ev := append([]EnumValue(nil), typed.Values...)
 			sort.Slice(ev, func(i, j int) bool { return ev[i].Name < ev[j].Name })
 			for _, v := range ev {
-				fmt.Fprintf(&b, "  %s\n", v.Name)
+				if v.Description != "" {
+					fmt.Fprintf(&b, "  \"\"\"%s\"\"\"\n", v.Description)
+				}
+				fmt.Fprintf(&b, "  %s", v.Name)
+				if v.IsDeprecated {
+					b.WriteString(" @deprecated")
+					if v.DeprecationReason != nil && *v.DeprecationReason != "" {
+						fmt.Fprintf(&b, "(reason: %s)", strconv.Quote(*v.DeprecationReason))
+					}
+				}
+				b.WriteByte('\n')
 			}
 			b.WriteString("}\n\n")
 		case *Union:
+			writeDescription(&b, typed.Description)
 			parts := make([]string, 0, len(typed.Types))
 			for _, o := range typed.Types {
 				if o != nil {
@@ -45,12 +62,29 @@ func PrintSDL(s *Schema) string {
 			sort.Strings(parts)
 			fmt.Fprintf(&b, "union %s = %s\n\n", typed.Name(), strings.Join(parts, " | "))
 		case *Interface:
+			writeDescription(&b, typed.Description)
 			fmt.Fprintf(&b, "interface %s", typed.Name())
+			if len(typed.Interfaces) > 0 {
+				ifaces := append([]*Interface(nil), typed.Interfaces...)
+				sort.Slice(ifaces, func(i, j int) bool { return ifaces[i].Name() < ifaces[j].Name() })
+				b.WriteString(" implements ")
+				for i, it := range ifaces {
+					if i > 0 {
+						b.WriteString(" & ")
+					}
+					b.WriteString(it.Name())
+				}
+			}
 			writeInterfaceFields(&b, typed)
 		case *InputObject:
+			writeDescription(&b, typed.Description)
 			fmt.Fprintf(&b, "input %s", typed.Name())
+			if typed.IsOneOf {
+				b.WriteString(" @oneOf")
+			}
 			writeInputFields(&b, typed)
 		case *Object:
+			writeDescription(&b, typed.Description)
 			fmt.Fprintf(&b, "type %s", typed.Name())
 			if len(typed.Interfaces) > 0 {
 				iface := append([]*Interface(nil), typed.Interfaces...)
@@ -81,6 +115,17 @@ func PrintSDL(s *Schema) string {
 	}
 	b.WriteString("}\n")
 	return b.String()
+}
+
+func writeDescription(b *strings.Builder, desc string) {
+	if desc == "" {
+		return
+	}
+	if !strings.Contains(desc, "\n") {
+		fmt.Fprintf(b, "\"\"\"%s\"\"\"\n", desc)
+	} else {
+		fmt.Fprintf(b, "\"\"\"\n%s\n\"\"\"\n", desc)
+	}
 }
 
 func writeInterfaceFields(b *strings.Builder, iface *Interface) {
@@ -124,6 +169,9 @@ func sortedFieldKeys(fields map[string]*Field) []string {
 
 func formatField(f *Field, input bool) string {
 	var sb strings.Builder
+	if f.Description != "" {
+		fmt.Fprintf(&sb, "  \"\"\"%s\"\"\"\n  ", f.Description)
+	}
 	sb.WriteString(f.Name)
 	if !input && len(f.Args) > 0 {
 		sb.WriteByte('(')
@@ -149,6 +197,12 @@ func formatField(f *Field, input bool) string {
 		if s, ok := formatSDLDefault(f.DefaultValue); ok {
 			sb.WriteString(" = ")
 			sb.WriteString(s)
+		}
+	}
+	if f.IsDeprecated {
+		sb.WriteString(" @deprecated")
+		if f.DeprecationReason != nil && *f.DeprecationReason != "" {
+			fmt.Fprintf(&sb, "(reason: %s)", strconv.Quote(*f.DeprecationReason))
 		}
 	}
 	sb.WriteByte('\n')

@@ -2,6 +2,7 @@ package schema
 
 import (
 	"context"
+	"strings"
 	"testing"
 )
 
@@ -200,5 +201,177 @@ func TestBuildRegistersAdvancedTypeDefinitions(t *testing.T) {
 	}
 	if len(enumType.Values) != 3 {
 		t.Fatalf("expected three enum values, got %d", len(enumType.Values))
+	}
+}
+
+// --- Issue #6: Type descriptions ---
+
+type buildDescQuery struct{}
+
+type buildDescUser struct {
+	ID   string `gql:"id,nonNull,description=The unique identifier"`
+	Name string `gql:"name,description=The display name"`
+}
+
+func (buildDescQuery) User(ctx context.Context) (*buildDescUser, error) {
+	return nil, nil
+}
+
+func TestBuildFieldDescriptions(t *testing.T) {
+	s, err := Build(Config{Query: buildDescQuery{}})
+	if err != nil {
+		t.Fatalf("build: %v", err)
+	}
+	userType, ok := s.Types["buildDescUser"].(*Object)
+	if !ok {
+		t.Fatalf("expected buildDescUser object, got %T", s.Types["buildDescUser"])
+	}
+	if userType.Fields["id"].Description != "The unique identifier" {
+		t.Fatalf("expected field description, got %q", userType.Fields["id"].Description)
+	}
+	if userType.Fields["name"].Description != "The display name" {
+		t.Fatalf("expected field description, got %q", userType.Fields["name"].Description)
+	}
+}
+
+// --- Issue #6: IsOneOf on InputObject ---
+
+type buildOneOfInput struct {
+	Email *string `gql:"email"`
+	Phone *string `gql:"phone"`
+}
+
+func TestInputObjectIsOneOf(t *testing.T) {
+	io := &InputObject{TypeName: "TestInput", IsOneOf: true, Fields: map[string]*Field{}}
+	if !io.IsOneOf {
+		t.Fatal("expected IsOneOf to be true")
+	}
+}
+
+// --- Issue #6: Reserved __ name validation ---
+
+func TestBuildRejectsReservedTypeName(t *testing.T) {
+	type __badType struct{ ID string }
+	type badQuery struct{}
+	// The builder should not allow types starting with "__" (reserved by spec).
+	// We test this via ValidateSchema which checks reserved names.
+	s := &Schema{
+		Types: map[string]Type{
+			"__BadType": &Object{TypeName: "__BadType", Fields: map[string]*Field{}},
+		},
+		Query: &Object{TypeName: "Query", Fields: map[string]*Field{}},
+	}
+	errs := ValidateSchema(s)
+	found := false
+	for _, e := range errs {
+		if strings.Contains(e.Error(), "__") {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("expected reserved name error, got %v", errs)
+	}
+}
+
+func TestValidateSchemaNoErrors(t *testing.T) {
+	s, err := Build(Config{Query: buildTestQuery{}})
+	if err != nil {
+		t.Fatalf("build: %v", err)
+	}
+	errs := ValidateSchema(s)
+	if len(errs) != 0 {
+		t.Fatalf("expected no schema errors, got %v", errs)
+	}
+}
+
+// --- Issue #6: Interface implementing interface ---
+
+func TestInterfaceImplementsInterfaces(t *testing.T) {
+	base := &Interface{TypeName: "Node", Fields: map[string]*Field{
+		"id": {Name: "id", Type: &Scalar{TypeName: "ID"}},
+	}}
+	derived := &Interface{
+		TypeName:   "Entity",
+		Interfaces: []*Interface{base},
+		Fields:     map[string]*Field{},
+	}
+	if len(derived.Interfaces) != 1 || derived.Interfaces[0].TypeName != "Node" {
+		t.Fatalf("expected Entity to implement Node, got %#v", derived.Interfaces)
+	}
+}
+
+// --- Issue #6: DirectiveDefinition type ---
+
+func TestDirectiveDefinitionType(t *testing.T) {
+	dd := &DirectiveDefinition{
+		Name:         "auth",
+		Description:  "Requires authentication",
+		Locations:    []string{"FIELD_DEFINITION", "OBJECT"},
+		IsRepeatable: false,
+		Args: []InputValue{
+			{Name: "role", Type: &Scalar{TypeName: "String"}},
+		},
+	}
+	if dd.Name != "auth" {
+		t.Fatalf("expected name auth, got %q", dd.Name)
+	}
+	if len(dd.Locations) != 2 {
+		t.Fatalf("expected 2 locations, got %d", len(dd.Locations))
+	}
+}
+
+// --- Issue #6: Type descriptions via struct tags ---
+
+type descTagQuery struct{}
+
+type descTagUser struct {
+	ID string `gql:"id,nonNull,description=User ID"`
+}
+
+func (descTagQuery) Me(ctx context.Context) (*descTagUser, error) { return nil, nil }
+
+func TestBuildPopulatesDescriptionFromTag(t *testing.T) {
+	s, err := Build(Config{Query: descTagQuery{}})
+	if err != nil {
+		t.Fatalf("build: %v", err)
+	}
+	userT := s.Types["descTagUser"].(*Object)
+	if userT.Fields["id"].Description != "User ID" {
+		t.Fatalf("expected 'User ID' description, got %q", userT.Fields["id"].Description)
+	}
+}
+
+// --- Issue #6: Deprecation metadata on Field ---
+
+type deprecatedQuery struct{}
+
+type deprecatedUser struct {
+	ID       string `gql:"id,nonNull"`
+	LegacyID string `gql:"legacyId,deprecated=Use id instead"`
+}
+
+func (deprecatedQuery) User(ctx context.Context) (*deprecatedUser, error) { return nil, nil }
+
+func TestBuildDeprecationMetadata(t *testing.T) {
+	s, err := Build(Config{Query: deprecatedQuery{}})
+	if err != nil {
+		t.Fatalf("build: %v", err)
+	}
+	userT := s.Types["deprecatedUser"].(*Object)
+	f := userT.Fields["legacyId"]
+	if !f.IsDeprecated {
+		t.Fatal("expected legacyId to be deprecated")
+	}
+	if f.DeprecationReason == nil || *f.DeprecationReason != "Use id instead" {
+		t.Fatalf("expected deprecation reason, got %v", f.DeprecationReason)
+	}
+}
+
+// --- Issue #6: specifiedByURL on Scalar ---
+
+func TestScalarSpecifiedByURL(t *testing.T) {
+	s := &Scalar{TypeName: "URL", SpecifiedByURL: "https://url.spec.whatwg.org/"}
+	if s.SpecifiedByURL != "https://url.spec.whatwg.org/" {
+		t.Fatalf("expected specifiedByURL, got %q", s.SpecifiedByURL)
 	}
 }

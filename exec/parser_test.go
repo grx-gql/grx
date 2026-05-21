@@ -855,3 +855,169 @@ func TestParseDocumentParsesFragmentSpread(t *testing.T) {
 		t.Fatalf("unexpected operation selections: %#v", doc.Selections)
 	}
 }
+
+// --- Issue #5: Variable definition default values ---
+
+func TestParseDocumentVariableDefaultScalar(t *testing.T) {
+	// Variable not supplied by client; default from definition must be used.
+	doc, err := parseDocument(
+		`query List($limit: Int = 10) { items(limit: $limit) { id } }`,
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if doc.Selections[0].Arguments["limit"] != 10 {
+		t.Fatalf("expected limit 10 from default, got %#v", doc.Selections[0].Arguments["limit"])
+	}
+}
+
+func TestParseDocumentVariableDefaultOverriddenByClient(t *testing.T) {
+	doc, err := parseDocument(
+		`query List($limit: Int = 10) { items(limit: $limit) { id } }`,
+		map[string]any{"limit": 20},
+	)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if doc.Selections[0].Arguments["limit"] != 20 {
+		t.Fatalf("expected limit 20 from variables, got %#v", doc.Selections[0].Arguments["limit"])
+	}
+}
+
+func TestParseDocumentVariableDefaultString(t *testing.T) {
+	doc, err := parseDocument(
+		`query Q($name: String = "World") { greet(name: $name) { message } }`,
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if doc.Selections[0].Arguments["name"] != "World" {
+		t.Fatalf("expected name World from default, got %#v", doc.Selections[0].Arguments["name"])
+	}
+}
+
+func TestParseDocumentVariableDefaultBool(t *testing.T) {
+	doc, err := parseDocument(
+		`query Q($verbose: Boolean = true) { items(verbose: $verbose) { id } }`,
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if doc.Selections[0].Arguments["verbose"] != true {
+		t.Fatalf("expected verbose true from default, got %#v", doc.Selections[0].Arguments["verbose"])
+	}
+}
+
+func TestParseDocumentVariableDefaultNull(t *testing.T) {
+	doc, err := parseDocument(
+		`query Q($cursor: String = null) { items(cursor: $cursor) { id } }`,
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if _, ok := doc.Selections[0].Arguments["cursor"]; !ok {
+		t.Fatalf("expected cursor key to be present in arguments")
+	}
+	if doc.Selections[0].Arguments["cursor"] != nil {
+		t.Fatalf("expected cursor nil from default, got %#v", doc.Selections[0].Arguments["cursor"])
+	}
+}
+
+func TestParseDocumentVariableDefaultListType(t *testing.T) {
+	// Default on a list-typed variable
+	doc, err := parseDocument(
+		`query Q($ids: [ID!]! = ["a", "b"]) { users(ids: $ids) { id } }`,
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	ids, ok := doc.Selections[0].Arguments["ids"].([]any)
+	if !ok || len(ids) != 2 {
+		t.Fatalf("expected ids list of length 2, got %#v", doc.Selections[0].Arguments["ids"])
+	}
+}
+
+func TestParseDocumentVariableDefaultObjectType(t *testing.T) {
+	doc, err := parseDocument(
+		`query Q($filter: FilterInput = {active: true}) { items(filter: $filter) { id } }`,
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	filter, ok := doc.Selections[0].Arguments["filter"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected filter map, got %#v", doc.Selections[0].Arguments["filter"])
+	}
+	if filter["active"] != true {
+		t.Fatalf("expected filter.active true, got %#v", filter["active"])
+	}
+}
+
+func TestParseDocumentMultipleVariableDefaults(t *testing.T) {
+	doc, err := parseDocument(
+		`query Q($limit: Int = 5, $offset: Int = 0, $q: String) {
+			search(limit: $limit, offset: $offset, q: $q) { id }
+		}`,
+		map[string]any{"q": "hello"},
+	)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	args := doc.Selections[0].Arguments
+	if args["limit"] != 5 {
+		t.Fatalf("expected limit 5, got %#v", args["limit"])
+	}
+	if args["offset"] != 0 {
+		t.Fatalf("expected offset 0, got %#v", args["offset"])
+	}
+	if args["q"] != "hello" {
+		t.Fatalf("expected q hello, got %#v", args["q"])
+	}
+}
+
+func TestParseDocumentVariableDefaultWithDirectiveOnVar(t *testing.T) {
+	// Directives on variable definitions should be parsed without error.
+	doc, err := parseDocument(
+		`query Q($id: ID! @deprecated) { user(id: $id) { id } }`,
+		map[string]any{"id": "u1"},
+	)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if doc.Selections[0].Arguments["id"] != "u1" {
+		t.Fatalf("expected id u1, got %#v", doc.Selections[0].Arguments["id"])
+	}
+}
+
+// --- Issue #5: Directives on fragment definitions ---
+
+func TestParseDocumentDirectivesOnFragmentDefinition(t *testing.T) {
+	q := `
+		fragment UserFields on User @deprecated(reason: "Use new format") {
+			id
+			name
+		}
+		query { ...UserFields }
+	`
+	_, err := parseDocumentNamed(q, nil, "", 0)
+	if err != nil {
+		t.Fatalf("unexpected error parsing fragment with directives: %v", err)
+	}
+}
+
+func TestParseDocumentDirectivesOnInlineFragment(t *testing.T) {
+	doc, err := parseDocument(
+		`{ user { ... on User @skip(if: false) { id } } }`,
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	_ = doc
+}

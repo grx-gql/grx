@@ -73,3 +73,90 @@ func TestPrintSDLFormatsInputObjectDefaults(t *testing.T) {
 		t.Fatalf("expected literal defaults on input fields, got:\n%s", sdl)
 	}
 }
+
+// --- Issue #6: Descriptions in SDL output ---
+
+type descSDLQuery struct{}
+
+type descSDLUser struct {
+	ID string `gql:"id,nonNull,description=The user ID"`
+}
+
+func (descSDLQuery) User(ctx context.Context) (*descSDLUser, error) { return nil, nil }
+
+func TestPrintSDLIncludesFieldDescriptions(t *testing.T) {
+	s, err := Build(Config{Query: descSDLQuery{}})
+	if err != nil {
+		t.Fatalf("build: %v", err)
+	}
+	sdl := PrintSDL(s)
+	if !strings.Contains(sdl, `"""The user ID"""`) {
+		t.Fatalf("expected field description in SDL, got:\n%s", sdl)
+	}
+}
+
+// --- Issue #6: IsOneOf in SDL output ---
+
+func TestPrintSDLIncludesOneOf(t *testing.T) {
+	s := &Schema{
+		Query: &Object{TypeName: "Query", Fields: map[string]*Field{
+			"q": {Name: "q", Type: &Scalar{TypeName: "String"}},
+		}},
+		Types: map[string]Type{
+			"Query": &Object{TypeName: "Query", Fields: map[string]*Field{
+				"q": {Name: "q", Type: &Scalar{TypeName: "String"}},
+			}},
+			"Contact": &InputObject{TypeName: "Contact", IsOneOf: true, Fields: map[string]*Field{
+				"email": {Name: "email", Type: &Scalar{TypeName: "String"}},
+			}},
+		},
+	}
+	sdl := PrintSDL(s)
+	if !strings.Contains(sdl, "@oneOf") {
+		t.Fatalf("expected @oneOf in SDL output, got:\n%s", sdl)
+	}
+}
+
+// --- Issue #6: @deprecated in SDL output ---
+
+func TestPrintSDLIncludesDeprecatedField(t *testing.T) {
+	reason := "Use id instead"
+	s := &Schema{
+		Query: &Object{TypeName: "Query", Fields: map[string]*Field{
+			"q": {Name: "q", Type: &Scalar{TypeName: "String"}},
+		}},
+		Types: map[string]Type{
+			"Query": &Object{TypeName: "Query", Fields: map[string]*Field{
+				"q": {Name: "q", Type: &Scalar{TypeName: "String"}},
+			}},
+			"User": &Object{TypeName: "User", Fields: map[string]*Field{
+				"id":       {Name: "id", Type: &Scalar{TypeName: "ID"}},
+				"legacyId": {Name: "legacyId", Type: &Scalar{TypeName: "String"}, IsDeprecated: true, DeprecationReason: &reason},
+			}},
+		},
+	}
+	sdl := PrintSDL(s)
+	if !strings.Contains(sdl, "@deprecated") {
+		t.Fatalf("expected @deprecated in SDL output, got:\n%s", sdl)
+	}
+}
+
+// --- Issue #5: @specifiedBy in SDL output ---
+
+func TestPrintSDLIncludesSpecifiedBy(t *testing.T) {
+	s := &Schema{
+		Query: &Object{TypeName: "Query", Fields: map[string]*Field{
+			"q": {Name: "q", Type: &Scalar{TypeName: "String"}},
+		}},
+		Types: map[string]Type{
+			"Query": &Object{TypeName: "Query", Fields: map[string]*Field{
+				"q": {Name: "q", Type: &Scalar{TypeName: "String"}},
+			}},
+			"URL": &Scalar{TypeName: "URL", SpecifiedByURL: "https://url.spec.whatwg.org/"},
+		},
+	}
+	sdl := PrintSDL(s)
+	if !strings.Contains(sdl, "@specifiedBy") {
+		t.Fatalf("expected @specifiedBy in SDL output, got:\n%s", sdl)
+	}
+}

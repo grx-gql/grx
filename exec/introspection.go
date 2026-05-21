@@ -41,14 +41,46 @@ func introspectionSchema(schemaValue *schema.Schema, includeDeprecated bool) *co
 }
 
 func introspectionBuiltinDirectives() []any {
+	boolType := booleanScalar()
+	strType := &schema.Scalar{TypeName: "String"}
+	intType := &schema.Scalar{TypeName: "Int"}
 	return []any{
 		introspectionDirective("skip", []string{"FIELD", "FRAGMENT_SPREAD", "INLINE_FRAGMENT"}, []schema.InputValue{
-			{Name: "if", Type: &schema.NonNull{OfType: booleanScalar()}},
+			{Name: "if", Type: &schema.NonNull{OfType: boolType}},
 		}),
 		introspectionDirective("include", []string{"FIELD", "FRAGMENT_SPREAD", "INLINE_FRAGMENT"}, []schema.InputValue{
-			{Name: "if", Type: &schema.NonNull{OfType: booleanScalar()}},
+			{Name: "if", Type: &schema.NonNull{OfType: boolType}},
 		}),
+		introspectionDirective("deprecated", []string{"FIELD_DEFINITION", "ARGUMENT_DEFINITION", "INPUT_FIELD_DEFINITION", "ENUM_VALUE"}, []schema.InputValue{
+			{Name: "reason", Type: strType, DefaultValue: "No longer supported"},
+		}),
+		introspectionDirective("specifiedBy", []string{"SCALAR"}, []schema.InputValue{
+			{Name: "url", Type: &schema.NonNull{OfType: strType}},
+		}),
+		introspectionDirectiveRepeatable("oneOf", []string{"INPUT_OBJECT"}, nil, false),
+		introspectionDirectiveRepeatable("defer", []string{"FRAGMENT_SPREAD", "FIELD"}, []schema.InputValue{
+			{Name: "if", Type: boolType, DefaultValue: true},
+			{Name: "label", Type: strType},
+		}, false),
+		introspectionDirectiveRepeatable("stream", []string{"FIELD"}, []schema.InputValue{
+			{Name: "if", Type: boolType, DefaultValue: true},
+			{Name: "label", Type: strType},
+			{Name: "initialCount", Type: intType, DefaultValue: 0},
+		}, false),
 	}
+}
+
+func introspectionDirectiveRepeatable(name string, locations []string, args []schema.InputValue, repeatable bool) *core.OrderedObject {
+	entry := core.NewOrderedObject(5)
+	entry.Set("name", name)
+	entry.Set("description", nil)
+	entry.Set("locations", locations)
+	if args == nil {
+		args = []schema.InputValue{}
+	}
+	entry.Set("args", introspectionInputValues(args))
+	entry.Set("isRepeatable", repeatable)
+	return entry
 }
 
 func booleanScalar() schema.Type {
@@ -142,20 +174,29 @@ func introspectionType(typeValue schema.Type, includeDeprecated bool) *core.Orde
 
 	switch typed := typeValue.(type) {
 	case *schema.Scalar:
+		result.Set("description", nullableString(typed.Description))
 		if typed.SpecifiedByURL != "" {
 			result.Set("specifiedByURL", typed.SpecifiedByURL)
 		}
 	case *schema.Object:
+		result.Set("description", nullableString(typed.Description))
 		result.Set("fields", introspectionFields(typed.Fields, includeDeprecated))
 		result.Set("interfaces", introspectionInterfaces(typed.Interfaces))
 	case *schema.Interface:
+		result.Set("description", nullableString(typed.Description))
 		result.Set("fields", introspectionFields(typed.Fields, includeDeprecated))
 		result.Set("possibleTypes", introspectionPossibleTypes(typed.PossibleTypes))
 	case *schema.InputObject:
+		result.Set("description", nullableString(typed.Description))
+		if typed.IsOneOf {
+			result.Set("isOneOf", true)
+		}
 		result.Set("inputFields", introspectionInputFields(typed.Fields))
 	case *schema.Union:
+		result.Set("description", nullableString(typed.Description))
 		result.Set("possibleTypes", introspectionPossibleTypes(typed.Types))
 	case *schema.Enum:
+		result.Set("description", nullableString(typed.Description))
 		result.Set("enumValues", introspectionEnumValues(typed.Values, includeDeprecated))
 	}
 
