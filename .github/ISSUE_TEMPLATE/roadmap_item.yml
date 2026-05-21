@@ -1,0 +1,87 @@
+name: Roadmap / parity item
+description: Track concrete work that maps to an unchecked item in ROADMAP.md (spec parity, transport behavior, DX, etc.).
+title: "[roadmap]: "
+labels: ["roadmap", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this template when filing work that corresponds to the [Feature Parity Checklist](https://github.com/patrickkabwe/grx/blob/main/ROADMAP.md)
+        in `ROADMAP.md`. For regressions or incorrect behaviour today, prefer **Bug report** instead.
+
+  - type: dropdown
+    id: roadmap_section
+    attributes:
+      label: Roadmap section
+      description: Match the `###` heading in `ROADMAP.md` (Feature Parity Checklist).
+      options:
+        - "Server HTTP Transport"
+        - "GraphQL Language Lexer"
+        - "GraphQL Parser"
+        - "Type System"
+        - "Validation"
+        - "Execution"
+        - "Introspection"
+        - "Built-in Directives"
+        - "Response Format"
+        - "Developer Experience"
+        - "Subscriptions"
+        - "WebSocket Transport (RFC 6455)"
+        - "graphql-transport-ws Subprotocol"
+        - "Security"
+        - "Observability"
+        - "Data Loading"
+        - "Other (describe below)"
+    validations:
+      required: true
+
+  - type: textarea
+    id: checklist_item
+    attributes:
+      label: Roadmap checklist line(s)
+      description: Paste the exact unchecked bullet(s) from `ROADMAP.md` (the `- [ ] ...` line(s)).
+      placeholder: |
+        - [ ] GraphQL-over-HTTP status code semantics
+    validations:
+      required: true
+
+  - type: dropdown
+    id: work_kind
+    attributes:
+      label: Kind of work
+      description: Rough classification for triage and release notes.
+      options:
+        - "New capability (spec / API parity)"
+        - "Improvement to existing behaviour"
+        - "Bug fix (spec violation or broken contract)"
+        - "Documentation / examples only"
+        - "Tooling / CI / release"
+    validations:
+      required: true
+
+  - type: textarea
+    id: motivation
+    attributes:
+      label: Motivation
+      description: Who benefits, and what breaks or is awkward without this?
+    validations:
+      required: true
+
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      description: What has to be true to close this issue? Tests, spec references, or observable behaviour.
+      placeholder: |
+        - GraphQL-over-HTTP test vectors from … pass
+        - `go test ./...` and docs updated
+    validations:
+      required: true
+
+  - type: textarea
+    id: spec_links
+    attributes:
+      label: Spec / prior art (optional)
+      description: Links to GraphQL spec sections, GraphQL-over-HTTP, graphql-ws, RFCs, or other libraries.
+    validations:
+      required: false
