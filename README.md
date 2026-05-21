@@ -7,7 +7,7 @@
 Requirements:
 
 - Go `1.22+`
-- Bun for the docs site only
+- Bun for building the [VitePress](https://vitepress.dev/) documentation site
 
 Run the basic example server:
 
@@ -16,6 +16,12 @@ go run ./examples/basic
 ```
 
 The example starts a server on `http://localhost:4000` and serves the GraphQL playground at `http://localhost:4000/`.
+
+Run the subscription example when you want pub/sub, WebSocket, and SSE wiring:
+
+```bash
+go run ./examples/subscriptions
+```
 
 Useful local commands:
 

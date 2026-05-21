@@ -1,6 +1,6 @@
-# Astro / Starlight build artifacts
-docs/dist/
-docs/.astro/
+# VitePress build artifacts
+docs/.vitepress/dist/
+docs/.vitepress/cache/
 docs/node_modules/
 
 # Dependency lockfile noise from other package managers

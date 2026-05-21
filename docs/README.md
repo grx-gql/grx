@@ -1,22 +1,22 @@
 # grx documentation site
 
 This directory is the source for the [grx documentation site](https://patrickkabwe.github.io/grx/).
-It is built with [Astro Starlight](https://starlight.astro.build/).
+It is built with [VitePress](https://vitepress.dev/).
 
 ## Local development
 
-All commands are exposed through the repo root `Makefile` so you don't
-need to remember bun/astro flags.
+Commands are exposed through the repo root `Makefile` so you do not need to
+remember tool-specific flags.
 
 ```bash
 make docs-install   # bun install in docs/
-make docs-dev       # dev server with HMR at http://localhost:4321/grx
-make docs-build     # production build → docs/dist
+make docs-dev       # dev server with HMR at http://localhost:4321/grx/
+make docs-build     # production build → docs/.vitepress/dist
 make docs-preview   # serve the built site locally
-make docs-clean     # nuke dist/, .astro/, node_modules/
+make docs-clean     # remove .vitepress/dist, .vitepress/cache, node_modules/
 ```
 
-You can also run the bun scripts directly from this directory:
+You can also run the Bun scripts directly from this directory:
 
 ```bash
 bun install
@@ -29,97 +29,95 @@ bun run preview
 
 ```
 docs/
-├── astro.config.mjs            # Starlight + sidebar config
-├── package.json                # bun deps + scripts
-├── public/                     # static assets served at /
-├── src/
-│   ├── assets/logo.svg         # in-page logo (currentColor aware)
-│   ├── content.config.ts       # Astro content collection schema
-│   ├── content/docs/
-│   │   ├── index.mdx           # splash home page (CardGrid)
-│   │   ├── getting-started.md
-│   │   ├── concepts/           # architecture, schema, executor, ...
-│   │   ├── guides/             # task-oriented walkthroughs
-│   │   └── reference/          # API reference (auto-generated)
-│   └── styles/custom.css       # accent color + minor type tweaks
-└── README.md                   # this file
+├── .vitepress/
+│   ├── config.ts           # site + sidebar + theme options
+│   └── theme/
+│       ├── index.ts        # extends the default theme
+│       └── custom.css      # accent tweaks
+├── package.json            # bun deps + scripts
+├── public/                 # static assets (favicon, hero image, …)
+├── index.md                # home page (layout: home)
+├── getting-started.md
+├── concepts/               # architecture, schema, executor, …
+├── guides/                 # task-oriented walkthroughs
+├── reference/              # API reference (hand-maintained + mirrored)
+├── benchmarks.md
+├── changelog.md            # generated — see below
+├── roadmap.md              # generated — see below
+└── README.md               # this file
 ```
 
 ## Auto-generated content
 
-Two pages on the site are mirrored from canonical sources elsewhere in
-the repo. **Do not edit them directly** — your edits will be overwritten
-on the next build.
+Two pages are mirrored from canonical sources elsewhere in the repo.
+**Do not edit them directly** — your edits will be overwritten on the next
+`make docs-content`.
 
-| Page                          | Generated from                                 | Script                          |
-| ----------------------------- | ---------------------------------------------- | ------------------------------- |
-| `reference/<pkg>/index.md`    | Go doc comments                                | `scripts/gen-api-docs.sh`       |
-| `changelog.md`                | repo-root `CHANGELOG.md`                       | `scripts/sync-changelog.sh`     |
-| `roadmap.md`                  | repo-root `README.md` (Feature Parity Checklist) | `scripts/sync-roadmap.sh`     |
+| Page             | Generated from        | Script                      |
+| ---------------- | --------------------- | --------------------------- |
+| `changelog.md`   | repo-root `CHANGELOG.md` | `scripts/sync-changelog.sh` |
+| `roadmap.md`     | repo-root `ROADMAP.md`   | `scripts/sync-roadmap.sh`   |
 
-Regenerate everything in one shot:
+Regenerate both in one shot:
 
 ```bash
-make docs-content   # docs-api + docs-changelog
+make docs-content
 ```
 
-`docs-dev` and `docs-build` already depend on `docs-content`, so the
-generated pages are always fresh when you serve or build the site.
-
-The API-ref script preserves the hand-written `reference/index.md`
-landing page; it only blows away the per-package subdirectories before
-regenerating.
+`docs-dev` and `docs-build` already depend on `docs-content`, so the mirrored
+pages stay fresh when you serve or build the site.
 
 ## Deployment
 
-`.github/workflows/docs.yml` builds and publishes the site to GitHub
-Pages on every push to `main`. PRs run the same pipeline up to (but not
-including) the deploy so broken builds get caught at review time.
+`.github/workflows/docs.yml` builds and publishes the site to GitHub Pages on
+every push to `main`. Pull requests run the same pipeline up to (but not
+including) the deploy so broken builds are caught at review time.
 
 ### Pipeline
 
-1. Checks out the repo with full history (Starlight's `lastUpdated:
-   true` reads commit timestamps).
-2. Sets up Go (version pulled from `go.mod`) and Bun (pinned).
-3. Caches `~/go/pkg/mod` and `~/.cache/go-build` so `gomarkdoc`'s
-   transitive deps are downloaded once.
-4. `bun install --frozen-lockfile` in `docs/` (uses `docs/bun.lock`).
-5. `make docs-content` regenerates the API reference, changelog, and
-   roadmap from their canonical sources.
-6. `bun run build` → `docs/dist`.
-7. Verifies `dist/index.html`, `dist/_astro/`, and `dist/pagefind/`
-   exist before doing anything destructive.
-8. Uploads `docs/dist` as a Pages artifact (skipped on PRs).
-9. The deploy job uses `actions/deploy-pages@v4` with the `github-pages`
-   environment to publish (skipped on PRs).
+1. Checks out the repo with full history (VitePress `lastUpdated` reads git).
+2. Sets up Node and Bun (pinned in the workflow).
+3. `bun install --frozen-lockfile` in `docs/` (uses `docs/bun.lock`).
+4. `make docs-content` regenerates the changelog and roadmap.
+5. `bun run build` → `docs/.vitepress/dist`.
+6. Verifies `docs/.vitepress/dist/index.html` exists before uploading.
+7. Uploads `docs/.vitepress/dist` as a Pages artifact (skipped on PRs).
+8. The deploy job uses `actions/deploy-pages@v4` with the `github-pages`
+   environment (skipped on PRs).
 
 ### One-time GitHub setup
 
-The workflow cannot enable Pages on its own. Do this once in the
-repository settings:
+The workflow cannot enable Pages on its own. Do this once in the repository
+settings:
 
 1. Open **Settings → Pages** for `patrickkabwe/grx`.
 2. Under **Build and deployment**, set **Source** to **GitHub Actions**.
-3. (Optional) Add a custom domain by creating a `CNAME` file under
-   `docs/public/` and configuring DNS. Astro will copy it into `dist/`
-   verbatim.
+3. (Optional) Add a custom domain via **Pages** settings and DNS.
 
-Once Pages is enabled, every push to `main` that touches a doc-relevant
-path will publish to **https://patrickkabwe.github.io/grx/**. Manual
-runs are also available via **Actions → Docs → Run workflow**.
+Once Pages is enabled, every push to `main` that touches a doc-relevant path
+will publish to **https://patrickkabwe.github.io/grx/**. Manual runs are also
+available via **Actions → Docs → Run workflow**.
 
 ### Path filter
 
-The workflow only runs when one of these paths changes:
+The workflow runs when one of these paths changes:
 
 - `docs/**`
-- `scripts/gen-api-docs.sh`, `scripts/sync-changelog.sh`,
-  `scripts/sync-roadmap.sh`
-- `CHANGELOG.md`, `README.md`
+- `scripts/sync-changelog.sh`, `scripts/sync-roadmap.sh`, `scripts/gen-api-docs.sh`
+- `CHANGELOG.md`, `README.md`, `ROADMAP.md`
 - `Makefile`
 - `.github/workflows/docs.yml`
-- `**/*.go` (so doc-comment changes flow through to the API reference)
+- `**/*.go` (so doc-comment changes are picked up for future API reference tooling)
 
-Use **Run workflow** for manual deploys outside that filter (for
-example, to refresh `lastUpdated` timestamps after a string of unrelated
-commits).
+Use **Run workflow** for manual deploys outside that filter.
+
+## Frontmatter cleanup
+
+If you paste Markdown that still uses old Starlight-style frontmatter, run:
+
+```bash
+python3 scripts/normalize-vitepress-frontmatter.py
+```
+
+That script keeps `title`, `description`, heading outline levels, and
+`lastUpdated: false` for generated API pages.

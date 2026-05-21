@@ -1,15 +1,14 @@
 #!/usr/bin/env bash
-# Mirror the root CHANGELOG.md into the Starlight content collection so
-# the docs site always reflects the canonical changelog. The root file
-# stays the single source of truth; this script just adds the Starlight
-# frontmatter and strips the duplicate H1.
+# Mirror the root CHANGELOG.md into the VitePress docs tree so the site
+# always reflects the canonical changelog. The root file stays the single
+# source of truth; this script adds frontmatter and strips the duplicate H1.
 
 set -euo pipefail
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
 ROOT_DIR="$(cd -- "$SCRIPT_DIR/.." >/dev/null 2>&1 && pwd)"
 SRC="$ROOT_DIR/CHANGELOG.md"
-DST="$ROOT_DIR/docs/src/content/docs/changelog.md"
+DST="$ROOT_DIR/docs/changelog.md"
 
 if [[ ! -f "$SRC" ]]; then
     echo "error: $SRC not found" >&2
@@ -23,12 +22,7 @@ mkdir -p "$(dirname "$DST")"
 ---
 title: Changelog
 description: All notable changes to grx, in reverse chronological order.
-sidebar:
-  order: 5
-editUrl: https://github.com/patrickkabwe/grx/edit/main/CHANGELOG.md
-tableOfContents:
-  minHeadingLevel: 2
-  maxHeadingLevel: 3
+outline: [2, 3]
 ---
 
 > This page is mirrored from
