@@ -413,6 +413,77 @@ func TestServeReturns500WhenExecutePanics(t *testing.T) {
 	}
 }
 
+func TestServeWritesIncrementalDeliveryFields(t *testing.T) {
+	hasNext := true
+	executor := &stubExecutor{response: core.Response{
+		Data: map[string]any{"user": map[string]any{"id": "1"}},
+		HasNext: &hasNext,
+		Incremental: []core.IncrementalPayload{
+			{Label: "friends-stream", Path: []any{"user", "friends"}},
+		},
+		Extensions: map[string]any{"requestId": "req_123"},
+	}}
+	transport := grxhttp.New()
+
+	req := postGraphQLRequest("/graphql", `{"query":"{ user { id } }"}`)
+	rec := httptest.NewRecorder()
+	transport.Serve(rec, req, executor)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusOK)
+	}
+
+	var decoded map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &decoded); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if decoded["hasNext"] != true {
+		t.Fatalf("hasNext = %#v", decoded["hasNext"])
+	}
+	extensions, ok := decoded["extensions"].(map[string]any)
+	if !ok || extensions["requestId"] != "req_123" {
+		t.Fatalf("extensions = %#v", decoded["extensions"])
+	}
+	incremental, ok := decoded["incremental"].([]any)
+	if !ok || len(incremental) != 1 {
+		t.Fatalf("incremental = %#v", decoded["incremental"])
+	}
+	entry, ok := incremental[0].(map[string]any)
+	if !ok || entry["label"] != "friends-stream" {
+		t.Fatalf("incremental entry = %#v", incremental[0])
+	}
+}
+
+func TestServeBatchUnsupportedOperationIncludesRequestClassification(t *testing.T) {
+	transport := grxhttp.New()
+	req := postGraphQLRequest("/graphql", `[{"query":"mutation { __typename }"},{"query":"{ __typename }"}]`)
+	rec := httptest.NewRecorder()
+	transport.Serve(rec, req, &stubExecutor{response: core.Response{Data: map[string]any{"__typename": "Query"}}})
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d", rec.Code)
+	}
+	var batch []map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &batch); err != nil {
+		t.Fatalf("decode batch: %v", err)
+	}
+	if len(batch) != 2 {
+		t.Fatalf("batch = %#v", batch)
+	}
+	errors, ok := batch[0]["errors"].([]any)
+	if !ok || len(errors) != 1 {
+		t.Fatalf("errors = %#v", batch[0]["errors"])
+	}
+	entry, ok := errors[0].(map[string]any)
+	if !ok {
+		t.Fatalf("error entry type = %T", errors[0])
+	}
+	extensions, ok := entry["extensions"].(map[string]any)
+	if !ok || extensions["classification"] != "request" {
+		t.Fatalf("extensions = %#v", entry["extensions"])
+	}
+}
+
 // TestSatisfiesCoreTransport ensures the package's exported type continues
 // to fulfil the core.Transport contract; a compile error here is the
 // earliest signal that the interface drifted.

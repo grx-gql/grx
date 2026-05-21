@@ -63,23 +63,23 @@ func (e *Executor) Execute(ctx context.Context, req core.Request) (response core
 			err := fmt.Errorf("panic during GraphQL execution: %v", rec)
 			e.notifyError(ctx, err)
 			e.notifyError(ctx, fmt.Errorf("panic stack: %s", string(debug.Stack())))
-			response = errorResponse(e.maskError(err, true))
+			response = e.failResponse(ctx, e.maskError(err, true))
 		}
 	}()
 
 	ctx, err := e.startRequest(ctx, req)
 	if err != nil {
-		return errorResponse(e.maskError(err, false))
+		return e.failResponse(ctx, e.maskError(err, false))
 	}
 	if err := e.notifyParsing(ctx, req); err != nil {
-		return errorResponse(e.maskError(err, false))
+		return e.failResponse(ctx, e.maskError(err, false))
 	}
 
 	if isIntrospectionQuery(req.Query) {
 		if e.disableIntrospection {
 			err := fmt.Errorf("introspection is disabled")
 			e.notifyError(ctx, err)
-			return errorResponse(err)
+			return e.failResponse(ctx, err)
 		}
 		return e.sendResponse(ctx, core.Response{Data: introspectionData(e.Schema, req)})
 	}
@@ -87,29 +87,29 @@ func (e *Executor) Execute(ctx context.Context, req core.Request) (response core
 	doc, err := parseDocumentNamed(req.Query, req.Variables, req.OperationName, e.maxSelectionDepth)
 	if err != nil {
 		e.notifyError(ctx, err)
-		return errorResponse(err)
+		return e.failResponse(ctx, err)
 	}
 	if err := e.validateDocumentSecurity(ctx, req, doc); err != nil {
 		e.notifyError(ctx, err)
-		return errorResponse(e.maskError(err, false))
+		return e.failResponse(ctx, e.maskError(err, false))
 	}
 
 	if doc.Kind == operationSubscription {
 		e.notifyError(ctx, ErrSubscriptionOperation)
-		return errorResponse(ErrSubscriptionOperation)
+		return e.failResponse(ctx, ErrSubscriptionOperation)
 	}
 
 	if err := e.notifyValidation(ctx, req); err != nil {
-		return errorResponse(err)
+		return e.failResponse(ctx, err)
 	}
 	if err := e.notifyExecution(ctx, req); err != nil {
-		return errorResponse(err)
+		return e.failResponse(ctx, err)
 	}
 
 	root, err := e.rootObject(doc.Kind)
 	if err != nil {
 		e.notifyError(ctx, err)
-		return errorResponse(e.maskError(err, false))
+		return e.failResponse(ctx, e.maskError(err, false))
 	}
 
 	data, fieldErrors := e.executeSelectionSet(ctx, root, nil, doc.Selections, doc.Fragments, nil)
@@ -259,10 +259,11 @@ func (e *Executor) Subscribe(ctx context.Context, req core.Request) (responses <
 }
 
 func (e *Executor) sendResponse(ctx context.Context, res core.Response) core.Response {
+	res = core.AttachRequestIDExtension(res, core.RequestIDFromContext(ctx))
 	for _, hook := range e.Plugins {
 		if err := hook.ResponseSend(ctx, res); err != nil {
 			e.notifyError(ctx, err)
-			return errorResponse(e.maskError(err, false))
+			return e.failResponse(ctx, e.maskError(err, false))
 		}
 	}
 	return res
@@ -594,35 +595,13 @@ func pathStrings(path []any) []string {
 	return result
 }
 
-func errorResponse(err error) core.Response {
-	return core.Response{Errors: []core.Error{newRequestError(err)}}
-}
-
-func newRequestError(err error) core.Error {
-	result := core.Error{
-		Message: err.Error(),
-		Extensions: map[string]any{
-			"classification": "request",
-		},
-	}
-
-	if provider, ok := err.(interface{ GraphQLLocations() []core.Location }); ok {
-		result.Locations = provider.GraphQLLocations()
-	}
-
-	return result
+func (e *Executor) failResponse(ctx context.Context, err error) core.Response {
+	return core.AttachRequestIDExtension(
+		core.Response{Errors: []core.Error{core.NewRequestError(err)}},
+		core.RequestIDFromContext(ctx),
+	)
 }
 
 func newFieldError(message string, path []any, location core.Location) core.Error {
-	result := core.Error{
-		Message: message,
-		Path:    path,
-		Extensions: map[string]any{
-			"classification": "field",
-		},
-	}
-	if location.Line > 0 && location.Column > 0 {
-		result.Locations = []core.Location{location}
-	}
-	return result
+	return core.NewFieldError(message, path, location)
 }

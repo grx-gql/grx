@@ -17,6 +17,7 @@ package http
 
 import (
 	"compress/gzip"
+	"context"
 	"encoding/json"
 	"fmt"
 	nethttp "net/http"
@@ -128,32 +129,27 @@ func (t *Transport) Serve(w nethttp.ResponseWriter, r *nethttp.Request, executor
 				msg = "internal server error"
 			}
 			core.WriteGraphQLResponse(w, nethttp.StatusInternalServerError, responseType, core.Response{
-				Errors: []core.Error{{
-					Message: msg,
-					Extensions: map[string]any{
-						"classification": "request",
-					},
-				}},
+				Errors: []core.Error{core.NewRequestError(fmt.Errorf("%s", msg))},
 			})
 		}
 	}()
 
 	responseType, ok := core.NegotiateResponseContentType(r.Header.Values("Accept"))
 	if !ok {
-		writeRequestError(w, core.MediaTypeJSON, nethttp.StatusNotAcceptable, fmt.Errorf("no supported response media type in Accept header"))
+		writeRequestError(r.Context(), w, core.MediaTypeJSON, nethttp.StatusNotAcceptable, fmt.Errorf("no supported response media type in Accept header"))
 		return
 	}
 
 	if r.Method == nethttp.MethodPost {
 		if err := core.ValidatePostContentType(r); err != nil {
-			writeRequestError(w, responseType, nethttp.StatusUnsupportedMediaType, err)
+			writeRequestError(r.Context(), w, responseType, nethttp.StatusUnsupportedMediaType, err)
 			return
 		}
 	}
 
 	if max := t.config.maxRequestBytes(); max > 0 {
 		if err := limitRequestSize(w, r, max); err != nil {
-			writeRequestError(w, responseType, nethttp.StatusRequestEntityTooLarge, err)
+			writeRequestError(r.Context(), w, responseType, nethttp.StatusRequestEntityTooLarge, err)
 			return
 		}
 	}
@@ -164,7 +160,7 @@ func (t *Transport) Serve(w nethttp.ResponseWriter, r *nethttp.Request, executor
 		if t.config.maxRequestBytes() > 0 && requestBodyTooLarge(err) {
 			status = nethttp.StatusRequestEntityTooLarge
 		}
-		writeRequestError(w, responseType, status, err)
+		writeRequestError(r.Context(), w, responseType, status, err)
 		return
 	}
 
@@ -180,12 +176,12 @@ func (t *Transport) Serve(w nethttp.ResponseWriter, r *nethttp.Request, executor
 			case nethttp.MethodGet:
 				if kind == core.OperationMutation || kind == core.OperationSubscription {
 					w.Header().Set("Allow", nethttp.MethodPost)
-					writeRequestError(w, responseType, nethttp.StatusMethodNotAllowed, fmt.Errorf("HTTP GET cannot execute GraphQL %s operations", kind))
+					writeRequestError(r.Context(), w, responseType, nethttp.StatusMethodNotAllowed, fmt.Errorf("HTTP GET cannot execute GraphQL %s operations", kind))
 					return
 				}
 			case nethttp.MethodPost:
 				if kind == core.OperationSubscription {
-					writeRequestError(w, responseType, nethttp.StatusMethodNotAllowed, fmt.Errorf("GraphQL subscription operations are not supported over HTTP POST; use WebSocket or SSE"))
+					writeRequestError(r.Context(), w, responseType, nethttp.StatusMethodNotAllowed, fmt.Errorf("GraphQL subscription operations are not supported over HTTP POST; use WebSocket or SSE"))
 					return
 				}
 			}
@@ -205,13 +201,13 @@ func (t *Transport) Serve(w nethttp.ResponseWriter, r *nethttp.Request, executor
 		}
 		kind, kindErr := executor.OperationKind(gqlReq)
 		if kindErr != nil {
-			responses[i] = core.Response{Errors: []core.Error{{Message: kindErr.Error()}}}
+			responses[i] = core.Response{Errors: []core.Error{core.NewRequestError(kindErr)}}
 			continue
 		}
 		if kind == core.OperationMutation || kind == core.OperationSubscription {
-			responses[i] = core.Response{Errors: []core.Error{{
-				Message: fmt.Sprintf("GraphQL %s operations are not supported in batched HTTP requests", kind),
-			}}}
+			responses[i] = core.Response{Errors: []core.Error{core.NewRequestError(
+				fmt.Errorf("GraphQL %s operations are not supported in batched HTTP requests", kind),
+			)}}
 			continue
 		}
 		responses[i] = executor.Execute(r.Context(), gqlReq)
@@ -276,13 +272,8 @@ func requestBodyTooLarge(err error) bool {
 		(strings.Contains(msg, "request exceeds") && strings.Contains(msg, "byte limit"))
 }
 
-func writeRequestError(w nethttp.ResponseWriter, mediaType string, status int, err error) {
-	core.WriteGraphQLResponse(w, status, mediaType, core.Response{
-		Errors: []core.Error{{
-			Message: err.Error(),
-			Extensions: map[string]any{
-				"classification": "request",
-			},
-		}},
-	})
+func writeRequestError(ctx context.Context, w nethttp.ResponseWriter, mediaType string, status int, err error) {
+	res := core.Response{Errors: []core.Error{core.NewRequestError(err)}}
+	res = core.AttachRequestIDExtension(res, core.RequestIDFromContext(ctx))
+	core.WriteGraphQLResponse(w, status, mediaType, res)
 }

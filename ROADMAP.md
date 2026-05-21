@@ -16,21 +16,21 @@ This file is the source of truth for feature parity tracking and roadmap sync in
 - [x] `application/graphql-response+json` response content type negotiation
 - [x] Strict request `Content-Type` validation
 - [x] GraphQL-over-HTTP status code semantics
-- [ ] Batched request support
+- [x] Batched request support
 - [ ] Multipart upload support
 - [ ] Incremental delivery over HTTP for `@defer` and `@stream`
 - [x] Subscriptions over WebSocket or SSE
 - [x] Request size limits
 - [x] Timeout/deadline handling
-- [ ] Persisted queries
-- [ ] Automatic persisted queries
+- [x] Persisted queries
+- [x] Automatic persisted queries
 - [ ] Query cost/depth/complexity limits
 - [x] CORS configuration
 - [x] Response compression (gzip)
 - [ ] Response compression (brotli)
 - [x] CSRF prevention for state-changing GET requests
 - [x] Introspection enable/disable toggle
-- [ ] Schema registry endpoint (`/schema.graphql`)
+- [x] Schema registry endpoint (`/schema.graphql`)
 
 ### GraphQL Language Lexer
 
@@ -50,7 +50,7 @@ This file is the source of truth for feature parity tracking and roadmap sync in
 - [x] At token `@`
 - [x] Ampersand token `&`
 - [x] Pipe token `|`
-- [ ] EOF and source-location tracking for diagnostics
+- [x] EOF and source-location tracking for diagnostics
 - [x] Unicode escape sequences including variable-width `\u{...}`
 - [ ] Line terminator normalization per spec
 - [x] Block string common indentation stripping
@@ -68,10 +68,10 @@ This file is the source of truth for feature parity tracking and roadmap sync in
 - [x] Multiple definitions per document
 - [x] Operation selection by `operationName`
 - [x] Subscription operations
-- [ ] Field aliases
-- [ ] Fragment definitions
-- [ ] Fragment spreads
-- [ ] Inline fragments
+- [x] Field aliases
+- [x] Fragment definitions
+- [x] Fragment spreads
+- [x] Inline fragments
 - [ ] Directives on operations, fields, fragments, and variable definitions
 - [ ] Variable definitions with default values
 - [x] List value literals
@@ -114,7 +114,7 @@ This file is the source of truth for feature parity tracking and roadmap sync in
 - [ ] Schema extension
 - [ ] Type extension
 - [ ] SDL parser
-- [ ] SDL printer
+- [x] SDL printer
 - [ ] Schema validation rules
 - [ ] Reserved `__` name validation
 - [ ] Oneof input objects
@@ -131,7 +131,7 @@ This file is the source of truth for feature parity tracking and roadmap sync in
 - [ ] Executable definitions only
 - [ ] Operation name uniqueness
 - [ ] Lone anonymous operation rule
-- [ ] Subscription single root field rule
+- [x] Subscription single root field rule
 - [ ] Field exists on parent type
 - [ ] Leaf field selection rule
 - [ ] Composite field selection rule
@@ -139,7 +139,7 @@ This file is the source of truth for feature parity tracking and roadmap sync in
 - [ ] Argument exists on field/directive
 - [ ] Argument uniqueness
 - [ ] Required argument presence
-- [ ] Fragment name uniqueness
+- [x] Fragment name uniqueness
 - [ ] Fragment target type existence
 - [ ] Fragments on composite types only
 - [ ] Fragment spreads target defined
@@ -158,8 +158,8 @@ This file is the source of truth for feature parity tracking and roadmap sync in
 - [ ] Variable use is defined
 - [ ] Variable use is allowed by location/type
 - [ ] Variables are used
-- [ ] Unknown operation name error
-- [ ] Multiple operations require operation name
+- [x] Unknown operation name error
+- [x] Multiple operations require operation name
 - [ ] Oneof input object exactly-one-field rule
 - [ ] `@defer`/`@stream` label uniqueness per document
 - [ ] `@defer`/`@stream` placement rules
@@ -178,32 +178,32 @@ This file is the source of truth for feature parity tracking and roadmap sync in
 - [x] Resolver argument binding from variables
 - [x] Partial data with field errors
 - [x] `__typename`
-- [ ] Field aliases
-- [ ] Fragment collection
-- [ ] Inline fragment type-condition matching
-- [ ] `@skip(if:)`
-- [ ] `@include(if:)`
+- [x] Field aliases
+- [x] Fragment collection
+- [x] Inline fragment type-condition matching
+- [x] `@skip(if:)`
+- [x] `@include(if:)`
 - [ ] Serial mutation field execution guarantee
 - [ ] Parallel query field execution where safe
 - [x] Operation selection by `operationName`
-- [ ] Variable default value coercion
-- [ ] Argument default value coercion
-- [ ] Input object default value coercion
+- [x] Variable default value coercion
+- [x] Argument default value coercion
+- [x] Input object default value coercion
 - [ ] Scalar result coercion
 - [x] Enum result coercion
 - [ ] List input coercion
 - [ ] Non-null error bubbling
-- [ ] Error path for aliased fields
-- [ ] Error locations
+- [x] Error path for aliased fields
+- [x] Error locations
 - [x] Interface concrete type resolution
 - [x] Union concrete type resolution
-- [ ] Custom scalar serialization and parsing
-- [ ] Context cancellation checks
+- [x] Custom scalar serialization and parsing
+- [x] Context cancellation checks
 - [x] Subscription source streams
 - [x] Subscription response streams
 - [ ] Incremental execution for `@defer`
 - [ ] Incremental execution for `@stream`
-- [ ] Resolver panic recovery
+- [x] Resolver panic recovery
 - [ ] Concurrent non-mutation field resolution with deterministic ordering
 - [ ] Per-request resolver cache / request-scoped memoization
 - [ ] Deferred resolver values (thunk/promise-style futures)
@@ -233,14 +233,14 @@ This file is the source of truth for feature parity tracking and roadmap sync in
 - [ ] Deprecated field filtering through `includeDeprecated`
 - [ ] Deprecated enum filtering through `includeDeprecated`
 - [ ] Description metadata
-- [ ] Default value string rendering
+- [x] Default value string rendering
 - [ ] Custom scalar `specifiedByURL`
 - [ ] Correct introspection type registration in schema
 
 ### Built-in Directives
 
-- [ ] `@skip(if: Boolean!)`
-- [ ] `@include(if: Boolean!)`
+- [x] `@skip(if: Boolean!)`
+- [x] `@include(if: Boolean!)`
 - [ ] `@deprecated(reason: String)`
 - [ ] `@specifiedBy(url: String!)`
 - [ ] `@oneOf` on input object types
@@ -253,15 +253,15 @@ This file is the source of truth for feature parity tracking and roadmap sync in
 - [x] JSON `errors`
 - [x] Error message
 - [x] Error path for field execution errors
-- [ ] Error locations
-- [ ] Error extensions
-- [ ] Stable response ordering
-- [ ] Request errors without `data`
-- [ ] Field errors with partial `data`
-- [ ] Incremental response payloads
-- [ ] Top-level `extensions` object
-- [ ] `hasNext` flag on incremental payloads
-- [ ] Error classification (request vs field)
+- [x] Error locations
+- [x] Error extensions
+- [x] Stable response ordering
+- [x] Request errors without `data`
+- [x] Field errors with partial `data`
+- [x] Incremental response payloads
+- [x] Top-level `extensions` object
+- [x] `hasNext` flag on incremental payloads
+- [x] Error classification (request vs field)
 
 ### Developer Experience
 
@@ -280,7 +280,7 @@ This file is the source of truth for feature parity tracking and roadmap sync in
 - [ ] Spec fixture tests
 - [x] Race detector CI
 - [ ] Compatibility test suite against GraphiQL introspection query
-- [ ] Schema SDL export/printing
+- [x] Schema SDL export/printing
 - [ ] Schema change diff tool
 - [x] Public examples for subscriptions
 - [ ] Public examples for interfaces and unions
@@ -355,15 +355,15 @@ This file is the source of truth for feature parity tracking and roadmap sync in
 ### Security
 
 - [x] Introspection disable flag for production
-- [ ] Client-facing error message masking
-- [ ] Internal error redaction with server-side preservation
-- [ ] Field-level authorization hook
-- [ ] Operation-level authorization hook
-- [ ] Trusted documents / operation safelist
-- [ ] Automatic persisted query safety limits
-- [ ] Rate limiting hook per operation or client
-- [ ] Variable value size limits
-- [ ] Rejection of unknown variables
+- [x] Client-facing error message masking
+- [x] Internal error redaction with server-side preservation
+- [x] Field-level authorization hook
+- [x] Operation-level authorization hook
+- [x] Trusted documents / operation safelist
+- [x] Automatic persisted query safety limits
+- [x] Rate limiting hook per operation or client
+- [x] Variable value size limits
+- [x] Rejection of unknown variables
 - [x] Safe panic recovery at the HTTP handler boundary
 
 ### Observability
