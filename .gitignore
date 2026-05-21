@@ -1,12 +1,15 @@
-# Astro / Starlight build artifacts
-docs/dist/
-docs/.astro/
+# VitePress build artifacts
+docs/.vitepress/dist/
+docs/.vitepress/cache/
 docs/node_modules/
 
 # Dependency lockfile noise from other package managers
 docs/package-lock.json
 docs/yarn.lock
 docs/pnpm-lock.yaml
+
+# Example build artifacts
+examples/basic/tmp/
 
 # Editor / OS noise
 .DS_Store

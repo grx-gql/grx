@@ -76,26 +76,10 @@ func (Transport) Serve(w http.ResponseWriter, r *http.Request, executor core.Exe
 }
 
 func readRequest(r *http.Request) (core.GraphQLBody, error) {
-	switch r.Method {
-	case http.MethodPost:
-		return core.DecodeGraphQLBody(r)
-	case http.MethodGet:
-		body := core.GraphQLBody{
-			Query:         r.URL.Query().Get("query"),
-			OperationName: r.URL.Query().Get("operationName"),
-		}
-		if body.Query == "" {
-			return body, fmt.Errorf("missing GraphQL query")
-		}
-		if rawVariables := r.URL.Query().Get("variables"); rawVariables != "" {
-			if err := json.Unmarshal([]byte(rawVariables), &body.Variables); err != nil {
-				return body, fmt.Errorf("invalid GraphQL variables: %s", err.Error())
-			}
-		}
-		return body, nil
-	default:
+	if r.Method != http.MethodPost && r.Method != http.MethodGet {
 		return core.GraphQLBody{}, fmt.Errorf("method %s not allowed for SSE", r.Method)
 	}
+	return core.DecodeGraphQLRequest(r)
 }
 
 func writeEvent(w http.ResponseWriter, event string, payload any) {

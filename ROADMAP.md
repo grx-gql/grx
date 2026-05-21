@@ -12,23 +12,24 @@ This file is the source of truth for feature parity tracking and roadmap sync in
 - [x] `/favicon.ico` handled without 404 noise
 - [x] Invalid JSON request errors
 - [x] Missing query request errors
-- [ ] `GET /graphql?query=...` support
-- [ ] `application/graphql-response+json` response content type negotiation
-- [ ] Strict request `Content-Type` validation
-- [ ] GraphQL-over-HTTP status code semantics
+- [x] `GET /graphql?query=...` support
+- [x] `application/graphql-response+json` response content type negotiation
+- [x] Strict request `Content-Type` validation
+- [x] GraphQL-over-HTTP status code semantics
 - [ ] Batched request support
 - [ ] Multipart upload support
 - [ ] Incremental delivery over HTTP for `@defer` and `@stream`
 - [x] Subscriptions over WebSocket or SSE
-- [ ] Request size limits
-- [ ] Timeout/deadline handling
+- [x] Request size limits
+- [x] Timeout/deadline handling
 - [ ] Persisted queries
 - [ ] Automatic persisted queries
 - [ ] Query cost/depth/complexity limits
-- [ ] CORS configuration
-- [ ] Response compression (gzip, br)
-- [ ] CSRF prevention for state-changing GET requests
-- [ ] Introspection enable/disable toggle
+- [x] CORS configuration
+- [x] Response compression (gzip)
+- [ ] Response compression (brotli)
+- [x] CSRF prevention for state-changing GET requests
+- [x] Introspection enable/disable toggle
 - [ ] Schema registry endpoint (`/schema.graphql`)
 
 ### GraphQL Language Lexer
@@ -277,7 +278,7 @@ This file is the source of truth for feature parity tracking and roadmap sync in
 - [x] Benchmarks
 - [ ] Fuzz tests for parser
 - [ ] Spec fixture tests
-- [ ] Race detector CI
+- [x] Race detector CI
 - [ ] Compatibility test suite against GraphiQL introspection query
 - [ ] Schema SDL export/printing
 - [ ] Schema change diff tool
@@ -353,7 +354,7 @@ This file is the source of truth for feature parity tracking and roadmap sync in
 
 ### Security
 
-- [ ] Introspection disable flag for production
+- [x] Introspection disable flag for production
 - [ ] Client-facing error message masking
 - [ ] Internal error redaction with server-side preservation
 - [ ] Field-level authorization hook
@@ -363,19 +364,19 @@ This file is the source of truth for feature parity tracking and roadmap sync in
 - [ ] Rate limiting hook per operation or client
 - [ ] Variable value size limits
 - [ ] Rejection of unknown variables
-- [ ] Safe panic recovery at the HTTP handler boundary
+- [x] Safe panic recovery at the HTTP handler boundary
 
 ### Observability
 
-- [ ] Parse phase hook
-- [ ] Validate phase hook
-- [ ] Execute phase hook
+- [x] Parse phase hook
+- [x] Validate phase hook
+- [x] Execute phase hook
 - [ ] Field-level resolver tracing hook
 - [ ] OpenTelemetry span emission per operation and field
 - [ ] Apollo-compatible tracing extension
 - [ ] Prometheus-style metrics hook (count, latency, error rate)
 - [ ] Structured operation access logs
-- [ ] Request ID propagation into resolver context
+- [x] Request ID propagation into resolver context
 
 ### Data Loading
 

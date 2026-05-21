@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Mirror the "Feature Parity Checklist", "Implementation Plan", and
 # "Performance Requirements" sections from the root ROADMAP.md into the
-# Starlight content collection as the project roadmap. Also compute a
+# VitePress docs tree as the project roadmap. Also compute a
 # per-section progress summary ([x] vs [ ] counts) and prepend it as a
 # "Progress at a glance" table so the "what's done vs what's not"
 # question is answerable without scrolling.
@@ -11,7 +11,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
 ROOT_DIR="$(cd -- "$SCRIPT_DIR/.." >/dev/null 2>&1 && pwd)"
 SRC="$ROOT_DIR/ROADMAP.md"
-DST="$ROOT_DIR/docs/src/content/docs/roadmap.md"
+DST="$ROOT_DIR/docs/roadmap.md"
 
 if [[ ! -f "$SRC" ]]; then
     echo "error: $SRC not found" >&2
@@ -66,7 +66,7 @@ else
 fi
 
 # 4) Drop the "## Feature Parity Checklist" heading from the slice — the
-#    Starlight page title comes from frontmatter, and we add our own
+#    page title comes from frontmatter, and we add our own
 #    section headings in the rendered page.
 BODY="$(awk '
     !skipped && /^## Feature Parity Checklist/ { skipped = 1; next }
@@ -77,12 +77,7 @@ cat > "$DST" <<FRONTMATTER
 ---
 title: Roadmap
 description: What grx supports today, what is planned, and how the work is sequenced.
-sidebar:
-  order: 6
-editUrl: https://github.com/patrickkabwe/grx/edit/main/README.md
-tableOfContents:
-  minHeadingLevel: 2
-  maxHeadingLevel: 3
+outline: [2, 3]
 ---
 
 > This page is mirrored from the **Feature Parity Checklist** in

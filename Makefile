@@ -40,7 +40,7 @@ vet: ## go vet all packages.
 fmt: ## gofmt every Go file in place.
 	gofmt -w .
 
-## ---- Docs (Astro Starlight) ---------------------------------------------
+## ---- Docs (VitePress) ----------------------------------------------------
 
 .PHONY: docs-install
 docs-install: ## Install docs site dependencies (uses bun).
@@ -51,18 +51,18 @@ docs-changelog: ## Mirror CHANGELOG.md into the docs site.
 	./scripts/sync-changelog.sh
 
 .PHONY: docs-roadmap
-docs-roadmap: ## Mirror the README Feature Parity Checklist into the docs site as a roadmap.
+docs-roadmap: ## Mirror ROADMAP.md into the docs site as a roadmap.
 	./scripts/sync-roadmap.sh
 
 .PHONY: docs-content
-docs-content: docs-changelog docs-roadmap ## Regenerate every auto-generated docs page (API ref + changelog + roadmap).
+docs-content: docs-changelog docs-roadmap ## Regenerate mirrored docs pages (changelog + roadmap).
 
 .PHONY: docs-dev
-docs-dev: docs-content ## Run the docs site dev server with HMR (http://localhost:4321/grx).
+docs-dev: docs-content ## Run the docs dev server with HMR (http://localhost:4321/grx/).
 	cd $(DOCS_DIR) && $(BUN) run dev
 
 .PHONY: docs-build
-docs-build: docs-content ## Build the static docs site into docs/dist.
+docs-build: docs-content ## Build the static docs site into docs/.vitepress/dist.
 	cd $(DOCS_DIR) && $(BUN) run build
 
 .PHONY: docs-preview
@@ -75,7 +75,14 @@ docs-pkgsite: ## Run pkgsite locally (the engine behind pkg.go.dev) on :6060.
 
 .PHONY: docs-clean
 docs-clean: ## Remove the built docs site and node_modules.
-	rm -rf $(DOCS_DIR)/dist $(DOCS_DIR)/node_modules $(DOCS_DIR)/.astro
+	rm -rf $(DOCS_DIR)/.vitepress/dist $(DOCS_DIR)/.vitepress/cache \
+		$(DOCS_DIR)/node_modules
+
+## ---- GitHub / CI ---------------------------------------------------------
+
+.PHONY: validate-issue-templates
+validate-issue-templates: ## Validate .github/ISSUE_TEMPLATE YAML (stdlib Ruby).
+	ruby .github/scripts/validate_issue_templates.rb
 
 ## ---- Benchmark -----------------------------------------------------------
 

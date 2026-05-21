@@ -3,6 +3,7 @@ package exec
 import (
 	"context"
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/patrickkabwe/grx/core"
@@ -295,6 +296,25 @@ func TestExecutorHandlesSchemaIntrospectionQueryWithFragments(t *testing.T) {
 	}
 	if len(createUserArgs) != 1 {
 		t.Fatalf("expected one createUser arg, got %#v", createUserArgs)
+	}
+}
+
+func TestExecutorRejectsIntrospectionWhenDisabled(t *testing.T) {
+	schemaValue, err := schema.Build(schema.Config{Query: testQuery{}, Mutation: testMutation{}})
+	if err != nil {
+		t.Fatalf("build schema: %v", err)
+	}
+
+	executor := New(schemaValue, nil, WithDisableIntrospection())
+	response := executor.Execute(context.Background(), core.Request{
+		Query: `{ __schema { queryType { name } } }`,
+	})
+
+	if len(response.Errors) != 1 {
+		t.Fatalf("expected one error, got %#v", response.Errors)
+	}
+	if !strings.Contains(response.Errors[0].Message, "introspection is disabled") {
+		t.Fatalf("unexpected error: %#v", response.Errors[0].Message)
 	}
 }
 
