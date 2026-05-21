@@ -128,31 +128,31 @@ This file is the source of truth for feature parity tracking and roadmap sync in
 
 ### Validation
 
-- [ ] Executable definitions only
-- [ ] Operation name uniqueness
-- [ ] Lone anonymous operation rule
+- [x] Executable definitions only
+- [x] Operation name uniqueness
+- [x] Lone anonymous operation rule
 - [x] Subscription single root field rule
-- [ ] Field exists on parent type
-- [ ] Leaf field selection rule
-- [ ] Composite field selection rule
+- [x] Field exists on parent type
+- [x] Leaf field selection rule
+- [x] Composite field selection rule
 - [ ] Field selection merging
-- [ ] Argument exists on field/directive
-- [ ] Argument uniqueness
-- [ ] Required argument presence
+- [x] Argument exists on field/directive
+- [x] Argument uniqueness
+- [x] Required argument presence
 - [x] Fragment name uniqueness
-- [ ] Fragment target type existence
-- [ ] Fragments on composite types only
-- [ ] Fragment spreads target defined
-- [ ] Fragment spreads must not form cycles
-- [ ] Fragment spread type overlap
-- [ ] Fragment must be used
+- [x] Fragment target type existence
+- [x] Fragments on composite types only
+- [x] Fragment spreads target defined
+- [x] Fragment spreads must not form cycles
+- [x] Fragment spread type overlap
+- [x] Fragment must be used
 - [ ] Value type correctness
 - [ ] Input object field existence
 - [ ] Input object field uniqueness
 - [ ] Required input object field presence
-- [ ] Directive existence
-- [ ] Directive location validity
-- [ ] Directive uniqueness where non-repeatable
+- [x] Directive existence
+- [x] Directive location validity
+- [x] Directive uniqueness where non-repeatable
 - [ ] Variable uniqueness
 - [ ] Variables are input types
 - [ ] Variable use is defined
@@ -167,7 +167,7 @@ This file is the source of truth for feature parity tracking and roadmap sync in
 - [ ] Input coercion for variable and argument values
 - [ ] Executable directive location enforcement
 - [ ] Known type names
-- [ ] Known fragment names
+- [x] Known fragment names
 
 ### Execution
 

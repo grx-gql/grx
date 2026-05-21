@@ -158,7 +158,7 @@ func TestParseDocumentMultipleOperationsRequiresName(t *testing.T) {
 	query := `query A { __typename } query B { __typename }`
 	if _, err := parseDocumentNamed(query, nil, "", 0); err == nil {
 		t.Fatalf("expected error when operationName is missing for multi-op document")
-	} else if !strings.Contains(err.Error(), "operationName") {
+	} else if !strings.Contains(err.Error(), "Must provide operation name if query contains multiple operations") {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
@@ -788,7 +788,7 @@ func TestParseDocumentNamedRejectsDuplicateFragments(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error for duplicate fragment name")
 	}
-	if !strings.Contains(err.Error(), `duplicate fragment "dup"`) {
+	if !strings.Contains(err.Error(), `There can be only one fragment named "dup"`) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }

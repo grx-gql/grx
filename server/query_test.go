@@ -37,7 +37,7 @@ func TestServeHTTPExecutesQuery(t *testing.T) {
 	}
 }
 
-func TestServeHTTPReturnsQueryFieldErrorsWithPartialData(t *testing.T) {
+func TestServeHTTPReturnsQueryValidationErrorForUnknownField(t *testing.T) {
 	h := newTestHarness(t)
 	body := responseToMap(t, execGraphQL(t, h, &grxclient.Request{
 		Query: "query GetUser($id: String!) { __typename missing user(id: $id) { id name } }",
@@ -45,13 +45,8 @@ func TestServeHTTPReturnsQueryFieldErrorsWithPartialData(t *testing.T) {
 			"id": "user_42",
 		},
 	}))
-	data := nestedMap(t, body, "data")
-	if data["__typename"] != "Query" {
-		t.Fatalf("expected root typename Query, got %#v", data["__typename"])
-	}
-	user := nestedMap(t, data, "user")
-	if user["id"] != "user_42" {
-		t.Fatalf("expected id user_42, got %#v", user["id"])
+	if _, exists := body["data"]; exists {
+		t.Fatalf("expected validation error to omit data, got %#v", body["data"])
 	}
 
 	errors := graphQLErrors(t, body)
@@ -59,15 +54,14 @@ func TestServeHTTPReturnsQueryFieldErrorsWithPartialData(t *testing.T) {
 		t.Fatalf("expected one error, got %#v", errors)
 	}
 	errorValue := graphQLError(t, errors, 0)
-	if errorValue["message"] != `unknown field "missing" on Query` {
+	if errorValue["message"] != `Cannot query field "missing" on type "Query".` {
 		t.Fatalf("unexpected error message: %#v", errorValue["message"])
 	}
-	assertErrorClassification(t, errorValue, "field")
-	assertErrorLocations(t, errorValue, 1, 42)
-	path, ok := errorValue["path"].([]any)
-	if !ok || len(path) != 1 || path[0] != "missing" {
-		t.Fatalf("expected missing error path, got %#v", errorValue["path"])
+	code, _ := errorValue["extensions"].(map[string]any)["code"].(string)
+	if code != "GRAPHQL_VALIDATION_FAILED" {
+		t.Fatalf("expected validation error code, got %#v", errorValue["extensions"])
 	}
+	assertErrorLocations(t, errorValue, 1, 42)
 }
 
 func TestServeHTTPReturnsExampleFieldErrorFromBasicSchema(t *testing.T) {

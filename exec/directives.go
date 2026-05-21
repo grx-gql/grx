@@ -74,7 +74,7 @@ func (e *Executor) flattenSelections(object *schema.Object, selections []selecti
 		case s.isFragmentSpread():
 			fd := fragments[s.FragmentSpread]
 			if fd == nil {
-				errs = append(errs, newFieldError(fmt.Sprintf("unknown fragment %q", s.FragmentSpread), nil, s.Location))
+				errs = append(errs, newFieldError(fmt.Sprintf(`Unknown fragment "%s".`, s.FragmentSpread), nil, s.Location))
 				continue
 			}
 			if !fragmentTypeMatches(object, fd.TypeCondition) {

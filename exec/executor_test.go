@@ -605,7 +605,7 @@ func TestExecutorUnknownFragmentProducesError(t *testing.T) {
 	if len(response.Errors) == 0 {
 		t.Fatalf("expected errors, got data %#v", response.Data)
 	}
-	if !strings.Contains(response.Errors[0].Message, `unknown fragment "Missing"`) {
+	if !strings.Contains(response.Errors[0].Message, `Unknown fragment "Missing".`) {
 		t.Fatalf("unexpected error: %#v", response.Errors)
 	}
 }

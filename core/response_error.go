@@ -7,6 +7,11 @@ type LocationProvider interface {
 	GraphQLLocations() []Location
 }
 
+const (
+	// ErrorCodeValidationFailed matches graphql-js validation error codes.
+	ErrorCodeValidationFailed = "GRAPHQL_VALIDATION_FAILED"
+)
+
 // NewRequestError builds a request-level GraphQL error per spec Section 7.
 // Request error results contain errors but no data entry.
 func NewRequestError(err error) Error {
@@ -19,6 +24,17 @@ func NewRequestError(err error) Error {
 	if provider, ok := err.(LocationProvider); ok {
 		result.Locations = provider.GraphQLLocations()
 	}
+	return result
+}
+
+// NewValidationError builds a request-level validation error using graphql-js
+// conventions (GRAPHQL_VALIDATION_FAILED in extensions).
+func NewValidationError(err error) Error {
+	result := NewRequestError(err)
+	if result.Extensions == nil {
+		result.Extensions = map[string]any{}
+	}
+	result.Extensions["code"] = ErrorCodeValidationFailed
 	return result
 }
 
