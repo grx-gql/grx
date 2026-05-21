@@ -512,6 +512,143 @@ func TestExecutorAppliesDefaultValues(t *testing.T) {
 	}
 }
 
+func TestExecutorUsesFieldAliasInResponse(t *testing.T) {
+	schemaValue, err := schema.Build(schema.Config{Query: testQuery{}})
+	if err != nil {
+		t.Fatalf("build schema: %v", err)
+	}
+
+	executor := New(schemaValue, nil)
+	response := executor.Execute(context.Background(), core.Request{
+		Query: `{ u: user(id: "7") { n: name } }`,
+	})
+
+	if len(response.Errors) != 0 {
+		t.Fatalf("unexpected errors: %#v", response.Errors)
+	}
+
+	data := responseObject(t, response.Data)
+	u := responseObject(t, data["u"])
+	if u["n"] != "Ada" {
+		t.Fatalf("expected nested alias n=Ada, got %#v", u["n"])
+	}
+}
+
+func TestExecutorSkipIncludeOmitsFields(t *testing.T) {
+	schemaValue, err := schema.Build(schema.Config{Query: testQuery{}})
+	if err != nil {
+		t.Fatalf("build schema: %v", err)
+	}
+
+	executor := New(schemaValue, nil)
+	response := executor.Execute(context.Background(), core.Request{
+		Query: `query Q($skipUser: Boolean!, $includeName: Boolean!) {
+			a: user(id: "1") @skip(if: $skipUser) { id }
+			b: user(id: "1") @include(if: $includeName) { id }
+		}`,
+		Variables: map[string]any{"skipUser": true, "includeName": false},
+	})
+
+	if len(response.Errors) != 0 {
+		t.Fatalf("unexpected errors: %#v", response.Errors)
+	}
+
+	data := responseObject(t, response.Data)
+	if _, ok := data["a"]; ok {
+		t.Fatalf("expected skipped field omitted, got %#v", data["a"])
+	}
+	if _, ok := data["b"]; ok {
+		t.Fatalf("expected excluded field omitted, got %#v", data["b"])
+	}
+}
+
+func TestExecutorNamedFragmentSpread(t *testing.T) {
+	schemaValue, err := schema.Build(schema.Config{Query: testQuery{}})
+	if err != nil {
+		t.Fatalf("build schema: %v", err)
+	}
+
+	executor := New(schemaValue, nil)
+	response := executor.Execute(context.Background(), core.Request{
+		Query: `
+			fragment UserFrag on Query {
+				user(id: "1") { id name }
+			}
+			query {
+				...UserFrag
+			}
+		`,
+	})
+
+	if len(response.Errors) != 0 {
+		t.Fatalf("unexpected errors: %#v", response.Errors)
+	}
+
+	data := responseObject(t, response.Data)
+	user := responseObject(t, data["user"])
+	if user["name"] != "Ada" {
+		t.Fatalf("unexpected user: %#v", user)
+	}
+}
+
+func TestExecutorUnknownFragmentProducesError(t *testing.T) {
+	schemaValue, err := schema.Build(schema.Config{Query: testQuery{}})
+	if err != nil {
+		t.Fatalf("build schema: %v", err)
+	}
+
+	executor := New(schemaValue, nil)
+	response := executor.Execute(context.Background(), core.Request{
+		Query: `{ ...Missing }`,
+	})
+
+	if len(response.Errors) == 0 {
+		t.Fatalf("expected errors, got data %#v", response.Data)
+	}
+	if !strings.Contains(response.Errors[0].Message, `unknown fragment "Missing"`) {
+		t.Fatalf("unexpected error: %#v", response.Errors)
+	}
+}
+
+func TestExecutorRejectsSelectionBeyondMaxDepth(t *testing.T) {
+	type nestUser struct {
+		ID string `gql:"id,nonNull"`
+	}
+	type nestPost struct {
+		Author *nestUser `gql:"author,nonNull"`
+	}
+	type nestQuery struct{}
+
+	schemaValue, err := schema.Build(schema.Config{
+		Query: struct {
+			Post func(context.Context, struct {
+				ID string `gql:"id,nonNull"`
+			}) (*nestPost, error)
+		}{
+			Post: func(ctx context.Context, args struct {
+				ID string `gql:"id,nonNull"`
+			}) (*nestPost, error) {
+				return &nestPost{Author: &nestUser{ID: "1"}}, nil
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("build schema: %v", err)
+	}
+
+	executor := New(schemaValue, nil, WithMaxSelectionDepth(2))
+	response := executor.Execute(context.Background(), core.Request{
+		Query: `{ post(id: "1") { author { id } } }`,
+	})
+
+	if len(response.Errors) == 0 {
+		t.Fatal("expected parse depth error")
+	}
+	if !strings.Contains(response.Errors[0].Message, "selection depth exceeds limit") {
+		t.Fatalf("unexpected error: %#v", response.Errors)
+	}
+}
+
 func responseObject(t *testing.T, value any) map[string]any {
 	t.Helper()
 

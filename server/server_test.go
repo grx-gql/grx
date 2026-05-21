@@ -18,6 +18,7 @@ import (
 	"github.com/patrickkabwe/grx/pkg/pubsub"
 	"github.com/patrickkabwe/grx/pkg/websocket"
 	"github.com/patrickkabwe/grx/plugin"
+	"github.com/patrickkabwe/grx/schema"
 )
 
 func TestServeHTTPServesPlaygroundAtConfiguredPath(t *testing.T) {
@@ -471,5 +472,34 @@ func TestRequestIDMiddlewarePropagatesContext(t *testing.T) {
 	}
 	if got := response.Header().Get("X-Request-Id"); got != "upstream-1" {
 		t.Fatalf("response X-Request-Id = %q", got)
+	}
+}
+
+type sdlTestQuery struct{}
+
+func (sdlTestQuery) Hello(ctx context.Context) (string, error) {
+	return "hi", nil
+}
+
+func TestServeHTTPSchemaSDL(t *testing.T) {
+	srv, err := New(Config{
+		Schema:        schema.Config{Query: sdlTestQuery{}},
+		SchemaSDLPath: "/schema.graphql",
+	})
+	if err != nil {
+		t.Fatalf("new server: %v", err)
+	}
+
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/schema.graphql", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d", rec.Code)
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, "type Query") || !strings.Contains(body, "hello") {
+		t.Fatalf("unexpected SDL body:\n%s", body)
+	}
+	if !strings.Contains(body, "schema {") {
+		t.Fatalf("expected schema block in SDL")
 	}
 }

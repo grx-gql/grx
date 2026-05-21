@@ -46,6 +46,10 @@ type Config struct {
 	// EnableGzip compresses JSON GraphQL responses when the client sends
 	// Accept-Encoding: gzip. Small payloads stay uncompressed.
 	EnableGzip bool
+	// PersistedQueries maps lowercase SHA-256 hex digests (64 characters) to
+	// GraphQL query strings for automatic persisted query (APQ) requests that
+	// send an empty "query" and a hash under extensions.persistedQuery.
+	PersistedQueries map[string]string
 }
 
 func (c Config) maxRequestBytes() int64 {
@@ -68,6 +72,13 @@ func New(cfg ...Config) *Transport {
 	t := &Transport{}
 	if len(cfg) > 0 {
 		t.config = cfg[0]
+		if t.config.PersistedQueries != nil {
+			norm := make(map[string]string, len(t.config.PersistedQueries))
+			for k, v := range t.config.PersistedQueries {
+				norm[strings.ToLower(strings.TrimSpace(k))] = v
+			}
+			t.config.PersistedQueries = norm
+		}
 	}
 	return t
 }
@@ -132,7 +143,7 @@ func (t *Transport) Serve(w nethttp.ResponseWriter, r *nethttp.Request, executor
 		}
 	}
 
-	body, err := core.DecodeGraphQLRequest(r)
+	bodies, err := decodeGraphQLHTTP(r, t.config.PersistedQueries)
 	if err != nil {
 		status := nethttp.StatusBadRequest
 		if t.config.maxRequestBytes() > 0 && requestBodyTooLarge(err) {
@@ -142,30 +153,55 @@ func (t *Transport) Serve(w nethttp.ResponseWriter, r *nethttp.Request, executor
 		return
 	}
 
-	gqlReq := core.Request{
-		Query:         body.Query,
-		OperationName: body.OperationName,
-		Variables:     body.Variables,
-	}
+	if len(bodies) == 1 {
+		gqlReq := core.Request{
+			Query:         bodies[0].Query,
+			OperationName: bodies[0].OperationName,
+			Variables:     bodies[0].Variables,
+		}
 
-	if kind, kindErr := executor.OperationKind(gqlReq); kindErr == nil {
-		switch r.Method {
-		case nethttp.MethodGet:
-			if kind == core.OperationMutation || kind == core.OperationSubscription {
-				w.Header().Set("Allow", nethttp.MethodPost)
-				writeRequestError(w, responseType, nethttp.StatusMethodNotAllowed, fmt.Errorf("HTTP GET cannot execute GraphQL %s operations", kind))
-				return
-			}
-		case nethttp.MethodPost:
-			if kind == core.OperationSubscription {
-				writeRequestError(w, responseType, nethttp.StatusMethodNotAllowed, fmt.Errorf("GraphQL subscription operations are not supported over HTTP POST; use WebSocket or SSE"))
-				return
+		if kind, kindErr := executor.OperationKind(gqlReq); kindErr == nil {
+			switch r.Method {
+			case nethttp.MethodGet:
+				if kind == core.OperationMutation || kind == core.OperationSubscription {
+					w.Header().Set("Allow", nethttp.MethodPost)
+					writeRequestError(w, responseType, nethttp.StatusMethodNotAllowed, fmt.Errorf("HTTP GET cannot execute GraphQL %s operations", kind))
+					return
+				}
+			case nethttp.MethodPost:
+				if kind == core.OperationSubscription {
+					writeRequestError(w, responseType, nethttp.StatusMethodNotAllowed, fmt.Errorf("GraphQL subscription operations are not supported over HTTP POST; use WebSocket or SSE"))
+					return
+				}
 			}
 		}
+
+		response := executor.Execute(r.Context(), gqlReq)
+		t.writeGraphQLPayload(w, r, nethttp.StatusOK, responseType, response)
+		return
 	}
 
-	response := executor.Execute(r.Context(), gqlReq)
-	t.writeGraphQLPayload(w, r, nethttp.StatusOK, responseType, response)
+	responses := make([]core.Response, len(bodies))
+	for i := range bodies {
+		gqlReq := core.Request{
+			Query:         bodies[i].Query,
+			OperationName: bodies[i].OperationName,
+			Variables:     bodies[i].Variables,
+		}
+		kind, kindErr := executor.OperationKind(gqlReq)
+		if kindErr != nil {
+			responses[i] = core.Response{Errors: []core.Error{{Message: kindErr.Error()}}}
+			continue
+		}
+		if kind == core.OperationMutation || kind == core.OperationSubscription {
+			responses[i] = core.Response{Errors: []core.Error{{
+				Message: fmt.Sprintf("GraphQL %s operations are not supported in batched HTTP requests", kind),
+			}}}
+			continue
+		}
+		responses[i] = executor.Execute(r.Context(), gqlReq)
+	}
+	t.writeGraphQLPayload(w, r, nethttp.StatusOK, responseType, responses)
 }
 
 func gzipAccepted(r *nethttp.Request) bool {
@@ -220,7 +256,9 @@ func limitRequestSize(w nethttp.ResponseWriter, r *nethttp.Request, max int64) e
 }
 
 func requestBodyTooLarge(err error) bool {
-	return strings.Contains(err.Error(), "request body too large")
+	msg := err.Error()
+	return strings.Contains(msg, "request body too large") ||
+		(strings.Contains(msg, "request exceeds") && strings.Contains(msg, "byte limit"))
 }
 
 func writeRequestError(w nethttp.ResponseWriter, mediaType string, status int, err error) {

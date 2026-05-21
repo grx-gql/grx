@@ -16,7 +16,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   panic-safe HTTP execution, and `RequestID` middleware with
   `core.RequestIDFromContext`.
 - `grx` options: `WithRequestTimeout`, `WithDisableIntrospection`,
-  `WithMaxHTTPRequestBytes`, `WithResponseGzip`, and `RequestID`.
+  `WithMaxHTTPRequestBytes`, `WithResponseGzip`, `WithPersistedQueries`,
+  `WithSchemaSDLPath`, and `RequestID`.
 - GitHub Actions workflow `ci` running `go test -race ./...`.
 - Public documentation site built with [VitePress](https://vitepress.dev/)
   and published to GitHub Pages from `docs/`.
@@ -31,6 +32,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   values can be routed to `SubscriptionPath` when it differs from
   `GraphQLPath` (`POST /graphql` remains queries/mutations; empty subscription
   path preserves the conventional single-path setup).
+- Execution: field aliases, `@skip` / `@include`, named fragment spreads and
+  inline fragments, parse-time selection depth limits via
+  `exec.WithMaxSelectionDepth`, and stricter non-null completion in the executor.
+- `schema.PrintSDL` plus optional `server.Config.SchemaSDLPath` (GET) for a
+  minimal SDL export of the built type registry.
+- Apollo-style HTTP batching: `POST` with a JSON array of requests returns a
+  JSON array of GraphQL responses; automatic persisted queries via
+  `server.Config.PersistedQueries` / `pkg/http.Config.PersistedQueries` and
+  `extensions.persistedQuery.sha256Hash`.
+- `core.GraphQLBody.Extensions` for persisted-query metadata on the wire.
 
 ### Changed
 
