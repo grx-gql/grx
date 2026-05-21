@@ -126,7 +126,7 @@ func TestParseDocumentMultipleOperationsSelectsByName(t *testing.T) {
 
 	subscription MySubscription { userCreated { email } }`
 
-	mutation, err := parseDocumentNamed(query, nil, "MyMutation")
+	mutation, err := parseDocumentNamed(query, nil, "MyMutation", 0)
 	if err != nil {
 		t.Fatalf("unexpected error selecting MyMutation: %v", err)
 	}
@@ -137,7 +137,7 @@ func TestParseDocumentMultipleOperationsSelectsByName(t *testing.T) {
 		t.Fatalf("expected 2 selections in mutation, got %d", len(mutation.Selections))
 	}
 
-	queryDoc, err := parseDocumentNamed(query, nil, "MyQuery")
+	queryDoc, err := parseDocumentNamed(query, nil, "MyQuery", 0)
 	if err != nil {
 		t.Fatalf("unexpected error selecting MyQuery: %v", err)
 	}
@@ -145,7 +145,7 @@ func TestParseDocumentMultipleOperationsSelectsByName(t *testing.T) {
 		t.Fatalf("expected query MyQuery, got %s %q", queryDoc.Kind, queryDoc.Name)
 	}
 
-	sub, err := parseDocumentNamed(query, nil, "MySubscription")
+	sub, err := parseDocumentNamed(query, nil, "MySubscription", 0)
 	if err != nil {
 		t.Fatalf("unexpected error selecting MySubscription: %v", err)
 	}
@@ -156,7 +156,7 @@ func TestParseDocumentMultipleOperationsSelectsByName(t *testing.T) {
 
 func TestParseDocumentMultipleOperationsRequiresName(t *testing.T) {
 	query := `query A { __typename } query B { __typename }`
-	if _, err := parseDocumentNamed(query, nil, ""); err == nil {
+	if _, err := parseDocumentNamed(query, nil, "", 0); err == nil {
 		t.Fatalf("expected error when operationName is missing for multi-op document")
 	} else if !strings.Contains(err.Error(), "operationName") {
 		t.Fatalf("unexpected error: %v", err)
@@ -165,7 +165,7 @@ func TestParseDocumentMultipleOperationsRequiresName(t *testing.T) {
 
 func TestParseDocumentUnknownOperationName(t *testing.T) {
 	query := `query A { __typename } query B { __typename }`
-	if _, err := parseDocumentNamed(query, nil, "C"); err == nil {
+	if _, err := parseDocumentNamed(query, nil, "C", 0); err == nil {
 		t.Fatalf("expected error when operationName does not match any operation")
 	} else if !strings.Contains(err.Error(), `"C"`) {
 		t.Fatalf("unexpected error: %v", err)
@@ -341,9 +341,9 @@ func TestParseDocumentErrors(t *testing.T) {
 		contains  string
 	}{
 		{
-			name:     "unsupported operation",
+			name:     "fragment definitions without operation",
 			query:    `fragment Foo on User { id }`,
-			contains: `unsupported operation`,
+			contains: `document contains no operations`,
 		},
 		{
 			name:     "missing selection set",
@@ -775,5 +775,83 @@ func TestParseDocumentEmptySelectionAllocations(t *testing.T) {
 	// No arguments => map should be left nil so we don't pay for an empty hmap.
 	if user.Arguments != nil {
 		t.Fatalf("expected nil Arguments for arg-less field, got %#v", user.Arguments)
+	}
+}
+
+func TestParseDocumentNamedRejectsDuplicateFragments(t *testing.T) {
+	q := `
+		fragment dup on Query { __typename }
+		fragment dup on Query { __typename }
+		query Q { __typename }
+	`
+	_, err := parseDocumentNamed(q, nil, "Q", 0)
+	if err == nil {
+		t.Fatal("expected error for duplicate fragment name")
+	}
+	if !strings.Contains(err.Error(), `duplicate fragment "dup"`) {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestParseDocumentNamedEnforcesMaxSelectionDepth(t *testing.T) {
+	q := `{ __schema { queryType { name } } }`
+	_, err := parseDocumentNamed(q, nil, "", 2)
+	if err == nil {
+		t.Fatal("expected depth error")
+	}
+	if !strings.Contains(err.Error(), "selection depth exceeds limit") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestParseDocumentParsesAliasAndDirectives(t *testing.T) {
+	doc, err := parseDocument(`query Q($s: Boolean!) { u: user(id: "1") @skip(if: $s) { n: name } }`, map[string]any{"s": false})
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	if len(doc.Selections) != 1 {
+		t.Fatalf("expected one root selection, got %d", len(doc.Selections))
+	}
+	sel := doc.Selections[0]
+	if sel.Alias != "u" || sel.Name != "user" {
+		t.Fatalf("unexpected alias/name: %#v", sel)
+	}
+	if len(sel.Directives) != 1 || sel.Directives[0].Name != "skip" {
+		t.Fatalf("unexpected directives: %#v", sel.Directives)
+	}
+	if sel.Directives[0].Args["if"] != false {
+		t.Fatalf("expected skip if=false, got %#v", sel.Directives[0].Args["if"])
+	}
+	if len(sel.Selections) != 1 {
+		t.Fatalf("expected nested selections")
+	}
+	inner := sel.Selections[0]
+	if inner.Alias != "n" || inner.Name != "name" {
+		t.Fatalf("unexpected nested alias: %#v", inner)
+	}
+}
+
+func TestParseDocumentParsesFragmentSpread(t *testing.T) {
+	q := `
+		fragment userFrag on Query {
+			user(id: "1") { id }
+		}
+		query {
+			...userFrag
+		}
+	`
+	doc, err := parseDocumentNamed(q, nil, "", 0)
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	if len(doc.Fragments) != 1 {
+		t.Fatalf("expected one fragment def, got %d", len(doc.Fragments))
+	}
+	fd := doc.Fragments["userFrag"]
+	if fd == nil || fd.TypeCondition != "Query" {
+		t.Fatalf("unexpected fragment: %#v", fd)
+	}
+	if len(doc.Selections) != 1 || doc.Selections[0].FragmentSpread != "userFrag" {
+		t.Fatalf("unexpected operation selections: %#v", doc.Selections)
 	}
 }

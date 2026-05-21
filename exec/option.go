@@ -11,3 +11,11 @@ func WithDisableIntrospection() ExecutorOption {
 		e.disableIntrospection = true
 	}
 }
+
+// WithMaxSelectionDepth sets a maximum nesting depth for selection sets in
+// parsed documents. Zero disables the limit.
+func WithMaxSelectionDepth(depth int) ExecutorOption {
+	return func(e *Executor) {
+		e.maxSelectionDepth = depth
+	}
+}

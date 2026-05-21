@@ -87,43 +87,63 @@ type token struct {
 }
 
 type parser struct {
-	tokens []token
-	index  int
-	vars   map[string]any
-	source string
+	tokens   []token
+	index    int
+	vars     map[string]any
+	source   string
+	maxDepth int // 0 = unlimited
 }
 
 // parseDocument parses a GraphQL source containing one or more operations and
 // returns the single executable operation. When the document defines multiple
 // operations the caller must pass a non-empty operationName to disambiguate.
 func parseDocument(query string, variables map[string]any) (document, error) {
-	return parseDocumentNamed(query, variables, "")
+	return parseDocumentNamed(query, variables, "", 0)
 }
 
 // parseDocumentNamed parses every operation in the document and selects the
 // one matching operationName. An empty operationName is allowed only when the
 // document defines exactly one operation (matching the GraphQL spec rule for
-// "GetOperation").
-func parseDocumentNamed(query string, variables map[string]any, operationName string) (document, error) {
+// "GetOperation"). maxDepth limits nested selection set depth (0 = unlimited).
+func parseDocumentNamed(query string, variables map[string]any, operationName string, maxDepth int) (document, error) {
 	source := normalizeSource(query)
 	tokens, err := lex(source)
 	if err != nil {
 		return document{}, err
 	}
 
-	p := parser{tokens: tokens, vars: variables, source: source}
+	p := parser{tokens: tokens, vars: variables, source: source, maxDepth: maxDepth}
 
+	fragments := make(map[string]*fragmentDef)
 	var operations []document
+
 	for p.peek().kind != tokenEOF {
+		if p.peek().kind == tokenName && p.peek().value == "fragment" {
+			fd, err := p.parseFragmentDefinition()
+			if err != nil {
+				return document{}, err
+			}
+			if _, dup := fragments[fd.Name]; dup {
+				return document{}, newParseError(p.source, fd.NameOffset, "duplicate fragment %q", fd.Name)
+			}
+			fragments[fd.Name] = fd
+			continue
+		}
+
 		kind, name, err := p.parseOperationHeader()
 		if err != nil {
 			return document{}, err
 		}
-		selections, err := p.parseSelectionSet()
+		selections, err := p.parseSelectionSet(1)
 		if err != nil {
 			return document{}, err
 		}
-		operations = append(operations, document{Kind: kind, Name: name, Selections: selections})
+		operations = append(operations, document{
+			Kind:       kind,
+			Name:       name,
+			Selections: selections,
+			Fragments:  fragments,
+		})
 	}
 
 	if len(operations) == 0 {
@@ -164,8 +184,6 @@ func (p *parser) parseOperationHeader() (operationKind, string, error) {
 	case "subscription":
 		p.next()
 		kind = operationSubscription
-	case "fragment":
-		return kind, "", newParseError(p.source, p.peek().offset, "unsupported operation %q", "fragment")
 	default:
 		return kind, "", newParseError(p.source, p.peek().offset, "unexpected token %q at top of operation", p.peek().value)
 	}
@@ -179,16 +197,16 @@ func (p *parser) parseOperationHeader() (operationKind, string, error) {
 			return kind, name, err
 		}
 	}
-	// Operation-level directives are tolerated but not yet acted on.
-	for p.peek().kind == tokenAt {
-		if err := p.skipDirective(); err != nil {
-			return kind, name, err
-		}
+	if _, err := p.parseDirectives(); err != nil {
+		return kind, name, err
 	}
 	return kind, name, nil
 }
 
-func (p *parser) parseSelectionSet() ([]selection, error) {
+func (p *parser) parseSelectionSet(depth int) ([]selection, error) {
+	if p.maxDepth > 0 && depth > p.maxDepth {
+		return nil, newParseError(p.source, p.peek().offset, "selection depth exceeds limit of %d", p.maxDepth)
+	}
 	if err := p.expect(tokenBraceOpen); err != nil {
 		return nil, err
 	}
@@ -198,7 +216,7 @@ func (p *parser) parseSelectionSet() ([]selection, error) {
 		if p.peek().kind == tokenEOF {
 			return nil, newParseError(p.source, p.peek().offset, "unexpected end of query inside selection set")
 		}
-		sel, err := p.parseSelection()
+		sel, err := p.parseSelection(depth)
 		if err != nil {
 			return nil, err
 		}
@@ -208,10 +226,49 @@ func (p *parser) parseSelectionSet() ([]selection, error) {
 	return selections, nil
 }
 
-func (p *parser) parseSelection() (selection, error) {
-	nameToken := p.next()
-	if nameToken.kind != tokenName {
-		return selection{}, newParseError(p.source, nameToken.offset, "expected field name, got %q", nameToken.value)
+func (p *parser) parseSelection(depth int) (selection, error) {
+	if p.peek().kind == tokenSpread {
+		p.next() // ...
+		if p.peek().kind == tokenName && p.peek().value == "on" {
+			p.next() // on
+			typeName := p.next()
+			if typeName.kind != tokenName {
+				return selection{}, newParseError(p.source, typeName.offset, "expected type name after \"on\", got %q", typeName.value)
+			}
+			nested, err := p.parseSelectionSet(depth + 1)
+			if err != nil {
+				return selection{}, err
+			}
+			return selection{
+				InlineFragmentOn: typeName.value,
+				Selections:       nested,
+				Location:         locationForOffset(p.source, typeName.offset),
+			}, nil
+		}
+		fragName := p.next()
+		if fragName.kind != tokenName {
+			return selection{}, newParseError(p.source, fragName.offset, "expected fragment name, got %q", fragName.value)
+		}
+		return selection{
+			FragmentSpread: fragName.value,
+			Location:       locationForOffset(p.source, fragName.offset),
+		}, nil
+	}
+
+	first := p.next()
+	if first.kind != tokenName {
+		return selection{}, newParseError(p.source, first.offset, "expected field name or fragment spread, got %q", first.value)
+	}
+
+	fieldName := first.value
+	locOffset := first.offset
+	if p.peek().kind == tokenColon {
+		p.next()
+		real := p.next()
+		if real.kind != tokenName {
+			return selection{}, newParseError(p.source, real.offset, "expected field name after alias, got %q", real.value)
+		}
+		fieldName = real.value
 	}
 
 	var args map[string]any
@@ -223,28 +280,84 @@ func (p *parser) parseSelection() (selection, error) {
 		args = parsed
 	}
 
-	// Field-level directives are tolerated but not yet acted on.
-	for p.peek().kind == tokenAt {
-		if err := p.skipDirective(); err != nil {
-			return selection{}, err
-		}
+	dirs, err := p.parseDirectives()
+	if err != nil {
+		return selection{}, err
 	}
 
 	var nested []selection
 	if p.peek().kind == tokenBraceOpen {
-		parsed, err := p.parseSelectionSet()
+		parsed, err := p.parseSelectionSet(depth + 1)
 		if err != nil {
 			return selection{}, err
 		}
 		nested = parsed
 	}
 
+	alias := ""
+	name := fieldName
+	if first.value != fieldName {
+		alias = first.value
+	}
+
 	return selection{
-		Name:       nameToken.value,
+		Alias:      alias,
+		Name:       name,
 		Arguments:  args,
+		Directives: dirs,
 		Selections: nested,
-		Location:   locationForOffset(p.source, nameToken.offset),
+		Location:   locationForOffset(p.source, locOffset),
 	}, nil
+}
+
+func (p *parser) parseFragmentDefinition() (*fragmentDef, error) {
+	if p.peek().kind != tokenName || p.peek().value != "fragment" {
+		return nil, newParseError(p.source, p.peek().offset, "expected \"fragment\"")
+	}
+	p.next()
+	nameTok := p.next()
+	if nameTok.kind != tokenName {
+		return nil, newParseError(p.source, nameTok.offset, "expected fragment name, got %q", nameTok.value)
+	}
+	if p.peek().kind != tokenName || p.peek().value != "on" {
+		return nil, newParseError(p.source, p.peek().offset, "expected \"on\" in fragment definition")
+	}
+	p.next()
+	typeTok := p.next()
+	if typeTok.kind != tokenName {
+		return nil, newParseError(p.source, typeTok.offset, "expected type condition name, got %q", typeTok.value)
+	}
+	sel, err := p.parseSelectionSet(1)
+	if err != nil {
+		return nil, err
+	}
+	return &fragmentDef{
+		Name:          nameTok.value,
+		TypeCondition: typeTok.value,
+		Selections:    sel,
+		NameOffset:    nameTok.offset,
+	}, nil
+}
+
+func (p *parser) parseDirectives() ([]directive, error) {
+	var out []directive
+	for p.peek().kind == tokenAt {
+		p.next()
+		name := p.next()
+		if name.kind != tokenName {
+			return nil, newParseError(p.source, name.offset, "expected directive name, got %q", name.value)
+		}
+		d := directive{Name: name.value}
+		if p.peek().kind == tokenParenOpen {
+			args, err := p.parseArguments()
+			if err != nil {
+				return nil, err
+			}
+			d.Args = args
+		}
+		out = append(out, d)
+	}
+	return out, nil
 }
 
 func (p *parser) parseArguments() (map[string]any, error) {
@@ -384,22 +497,6 @@ func (p *parser) skipBalancedParens() error {
 			return newParseError(p.source, current.offset, "unexpected end of query inside operation variables")
 		}
 	}
-}
-
-// skipDirective consumes a `@name` or `@name(arg: value, ...)` directive
-// invocation. Directives are accepted by the parser but not yet executed.
-func (p *parser) skipDirective() error {
-	p.next() // consume @
-	name := p.next()
-	if name.kind != tokenName {
-		return newParseError(p.source, name.offset, "expected directive name, got %q", name.value)
-	}
-	if p.peek().kind == tokenParenOpen {
-		if err := p.skipBalancedParens(); err != nil {
-			return err
-		}
-	}
-	return nil
 }
 
 func (p *parser) expect(kind tokenKind) error {

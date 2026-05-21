@@ -160,6 +160,22 @@ func WithResponseGzip() Option {
 	}
 }
 
+// WithPersistedQueries registers SHA-256 hex digest → query text mappings for
+// automatic persisted query (APQ) support on the default HTTP transport.
+func WithPersistedQueries(queries map[string]string) Option {
+	return func(c *server.Config) {
+		c.PersistedQueries = queries
+	}
+}
+
+// WithSchemaSDLPath enables GET export of a minimal SDL document at path
+// (for example "/schema.graphql"). The empty string disables the endpoint.
+func WithSchemaSDLPath(path string) Option {
+	return func(c *server.Config) {
+		c.SchemaSDLPath = path
+	}
+}
+
 // CorsConfig configures [Cors].
 type CorsConfig = cors.Config
 

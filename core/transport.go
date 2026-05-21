@@ -27,6 +27,9 @@ type GraphQLBody struct {
 	Query         string         `json:"query"`
 	OperationName string         `json:"operationName"`
 	Variables     map[string]any `json:"variables"`
+	// Extensions carries transport-specific metadata (for example automatic
+	// persisted query hashes). Most callers leave it unset.
+	Extensions map[string]any `json:"extensions"`
 }
 
 // DecodeGraphQLBody parses a JSON body into a GraphQLBody and returns a

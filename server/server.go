@@ -86,15 +86,26 @@ type Config struct {
 	// EnableResponseGzip enables gzip compression for JSON GraphQL responses
 	// when the client advertises Accept-Encoding: gzip.
 	EnableResponseGzip bool
+
+	// PersistedQueries maps SHA-256 hex digests (case-insensitive) to GraphQL
+	// query strings for automatic persisted query (APQ) support on the default
+	// HTTP transport.
+	PersistedQueries map[string]string
+
+	// SchemaSDLPath enables GET export of a minimal SDL document at this path
+	// (for example "/schema.graphql"). The empty string disables the endpoint.
+	SchemaSDLPath string
 }
 
 // Server is an http.Handler that exposes a GraphQL endpoint and an
 // optional GraphiQL playground. Construct one with [New].
 type Server struct {
 	executor         core.Executor
+	schemaValue      *schema.Schema
 	PlaygroundPath   string
 	GraphqlPath      string // normalized; persisted from New
 	SubscriptionPath string // pathname passed to graphql-ws in playground (canonical subscription URL)
+	schemaSDLPath    string
 
 	separateSubs   bool             // graphqlPath != subscriptionPath routing
 	mainChain      []core.Transport // graphqlPath
@@ -174,13 +185,23 @@ func New(config Config) (*Server, error) {
 	if config.EnableResponseGzip {
 		httpTransportCfg.EnableGzip = true
 	}
+	if len(config.PersistedQueries) > 0 {
+		httpTransportCfg.PersistedQueries = config.PersistedQueries
+	}
 	main = append(main, grxhttp.New(httpTransportCfg))
+
+	sdlPath := strings.TrimSpace(config.SchemaSDLPath)
+	if sdlPath != "" && !strings.HasPrefix(sdlPath, "/") {
+		sdlPath = "/" + sdlPath
+	}
 
 	srv := &Server{
 		executor:         executor,
+		schemaValue:      schemaValue,
 		PlaygroundPath:   config.PlaygroundPath,
 		GraphqlPath:      graphqlPath,
 		SubscriptionPath: subPath,
+		schemaSDLPath:    sdlPath,
 		separateSubs:     separate,
 		mainChain:        main,
 		subChain:         sub,
@@ -237,6 +258,14 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 func (s *Server) serveHTTP(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Path == faviconPath && (r.Method == http.MethodGet || r.Method == http.MethodHead) {
 		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+
+	if s.schemaSDLPath != "" && r.Method == http.MethodGet && r.URL.Path == s.schemaSDLPath {
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		w.Header().Set("Cache-Control", "no-store")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(schema.PrintSDL(s.schemaValue)))
 		return
 	}
 

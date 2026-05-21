@@ -27,6 +27,7 @@ type Executor struct {
 	Schema               *schema.Schema
 	Plugins              []plugin.Plugin
 	disableIntrospection bool
+	maxSelectionDepth    int
 }
 
 // New returns an [Executor] bound to schemaValue and plugins. plugins
@@ -61,7 +62,7 @@ func (e *Executor) Execute(ctx context.Context, req core.Request) core.Response 
 		return e.sendResponse(ctx, core.Response{Data: introspectionData(e.Schema, req)})
 	}
 
-	doc, err := parseDocumentNamed(req.Query, req.Variables, req.OperationName)
+	doc, err := parseDocumentNamed(req.Query, req.Variables, req.OperationName, e.maxSelectionDepth)
 	if err != nil {
 		e.notifyError(ctx, err)
 		return errorResponse(err)
@@ -84,7 +85,7 @@ func (e *Executor) Execute(ctx context.Context, req core.Request) core.Response 
 		return errorResponse(err)
 	}
 
-	data, fieldErrors := e.executeSelectionSet(ctx, root, nil, doc.Selections, nil)
+	data, fieldErrors := e.executeSelectionSet(ctx, root, nil, doc.Selections, doc.Fragments, nil)
 	res := core.Response{Data: data, Errors: fieldErrors}
 	if len(fieldErrors) == 0 {
 		res.Errors = nil
@@ -97,7 +98,7 @@ func (e *Executor) Execute(ctx context.Context, req core.Request) core.Response 
 // can call it cheaply to decide whether to dispatch a request to Execute
 // or Subscribe.
 func (e *Executor) OperationKind(req core.Request) (core.OperationKind, error) {
-	doc, err := parseDocumentNamed(req.Query, req.Variables, req.OperationName)
+	doc, err := parseDocumentNamed(req.Query, req.Variables, req.OperationName, e.maxSelectionDepth)
 	if err != nil {
 		return "", err
 	}
@@ -125,7 +126,7 @@ func (e *Executor) Subscribe(ctx context.Context, req core.Request) (<-chan core
 		return nil, err
 	}
 
-	doc, err := parseDocumentNamed(req.Query, req.Variables, req.OperationName)
+	doc, err := parseDocumentNamed(req.Query, req.Variables, req.OperationName, e.maxSelectionDepth)
 	if err != nil {
 		e.notifyError(ctx, err)
 		return nil, err
@@ -138,18 +139,23 @@ func (e *Executor) Subscribe(ctx context.Context, req core.Request) (<-chan core
 	if err := e.notifyValidation(ctx, req); err != nil {
 		return nil, err
 	}
-	if len(doc.Selections) != 1 {
-		err := errors.New("subscription operations must select exactly one root field")
-		e.notifyError(ctx, err)
-		return nil, err
-	}
 
 	root, err := e.rootObject(doc.Kind)
 	if err != nil {
 		return nil, err
 	}
 
-	rootField := doc.Selections[0]
+	flat, flatErrs := e.flattenSelections(root, doc.Selections, doc.Fragments)
+	if len(flatErrs) > 0 {
+		return nil, errors.New(flatErrs[0].Message)
+	}
+	if len(flat) != 1 || !flat[0].isField() {
+		err := errors.New("subscription operations must select exactly one root field")
+		e.notifyError(ctx, err)
+		return nil, err
+	}
+
+	rootField := flat[0]
 	field, ok := root.Fields[rootField.Name]
 	if !ok {
 		err := fmt.Errorf("unknown subscription field %q", rootField.Name)
@@ -173,6 +179,8 @@ func (e *Executor) Subscribe(ctx context.Context, req core.Request) (<-chan core
 		return nil, err
 	}
 
+	outKey := rootField.responseKey()
+
 	out := make(chan core.Response)
 	go func() {
 		defer close(out)
@@ -190,9 +198,9 @@ func (e *Executor) Subscribe(ctx context.Context, req core.Request) (<-chan core
 				return
 			}
 
-			data, fieldErrors := e.completeValue(ctx, field.Type, value.Interface(), rootField.Selections, []any{rootField.Name})
+			data, fieldErrors := e.completeValue(ctx, field.Type, value.Interface(), rootField.Selections, doc.Fragments, []any{outKey})
 			payload := core.NewOrderedObject(1)
-			payload.Set(rootField.Name, data)
+			payload.Set(outKey, data)
 			res := core.Response{Data: payload}
 			if len(fieldErrors) > 0 {
 				res.Errors = fieldErrors
@@ -242,23 +250,39 @@ func (e *Executor) rootObject(kind operationKind) (*schema.Object, error) {
 	}
 }
 
-func (e *Executor) executeSelectionSet(ctx context.Context, object *schema.Object, source any, selections []selection, path []any) (*core.OrderedObject, []core.Error) {
-	data := core.NewOrderedObject(len(selections))
-	errors := []core.Error{}
+func (e *Executor) executeSelectionSet(ctx context.Context, object *schema.Object, source any, selections []selection, fragments map[string]*fragmentDef, path []any) (*core.OrderedObject, []core.Error) {
+	flat, flatErrs := e.flattenSelections(object, selections, fragments)
+	errors := append([]core.Error{}, flatErrs...)
 
-	for _, selected := range selections {
+	data := core.NewOrderedObject(len(flat))
+	for _, selected := range flat {
+		if err := ctx.Err(); err != nil {
+			errors = append(errors, newFieldError(err.Error(), path, core.Location{}))
+			return data, errors
+		}
+
+		key := selected.responseKey()
 		if selected.Name == "__typename" {
-			data.Set(selected.Name, object.Name())
+			data.Set(key, object.Name())
+			continue
+		}
+
+		skip, include, derr := evalSkipInclude(selected.Directives)
+		if derr != nil {
+			errors = append(errors, newFieldError(derr.Error(), appendPath(path, key), selected.Location))
+			continue
+		}
+		if skip || !include {
 			continue
 		}
 
 		field, ok := object.Fields[selected.Name]
 		if !ok {
-			errors = append(errors, newFieldError(fmt.Sprintf("unknown field %q on %s", selected.Name, object.Name()), appendPath(path, selected.Name), selected.Location))
+			errors = append(errors, newFieldError(fmt.Sprintf("unknown field %q on %s", selected.Name, object.Name()), appendPath(path, key), selected.Location))
 			continue
 		}
 
-		fieldPath := appendPath(path, selected.Name)
+		fieldPath := appendPath(path, key)
 		for _, hook := range e.Plugins {
 			if err := hook.FieldResolveStart(ctx, plugin.FieldContext{Path: pathStrings(fieldPath), FieldName: selected.Name}); err != nil {
 				errors = append(errors, newFieldError(err.Error(), fieldPath, selected.Location))
@@ -273,15 +297,18 @@ func (e *Executor) executeSelectionSet(ctx context.Context, object *schema.Objec
 			continue
 		}
 
-		resolved, nestedErrors := e.completeValue(ctx, field.Type, value, selected.Selections, fieldPath)
-		data.Set(selected.Name, resolved)
+		resolved, nestedErrors := e.completeValue(ctx, field.Type, value, selected.Selections, fragments, fieldPath)
+		data.Set(key, resolved)
 		errors = append(errors, nestedErrors...)
 	}
 
 	return data, errors
 }
 
-func (e *Executor) completeValue(ctx context.Context, fieldType schema.Type, value any, selections []selection, path []any) (any, []core.Error) {
+func (e *Executor) completeValue(ctx context.Context, fieldType schema.Type, value any, selections []selection, fragments map[string]*fragmentDef, path []any) (any, []core.Error) {
+	if err := ctx.Err(); err != nil {
+		return nil, []core.Error{newFieldError(err.Error(), path, core.Location{})}
+	}
 	if value == nil {
 		if fieldType.Kind() == schema.NonNullKind {
 			return nil, []core.Error{newFieldError("non-null field resolved to null", path, core.Location{})}
@@ -291,23 +318,30 @@ func (e *Executor) completeValue(ctx context.Context, fieldType schema.Type, val
 
 	switch typed := fieldType.(type) {
 	case *schema.NonNull:
-		return e.completeValue(ctx, typed.OfType, value, selections, path)
+		inner, errs := e.completeValue(ctx, typed.OfType, value, selections, fragments, path)
+		if len(errs) > 0 || inner == nil {
+			if len(errs) == 0 {
+				errs = []core.Error{newFieldError("non-null field resolved to null", path, core.Location{})}
+			}
+			return nil, errs
+		}
+		return inner, nil
 	case *schema.List:
-		return e.completeList(ctx, typed.OfType, value, selections, path)
+		return e.completeList(ctx, typed.OfType, value, selections, fragments, path)
 	case *schema.Object:
-		return e.executeSelectionSet(ctx, typed, value, selections, path)
+		return e.executeSelectionSet(ctx, typed, value, selections, fragments, path)
 	case *schema.Interface:
 		objectType, err := typed.Resolve(value)
 		if err != nil {
 			return nil, []core.Error{newFieldError(err.Error(), path, core.Location{})}
 		}
-		return e.executeSelectionSet(ctx, objectType, value, selections, path)
+		return e.executeSelectionSet(ctx, objectType, value, selections, fragments, path)
 	case *schema.Union:
 		objectType, err := typed.Resolve(value)
 		if err != nil {
 			return nil, []core.Error{newFieldError(err.Error(), path, core.Location{})}
 		}
-		return e.executeSelectionSet(ctx, objectType, value, selections, path)
+		return e.executeSelectionSet(ctx, objectType, value, selections, fragments, path)
 	case *schema.Enum:
 		serialized, err := typed.Serialize(value)
 		if err != nil {
@@ -325,7 +359,7 @@ func (e *Executor) completeValue(ctx context.Context, fieldType schema.Type, val
 	}
 }
 
-func (e *Executor) completeList(ctx context.Context, itemType schema.Type, value any, selections []selection, path []any) ([]any, []core.Error) {
+func (e *Executor) completeList(ctx context.Context, itemType schema.Type, value any, selections []selection, fragments map[string]*fragmentDef, path []any) ([]any, []core.Error) {
 	raw := reflect.ValueOf(value)
 	if raw.Kind() == reflect.Pointer {
 		raw = raw.Elem()
@@ -337,8 +371,11 @@ func (e *Executor) completeList(ctx context.Context, itemType schema.Type, value
 	items := make([]any, 0, raw.Len())
 	errors := []core.Error{}
 	for index := 0; index < raw.Len(); index++ {
+		if err := ctx.Err(); err != nil {
+			return items, append(errors, newFieldError(err.Error(), path, core.Location{}))
+		}
 		itemPath := appendPath(path, index)
-		item, itemErrors := e.completeValue(ctx, itemType, raw.Index(index).Interface(), selections, itemPath)
+		item, itemErrors := e.completeValue(ctx, itemType, raw.Index(index).Interface(), selections, fragments, itemPath)
 		items = append(items, item)
 		errors = append(errors, itemErrors...)
 	}
