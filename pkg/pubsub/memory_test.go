@@ -204,6 +204,32 @@ func TestMemoryCloseStopsSubscribers(t *testing.T) {
 	}
 }
 
+func TestMemoryCloseWhileSubscribersCancel(t *testing.T) {
+	bus := NewMemory()
+	const n = 32
+	channels := make([]<-chan Message, n)
+	for i := 0; i < n; i++ {
+		ctx, cancel := context.WithCancel(context.Background())
+		ch, err := bus.Subscribe(ctx, "topic")
+		if err != nil {
+			t.Fatalf("Subscribe: %v", err)
+		}
+		channels[i] = ch
+		if i%2 == 0 {
+			cancel()
+		}
+	}
+
+	if err := bus.Close(); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+
+	for _, ch := range channels {
+		for range ch {
+		}
+	}
+}
+
 func TestMemoryConcurrentPublishSubscribe(t *testing.T) {
 	bus := NewMemory(MemoryConfig{Buffer: 64})
 	t.Cleanup(func() { _ = bus.Close() })

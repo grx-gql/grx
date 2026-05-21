@@ -42,10 +42,10 @@ type Memory struct {
 // by Close to block until every subscriber goroutine has observed the
 // channel close, so Close can promise no further deliveries.
 type memorySub struct {
-	ch      chan Message
-	filters []Filter
-	cancel  context.CancelFunc
-	done    chan struct{}
+	ch        chan Message
+	filters   []Filter
+	cancel    context.CancelFunc
+	closeOnce sync.Once
 }
 
 // NewMemory returns a [Memory] ready for use. Pass an optional
@@ -122,7 +122,6 @@ func (m *Memory) Subscribe(ctx context.Context, topic string, filters ...Filter)
 		ch:      make(chan Message, m.buffer),
 		filters: filters,
 		cancel:  cancel,
-		done:    make(chan struct{}),
 	}
 	if _, ok := m.subs[topic]; !ok {
 		m.subs[topic] = map[uint64]*memorySub{}
@@ -153,13 +152,9 @@ func (m *Memory) unsubscribe(topic string, id uint64, sub *memorySub) {
 	}
 	m.mu.Unlock()
 
-	select {
-	case <-sub.done:
-		return
-	default:
-	}
-	close(sub.done)
-	close(sub.ch)
+	sub.closeOnce.Do(func() {
+		close(sub.ch)
+	})
 }
 
 // Close cancels every active subscription and refuses further
