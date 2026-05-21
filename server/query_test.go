@@ -1,19 +1,19 @@
 package server
 
 import (
-	"net/http"
 	"testing"
+
+	grxclient "github.com/patrickkabwe/grx/pkg/client"
 )
 
 func TestServeHTTPExecutesQuery(t *testing.T) {
-	server := newTestServer(t)
-	response := executeGraphQL(t, server, `{"query":"query GetUser($id: String!) { __typename user(id: $id) { __typename id name email } }","variables":{"id":"user_42"}}`)
-
-	if response.Code != http.StatusOK {
-		t.Fatalf("expected status %d, got %d", http.StatusOK, response.Code)
-	}
-
-	body := graphQLResponseBody(t, response)
+	h := newTestHarness(t)
+	body := responseToMap(t, execGraphQL(t, h, &grxclient.Request{
+		Query: "query GetUser($id: String!) { __typename user(id: $id) { __typename id name email } }",
+		Variables: map[string]any{
+			"id": "user_42",
+		},
+	}))
 	assertNoErrors(t, body)
 
 	data := nestedMap(t, body, "data")
@@ -38,14 +38,13 @@ func TestServeHTTPExecutesQuery(t *testing.T) {
 }
 
 func TestServeHTTPReturnsQueryFieldErrorsWithPartialData(t *testing.T) {
-	server := newTestServer(t)
-	response := executeGraphQL(t, server, `{"query":"query GetUser($id: String!) { __typename missing user(id: $id) { id name } }","variables":{"id":"user_42"}}`)
-
-	if response.Code != http.StatusOK {
-		t.Fatalf("expected status %d, got %d", http.StatusOK, response.Code)
-	}
-
-	body := graphQLResponseBody(t, response)
+	h := newTestHarness(t)
+	body := responseToMap(t, execGraphQL(t, h, &grxclient.Request{
+		Query: "query GetUser($id: String!) { __typename missing user(id: $id) { id name } }",
+		Variables: map[string]any{
+			"id": "user_42",
+		},
+	}))
 	data := nestedMap(t, body, "data")
 	if data["__typename"] != "Query" {
 		t.Fatalf("expected root typename Query, got %#v", data["__typename"])
@@ -72,14 +71,10 @@ func TestServeHTTPReturnsQueryFieldErrorsWithPartialData(t *testing.T) {
 }
 
 func TestServeHTTPReturnsExampleFieldErrorFromBasicSchema(t *testing.T) {
-	server := newTestServer(t)
-	response := executeGraphQL(t, server, `{"query":"query ExampleError { errorExample }"}`)
-
-	if response.Code != http.StatusOK {
-		t.Fatalf("expected status %d, got %d", http.StatusOK, response.Code)
-	}
-
-	body := graphQLResponseBody(t, response)
+	h := newTestHarness(t)
+	body := responseToMap(t, execGraphQL(t, h, &grxclient.Request{
+		Query: "query ExampleError { errorExample }",
+	}))
 	data := nestedMap(t, body, "data")
 	if len(data) != 0 {
 		t.Fatalf("expected empty partial data for errorExample, got %#v", data)

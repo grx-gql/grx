@@ -1,19 +1,22 @@
 package server
 
 import (
-	"net/http"
 	"testing"
+
+	grxclient "github.com/patrickkabwe/grx/pkg/client"
 )
 
 func TestServeHTTPExecutesMutation(t *testing.T) {
-	server := newTestServer(t)
-	response := executeGraphQL(t, server, `{"query":"mutation CreateUser($input: UserCreateInput!) { __typename createUser(input: $input) { __typename user { __typename id name email } } }","variables":{"input":{"name":"Grace Hopper","email":"grace@example.com"}}}`)
-
-	if response.Code != http.StatusOK {
-		t.Fatalf("expected status %d, got %d", http.StatusOK, response.Code)
-	}
-
-	body := graphQLResponseBody(t, response)
+	h := newTestHarness(t)
+	body := responseToMap(t, execGraphQL(t, h, &grxclient.Request{
+		Query: "mutation CreateUser($input: UserCreateInput!) { __typename createUser(input: $input) { __typename user { __typename id name email } } }",
+		Variables: map[string]any{
+			"input": map[string]any{
+				"name":  "Grace Hopper",
+				"email": "grace@example.com",
+			},
+		},
+	}))
 	assertNoErrors(t, body)
 
 	data := nestedMap(t, body, "data")
@@ -44,14 +47,10 @@ func TestServeHTTPExecutesMutation(t *testing.T) {
 }
 
 func TestServeHTTPExecutesMutationWithInlineInputObject(t *testing.T) {
-	server := newTestServer(t)
-	response := executeGraphQL(t, server, `{"query":"mutation MyMutation { __typename createUser(input: {email: \"test@gmail.com\", name: \"test\"}) { user { email } } }"}`)
-
-	if response.Code != http.StatusOK {
-		t.Fatalf("expected status %d, got %d", http.StatusOK, response.Code)
-	}
-
-	body := graphQLResponseBody(t, response)
+	h := newTestHarness(t)
+	body := responseToMap(t, execGraphQL(t, h, &grxclient.Request{
+		Query: `mutation MyMutation { __typename createUser(input: {email: "test@gmail.com", name: "test"}) { user { email } } }`,
+	}))
 	assertNoErrors(t, body)
 
 	data := nestedMap(t, body, "data")
@@ -66,14 +65,15 @@ func TestServeHTTPExecutesMutationWithInlineInputObject(t *testing.T) {
 }
 
 func TestServeHTTPReturnsMutationFieldErrorsWithPartialData(t *testing.T) {
-	server := newTestServer(t)
-	response := executeGraphQL(t, server, `{"query":"mutation CreateUser($input: UserCreateInput!) { __typename missing createUser(input: $input) { user { id name } } }","variables":{"input":{"name":"Grace Hopper"}}}`)
-
-	if response.Code != http.StatusOK {
-		t.Fatalf("expected status %d, got %d", http.StatusOK, response.Code)
-	}
-
-	body := graphQLResponseBody(t, response)
+	h := newTestHarness(t)
+	body := responseToMap(t, execGraphQL(t, h, &grxclient.Request{
+		Query: "mutation CreateUser($input: UserCreateInput!) { __typename missing createUser(input: $input) { user { id name } } }",
+		Variables: map[string]any{
+			"input": map[string]any{
+				"name": "Grace Hopper",
+			},
+		},
+	}))
 	data := nestedMap(t, body, "data")
 	if data["__typename"] != "Mutation" {
 		t.Fatalf("expected root typename Mutation, got %#v", data["__typename"])
