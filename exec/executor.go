@@ -6,9 +6,13 @@ package exec
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"reflect"
+	"runtime/debug"
+	"strings"
 
 	"github.com/patrickkabwe/grx/core"
 	"github.com/patrickkabwe/grx/plugin"
@@ -28,6 +32,13 @@ type Executor struct {
 	Plugins              []plugin.Plugin
 	disableIntrospection bool
 	maxSelectionDepth    int
+	maskInternalErrors   bool
+	clientErrorMessage   string
+	operationAuthorizer  OperationAuthorizer
+	fieldAuthorizer      FieldAuthorizer
+	rateLimiter          RateLimiter
+	trustedDocuments     map[string]string
+	rejectUnknownVars    bool
 }
 
 // New returns an [Executor] bound to schemaValue and plugins. plugins
@@ -46,18 +57,29 @@ func New(schemaValue *schema.Schema, plugins []plugin.Plugin, opts ...ExecutorOp
 // [ErrSubscriptionOperation]; use [Executor.Subscribe] instead. Errors
 // produced during plugin notifications, parsing, or field resolution are
 // surfaced via the returned response.
-func (e *Executor) Execute(ctx context.Context, req core.Request) core.Response {
+func (e *Executor) Execute(ctx context.Context, req core.Request) (response core.Response) {
+	defer func() {
+		if rec := recover(); rec != nil {
+			err := fmt.Errorf("panic during GraphQL execution: %v", rec)
+			e.notifyError(ctx, err)
+			e.notifyError(ctx, fmt.Errorf("panic stack: %s", string(debug.Stack())))
+			response = errorResponse(e.maskError(err, true))
+		}
+	}()
+
 	ctx, err := e.startRequest(ctx, req)
 	if err != nil {
-		return errorResponse(err)
+		return errorResponse(e.maskError(err, false))
 	}
 	if err := e.notifyParsing(ctx, req); err != nil {
-		return errorResponse(err)
+		return errorResponse(e.maskError(err, false))
 	}
 
 	if isIntrospectionQuery(req.Query) {
 		if e.disableIntrospection {
-			return errorResponse(fmt.Errorf("introspection is disabled"))
+			err := fmt.Errorf("introspection is disabled")
+			e.notifyError(ctx, err)
+			return errorResponse(err)
 		}
 		return e.sendResponse(ctx, core.Response{Data: introspectionData(e.Schema, req)})
 	}
@@ -66,6 +88,10 @@ func (e *Executor) Execute(ctx context.Context, req core.Request) core.Response 
 	if err != nil {
 		e.notifyError(ctx, err)
 		return errorResponse(err)
+	}
+	if err := e.validateDocumentSecurity(ctx, req, doc); err != nil {
+		e.notifyError(ctx, err)
+		return errorResponse(e.maskError(err, false))
 	}
 
 	if doc.Kind == operationSubscription {
@@ -82,7 +108,8 @@ func (e *Executor) Execute(ctx context.Context, req core.Request) core.Response 
 
 	root, err := e.rootObject(doc.Kind)
 	if err != nil {
-		return errorResponse(err)
+		e.notifyError(ctx, err)
+		return errorResponse(e.maskError(err, false))
 	}
 
 	data, fieldErrors := e.executeSelectionSet(ctx, root, nil, doc.Selections, doc.Fragments, nil)
@@ -117,13 +144,22 @@ func (e *Executor) OperationKind(req core.Request) (core.OperationKind, error) {
 // Subscribe parses a subscription operation, invokes the source-stream resolver,
 // and returns a channel of GraphQL responses that close when the source stream
 // closes or the supplied context is cancelled.
-func (e *Executor) Subscribe(ctx context.Context, req core.Request) (<-chan core.Response, error) {
-	ctx, err := e.startRequest(ctx, req)
+func (e *Executor) Subscribe(ctx context.Context, req core.Request) (responses <-chan core.Response, err error) {
+	defer func() {
+		if rec := recover(); rec != nil {
+			raw := fmt.Errorf("panic during GraphQL subscription: %v", rec)
+			e.notifyError(ctx, raw)
+			e.notifyError(ctx, fmt.Errorf("panic stack: %s", string(debug.Stack())))
+			err = e.maskError(raw, true)
+		}
+	}()
+
+	ctx, err = e.startRequest(ctx, req)
 	if err != nil {
-		return nil, err
+		return nil, e.maskError(err, false)
 	}
 	if err := e.notifyParsing(ctx, req); err != nil {
-		return nil, err
+		return nil, e.maskError(err, false)
 	}
 
 	doc, err := parseDocumentNamed(req.Query, req.Variables, req.OperationName, e.maxSelectionDepth)
@@ -131,10 +167,14 @@ func (e *Executor) Subscribe(ctx context.Context, req core.Request) (<-chan core
 		e.notifyError(ctx, err)
 		return nil, err
 	}
+	if err := e.validateDocumentSecurity(ctx, req, doc); err != nil {
+		e.notifyError(ctx, err)
+		return nil, e.maskError(err, false)
+	}
 	if doc.Kind != operationSubscription {
 		err := fmt.Errorf("Subscribe requires a subscription operation, got %s", doc.Kind)
 		e.notifyError(ctx, err)
-		return nil, err
+		return nil, e.maskError(err, false)
 	}
 	if err := e.notifyValidation(ctx, req); err != nil {
 		return nil, err
@@ -170,7 +210,7 @@ func (e *Executor) Subscribe(ctx context.Context, req core.Request) (<-chan core
 	source, err := field.Resolver(ctx, schema.ResolveParams{Args: rootField.Arguments})
 	if err != nil {
 		e.notifyError(ctx, err)
-		return nil, err
+		return nil, e.maskError(err, true)
 	}
 	sourceValue := reflect.ValueOf(source)
 	if sourceValue.Kind() != reflect.Chan {
@@ -222,7 +262,7 @@ func (e *Executor) sendResponse(ctx context.Context, res core.Response) core.Res
 	for _, hook := range e.Plugins {
 		if err := hook.ResponseSend(ctx, res); err != nil {
 			e.notifyError(ctx, err)
-			return errorResponse(err)
+			return errorResponse(e.maskError(err, false))
 		}
 	}
 	return res
@@ -283,17 +323,36 @@ func (e *Executor) executeSelectionSet(ctx context.Context, object *schema.Objec
 		}
 
 		fieldPath := appendPath(path, key)
-		for _, hook := range e.Plugins {
-			if err := hook.FieldResolveStart(ctx, plugin.FieldContext{Path: pathStrings(fieldPath), FieldName: selected.Name}); err != nil {
-				errors = append(errors, newFieldError(err.Error(), fieldPath, selected.Location))
+		if e.fieldAuthorizer != nil {
+			err := e.fieldAuthorizer(ctx, FieldAuthorizationContext{
+				ParentType: object.Name(),
+				FieldName:  selected.Name,
+				Path:       pathStrings(fieldPath),
+			})
+			if err != nil {
+				e.notifyError(ctx, err)
+				errors = append(errors, newFieldError(e.maskError(err, false).Error(), fieldPath, selected.Location))
 				continue
 			}
+		}
+
+		blocked := false
+		for _, hook := range e.Plugins {
+			if err := hook.FieldResolveStart(ctx, plugin.FieldContext{Path: pathStrings(fieldPath), FieldName: selected.Name}); err != nil {
+				e.notifyError(ctx, err)
+				errors = append(errors, newFieldError(e.maskError(err, false).Error(), fieldPath, selected.Location))
+				blocked = true
+				break
+			}
+		}
+		if blocked {
+			continue
 		}
 
 		value, err := field.Resolver(ctx, schema.ResolveParams{Source: source, Args: selected.Arguments})
 		if err != nil {
 			e.notifyError(ctx, err)
-			errors = append(errors, newFieldError(err.Error(), fieldPath, selected.Location))
+			errors = append(errors, newFieldError(e.maskError(err, true).Error(), fieldPath, selected.Location))
 			continue
 		}
 
@@ -333,25 +392,29 @@ func (e *Executor) completeValue(ctx context.Context, fieldType schema.Type, val
 	case *schema.Interface:
 		objectType, err := typed.Resolve(value)
 		if err != nil {
-			return nil, []core.Error{newFieldError(err.Error(), path, core.Location{})}
+			e.notifyError(ctx, err)
+			return nil, []core.Error{newFieldError(e.maskError(err, true).Error(), path, core.Location{})}
 		}
 		return e.executeSelectionSet(ctx, objectType, value, selections, fragments, path)
 	case *schema.Union:
 		objectType, err := typed.Resolve(value)
 		if err != nil {
-			return nil, []core.Error{newFieldError(err.Error(), path, core.Location{})}
+			e.notifyError(ctx, err)
+			return nil, []core.Error{newFieldError(e.maskError(err, true).Error(), path, core.Location{})}
 		}
 		return e.executeSelectionSet(ctx, objectType, value, selections, fragments, path)
 	case *schema.Enum:
 		serialized, err := typed.Serialize(value)
 		if err != nil {
-			return nil, []core.Error{newFieldError(err.Error(), path, core.Location{})}
+			e.notifyError(ctx, err)
+			return nil, []core.Error{newFieldError(e.maskError(err, true).Error(), path, core.Location{})}
 		}
 		return serialized, nil
 	case *schema.Scalar:
 		serialized, err := typed.Serialize(value)
 		if err != nil {
-			return nil, []core.Error{newFieldError(err.Error(), path, core.Location{})}
+			e.notifyError(ctx, err)
+			return nil, []core.Error{newFieldError(e.maskError(err, true).Error(), path, core.Location{})}
 		}
 		return serialized, nil
 	default:
@@ -365,7 +428,9 @@ func (e *Executor) completeList(ctx context.Context, itemType schema.Type, value
 		raw = raw.Elem()
 	}
 	if raw.Kind() != reflect.Slice && raw.Kind() != reflect.Array {
-		return nil, []core.Error{newFieldError(fmt.Sprintf("expected list value, got %T", value), path, core.Location{})}
+		err := fmt.Errorf("expected list value, got %T", value)
+		e.notifyError(ctx, err)
+		return nil, []core.Error{newFieldError(e.maskError(err, true).Error(), path, core.Location{})}
 	}
 
 	items := make([]any, 0, raw.Len())
@@ -429,6 +494,89 @@ func (e *Executor) notifyError(ctx context.Context, err error) {
 	for _, hook := range e.Plugins {
 		hook.Error(ctx, err)
 	}
+}
+
+func (e *Executor) validateDocumentSecurity(ctx context.Context, req core.Request, doc document) error {
+	if e.rejectUnknownVars {
+		if err := rejectUnknownVariables(req, doc); err != nil {
+			return err
+		}
+	}
+	if len(e.trustedDocuments) > 0 {
+		if err := e.validateTrustedDocument(req.Query); err != nil {
+			return err
+		}
+	}
+
+	operationCtx := OperationContext{
+		Request: req,
+		Kind:    toCoreOperationKind(doc.Kind),
+		Name:    doc.Name,
+	}
+	if e.rateLimiter != nil {
+		if err := e.rateLimiter(ctx, operationCtx); err != nil {
+			return err
+		}
+	}
+	if e.operationAuthorizer != nil {
+		if err := e.operationAuthorizer(ctx, operationCtx); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (e *Executor) validateTrustedDocument(query string) error {
+	sum := sha256.Sum256([]byte(query))
+	hash := hex.EncodeToString(sum[:])
+	trustedQuery, ok := e.trustedDocuments[hash]
+	if !ok {
+		return fmt.Errorf("operation is not trusted")
+	}
+	if trustedQuery != "" && trustedQuery != query {
+		return fmt.Errorf("trusted document hash %q does not match request query", hash)
+	}
+	return nil
+}
+
+func rejectUnknownVariables(req core.Request, doc document) error {
+	if len(req.Variables) == 0 {
+		return nil
+	}
+	declared := make(map[string]struct{}, len(doc.Variables))
+	for _, variable := range doc.Variables {
+		declared[variable] = struct{}{}
+	}
+	for variable := range req.Variables {
+		if _, ok := declared[variable]; !ok {
+			return fmt.Errorf("unknown variable %q", variable)
+		}
+	}
+	return nil
+}
+
+func toCoreOperationKind(kind operationKind) core.OperationKind {
+	switch kind {
+	case operationQuery:
+		return core.OperationQuery
+	case operationMutation:
+		return core.OperationMutation
+	case operationSubscription:
+		return core.OperationSubscription
+	default:
+		return core.OperationKind(kind)
+	}
+}
+
+func (e *Executor) maskError(err error, internal bool) error {
+	if !internal || !e.maskInternalErrors {
+		return err
+	}
+	message := strings.TrimSpace(e.clientErrorMessage)
+	if message == "" {
+		message = "internal server error"
+	}
+	return errors.New(message)
 }
 
 func appendPath(path []any, item any) []any {

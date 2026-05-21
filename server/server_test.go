@@ -3,7 +3,10 @@ package server
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -15,6 +18,7 @@ import (
 
 	"github.com/patrickkabwe/grx/core"
 	subscriptiongraph "github.com/patrickkabwe/grx/examples/subscriptions/graph"
+	"github.com/patrickkabwe/grx/exec"
 	"github.com/patrickkabwe/grx/pkg/pubsub"
 	"github.com/patrickkabwe/grx/pkg/websocket"
 	"github.com/patrickkabwe/grx/plugin"
@@ -393,7 +397,6 @@ func TestDisableIntrospectionRejectsSchemaQuery(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new server: %v", err)
 	}
-
 	response := executeGraphQL(t, srv, `{"query":"{ __schema { queryType { name } } }"}`)
 	body := graphQLResponseBody(t, response)
 	errors := graphQLErrors(t, body)
@@ -426,7 +429,6 @@ func TestRequestTimeoutStopsSlowValidation(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new server: %v", err)
 	}
-
 	response := executeGraphQL(t, srv, `{"query":"{ __typename }"}`)
 	body := graphQLResponseBody(t, response)
 	errors := graphQLErrors(t, body)
@@ -463,7 +465,6 @@ func TestRequestIDMiddlewarePropagatesContext(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new server: %v", err)
 	}
-
 	response := executeGraphQLHeaders(t, srv, `{"query":"{ __typename }"}`, map[string]string{
 		"X-Request-Id": "upstream-1",
 	})
@@ -472,6 +473,154 @@ func TestRequestIDMiddlewarePropagatesContext(t *testing.T) {
 	}
 	if got := response.Header().Get("X-Request-Id"); got != "upstream-1" {
 		t.Fatalf("response X-Request-Id = %q", got)
+	}
+}
+
+type errorRecorder struct {
+	plugin.Base
+	errors []error
+}
+
+func (r *errorRecorder) Error(ctx context.Context, err error) {
+	r.errors = append(r.errors, err)
+}
+
+func TestSecurityMasksResolverErrorsAndPreservesRawError(t *testing.T) {
+	bus := pubsub.NewMemory()
+	t.Cleanup(func() { _ = bus.Close() })
+	recorder := &errorRecorder{}
+	srv, err := New(Config{
+		Schema:             subscriptiongraph.New(subscriptiongraph.WithPubSub(bus)),
+		Plugins:            []plugin.Plugin{recorder},
+		MaskInternalErrors: true,
+		ClientErrorMessage: "hidden",
+	})
+	if err != nil {
+		t.Fatalf("new server: %v", err)
+	}
+	response := executeGraphQL(t, srv, `{"query":"query ExampleError { errorExample }"}`)
+	body := graphQLResponseBody(t, response)
+	errors := graphQLErrors(t, body)
+	msg := graphQLError(t, errors, 0)["message"].(string)
+	if msg != "hidden" {
+		t.Fatalf("expected masked error, got %q", msg)
+	}
+	if len(recorder.errors) != 1 || !strings.Contains(recorder.errors[0].Error(), "example error from basic server") {
+		t.Fatalf("expected raw error to be preserved, got %#v", recorder.errors)
+	}
+}
+
+func TestSecurityOperationAuthorizerRejectsOperation(t *testing.T) {
+	bus := pubsub.NewMemory()
+	t.Cleanup(func() { _ = bus.Close() })
+	srv, err := New(Config{
+		Schema: subscriptiongraph.New(subscriptiongraph.WithPubSub(bus)),
+		OperationAuthorizer: func(ctx context.Context, operation exec.OperationContext) error {
+			if operation.Kind == core.OperationMutation {
+				return errors.New("mutation denied")
+			}
+			return nil
+		},
+	})
+	if err != nil {
+		t.Fatalf("new server: %v", err)
+	}
+	response := executeGraphQL(t, srv, `{"query":"mutation CreatePost { createPost(input: {title: \"x\", body: \"y\"}) { post { id } } }"}`)
+	body := graphQLResponseBody(t, response)
+	errors := graphQLErrors(t, body)
+	msg := graphQLError(t, errors, 0)["message"].(string)
+	if msg != "mutation denied" {
+		t.Fatalf("unexpected error message %q", msg)
+	}
+}
+
+func TestSecurityFieldAuthorizerRejectsField(t *testing.T) {
+	bus := pubsub.NewMemory()
+	t.Cleanup(func() { _ = bus.Close() })
+	srv, err := New(Config{
+		Schema: subscriptiongraph.New(subscriptiongraph.WithPubSub(bus)),
+		FieldAuthorizer: func(ctx context.Context, field exec.FieldAuthorizationContext) error {
+			if field.ParentType == "User" && field.FieldName == "email" {
+				return errors.New("email denied")
+			}
+			return nil
+		},
+	})
+	if err != nil {
+		t.Fatalf("new server: %v", err)
+	}
+	response := executeGraphQL(t, srv, `{"query":"query GetUser($id: String!) { user(id: $id) { id email } }","variables":{"id":"user_42"}}`)
+	body := graphQLResponseBody(t, response)
+	errors := graphQLErrors(t, body)
+	errorValue := graphQLError(t, errors, 0)
+	if errorValue["message"] != "email denied" {
+		t.Fatalf("unexpected error: %#v", errorValue)
+	}
+	path, ok := errorValue["path"].([]any)
+	if !ok || len(path) != 2 || path[0] != "user" || path[1] != "email" {
+		t.Fatalf("unexpected path: %#v", errorValue["path"])
+	}
+}
+
+func TestSecurityRateLimiterRejectsOperation(t *testing.T) {
+	bus := pubsub.NewMemory()
+	t.Cleanup(func() { _ = bus.Close() })
+	srv, err := New(Config{
+		Schema: subscriptiongraph.New(subscriptiongraph.WithPubSub(bus)),
+		RateLimiter: func(ctx context.Context, operation exec.OperationContext) error {
+			return errors.New("rate limited")
+		},
+	})
+	if err != nil {
+		t.Fatalf("new server: %v", err)
+	}
+	response := executeGraphQL(t, srv, `{"query":"{ __typename }"}`)
+	body := graphQLResponseBody(t, response)
+	errors := graphQLErrors(t, body)
+	if graphQLError(t, errors, 0)["message"] != "rate limited" {
+		t.Fatalf("unexpected errors: %#v", errors)
+	}
+}
+
+func TestSecurityTrustedDocumentsRejectsUnknownQuery(t *testing.T) {
+	query := "{ __typename }"
+	sum := sha256.Sum256([]byte(query))
+	hash := hex.EncodeToString(sum[:])
+	bus := pubsub.NewMemory()
+	t.Cleanup(func() { _ = bus.Close() })
+	srv, err := New(Config{
+		Schema:           subscriptiongraph.New(subscriptiongraph.WithPubSub(bus)),
+		TrustedDocuments: map[string]string{hash: query},
+	})
+	if err != nil {
+		t.Fatalf("new server: %v", err)
+	}
+	allowed := executeGraphQL(t, srv, `{"query":"{ __typename }"}`)
+	assertNoErrors(t, graphQLResponseBody(t, allowed))
+
+	rejected := executeGraphQL(t, srv, `{"query":"{ posts { id } }"}`)
+	body := graphQLResponseBody(t, rejected)
+	errors := graphQLErrors(t, body)
+	if graphQLError(t, errors, 0)["message"] != "operation is not trusted" {
+		t.Fatalf("unexpected errors: %#v", errors)
+	}
+}
+
+func TestSecurityRejectsUnknownVariables(t *testing.T) {
+	bus := pubsub.NewMemory()
+	t.Cleanup(func() { _ = bus.Close() })
+	srv, err := New(Config{
+		Schema:                 subscriptiongraph.New(subscriptiongraph.WithPubSub(bus)),
+		RejectUnknownVariables: true,
+	})
+	if err != nil {
+		t.Fatalf("new server: %v", err)
+	}
+	response := executeGraphQL(t, srv, `{"query":"query GetUser($id: String!) { user(id: $id) { id } }","variables":{"id":"user_42","extra":"x"}}`)
+	body := graphQLResponseBody(t, response)
+	errors := graphQLErrors(t, body)
+	if graphQLError(t, errors, 0)["message"] != `unknown variable "extra"` {
+		t.Fatalf("unexpected errors: %#v", errors)
 	}
 }
 

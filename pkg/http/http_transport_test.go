@@ -404,6 +404,13 @@ func TestServeReturns500WhenExecutePanics(t *testing.T) {
 	if rec.Code != http.StatusInternalServerError {
 		t.Fatalf("status = %d, want %d", rec.Code, http.StatusInternalServerError)
 	}
+	var decoded core.Response
+	if err := json.NewDecoder(rec.Body).Decode(&decoded); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if len(decoded.Errors) != 1 || decoded.Errors[0].Message != "internal server error" {
+		t.Fatalf("errors = %#v", decoded.Errors)
+	}
 }
 
 // TestSatisfiesCoreTransport ensures the package's exported type continues
