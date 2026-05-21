@@ -10,27 +10,38 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: "Tag to release (e.g. v0.1.0). Must already exist."
+        description: "Tag to create and release (e.g. v0.1.0)."
         required: true
+        type: string
+      target_ref:
+        description: "Branch, tag, or SHA to release from."
+        required: true
+        default: "main"
         type: string
 
 permissions:
   contents: write
 
 concurrency:
-  group: release-${{ github.ref }}
+  group: release-${{ inputs.tag || github.ref }}
   cancel-in-progress: false
 
 jobs:
   verify:
     name: Verify build & tests
     runs-on: ubuntu-latest
+    outputs:
+      target_sha: ${{ steps.resolve.outputs.sha }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.tag || github.ref }}
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.target_ref || github.ref }}
           fetch-depth: 0
+
+      - name: Resolve checked out SHA
+        id: resolve
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
       - name: Set up Go
         uses: actions/setup-go@v5
@@ -58,7 +69,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.tag || github.ref }}
+          ref: ${{ github.event_name == 'workflow_dispatch' && needs.verify.outputs.target_sha || github.ref }}
           fetch-depth: 0
 
       - name: Resolve tag metadata
@@ -86,6 +97,26 @@ jobs:
           else
             echo "prerelease=false" >> "$GITHUB_OUTPUT"
           fi
+
+      - name: Create tag for manual release
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          set -euo pipefail
+          TAG="${{ steps.meta.outputs.tag }}"
+          TARGET_SHA="${{ needs.verify.outputs.target_sha }}"
+
+          if git rev-parse -q --verify "refs/tags/${TAG}" >/dev/null; then
+            EXISTING_SHA="$(git rev-list -n 1 "${TAG}")"
+            if [[ "${EXISTING_SHA}" != "${TARGET_SHA}" ]]; then
+              echo "::error::tag ${TAG} already exists at ${EXISTING_SHA}, expected ${TARGET_SHA}"
+              exit 1
+            fi
+            echo "Tag ${TAG} already exists at ${TARGET_SHA}"
+            exit 0
+          fi
+
+          git tag "${TAG}" "${TARGET_SHA}"
+          git push origin "refs/tags/${TAG}"
 
       - name: Extract changelog section
         id: changelog
