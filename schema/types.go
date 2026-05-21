@@ -183,6 +183,7 @@ type Field struct {
 	Description       string
 	Type              Type
 	Args              []InputValue
+	ArgsByName        map[string]InputValue
 	Resolver          Resolver
 	DefaultValue      any
 	IsDeprecated      bool

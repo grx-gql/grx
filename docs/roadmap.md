@@ -10,25 +10,25 @@ outline: [2, 3]
 
 ## Overall progress
 
-**217 / 325 items complete (66%)** across the
+**278 / 327 items complete (85%)** across the
 sections below.
 
 ## Progress at a glance
 
 | Area | Done / Total | % |
 | --- | --- | --- |
-| Server HTTP Transport | 21 / 25 | 84% |
+| Server HTTP Transport | 23 / 26 | 88% |
 | GraphQL Language Lexer | 21 / 22 | 95% |
-| GraphQL Parser | 16 / 28 | 57% |
-| Type System | 15 / 35 | 42% |
-| Validation | 23 / 40 | 57% |
-| Execution | 26 / 38 | 68% |
-| Introspection | 9 / 24 | 37% |
-| Built-in Directives | 2 / 7 | 28% |
+| GraphQL Parser | 26 / 28 | 92% |
+| Type System | 34 / 35 | 97% |
+| Validation | 26 / 40 | 65% |
+| Execution | 32 / 38 | 84% |
+| Introspection | 23 / 24 | 95% |
+| Built-in Directives | 7 / 7 | 100% |
 | Response Format | 13 / 13 | 100% |
 | Developer Experience | 12 / 20 | 60% |
-| Subscriptions | 17 / 17 | 100% |
-| WebSocket Transport (RFC 6455) | 15 / 19 | 78% |
+| Subscriptions | 18 / 18 | 100% |
+| WebSocket Transport (RFC 6455) | 16 / 19 | 84% |
 | graphql-transport-ws Subprotocol | 12 / 12 | 100% |
 | Security | 11 / 11 | 100% |
 | Observability | 4 / 9 | 44% |
@@ -57,7 +57,8 @@ sections below.
 - [x] Timeout/deadline handling
 - [x] Persisted queries
 - [x] Automatic persisted queries
-- [ ] Query cost/depth/complexity limits
+- [x] Query cost/depth/complexity limits
+- [x] Optional bounded parsed-document cache for variable-free requests (`server.Config.DocumentCacheSize`)
 - [x] CORS configuration
 - [x] Response compression (gzip)
 - [ ] Response compression (brotli)
@@ -105,21 +106,21 @@ sections below.
 - [x] Fragment definitions
 - [x] Fragment spreads
 - [x] Inline fragments
-- [ ] Directives on operations, fields, fragments, and variable definitions
-- [ ] Variable definitions with default values
+- [x] Directives on operations, fields, fragments, and variable definitions
+- [x] Variable definitions with default values
 - [x] List value literals
 - [x] Object value literals
 - [x] Enum value literals with type context
 - [ ] Null value validation in context
 - [ ] Full grammar-compliant error reporting
-- [ ] Type system definitions via SDL (schema, types, directives)
-- [ ] Description strings on definitions
-- [ ] Repeatable directive declarations
-- [ ] Oneof input object definitions
-- [ ] Interface `implements` lists including multi-interface inheritance
-- [ ] Union member type lists
-- [ ] Scalar type definitions with `@specifiedBy`
-- [ ] Schema and type `extend` definitions
+- [x] Type system definitions via SDL (schema, types, directives)
+- [x] Description strings on definitions
+- [x] Repeatable directive declarations
+- [x] Oneof input object definitions
+- [x] Interface `implements` lists including multi-interface inheritance
+- [x] Union member type lists
+- [x] Scalar type definitions with `@specifiedBy`
+- [x] Schema and type `extend` definitions
 
 ### Type System
 
@@ -134,30 +135,30 @@ sections below.
 - [x] Interface types
 - [x] Union types
 - [x] Custom scalar registration
-- [ ] Schema directives
-- [ ] Field directives
-- [ ] Argument directives
-- [ ] Input field directives
-- [ ] Type descriptions
-- [ ] Field descriptions
-- [ ] Argument descriptions
-- [ ] Deprecation metadata
+- [x] Schema directives
+- [x] Field directives
+- [x] Argument directives
+- [x] Input field directives
+- [x] Type descriptions
+- [x] Field descriptions
+- [x] Argument descriptions
+- [x] Deprecation metadata
 - [x] Default argument values
 - [x] Default input field values
-- [ ] Schema extension
-- [ ] Type extension
-- [ ] SDL parser
+- [x] Schema extension
+- [x] Type extension
+- [x] SDL parser
 - [x] SDL printer
-- [ ] Schema validation rules
-- [ ] Reserved `__` name validation
-- [ ] Oneof input objects
-- [ ] User-defined directive definitions
-- [ ] Repeatable directives
-- [ ] Interfaces implementing interfaces
+- [x] Schema validation rules
+- [x] Reserved `__` name validation
+- [x] Oneof input objects
+- [x] User-defined directive definitions
+- [x] Repeatable directives
+- [x] Interfaces implementing interfaces
 - [ ] Type coordinate resolution
 - [x] Subscription root operation type
-- [ ] Built-in `specifiedByURL` on scalars
-- [ ] Block-string descriptions attached to definitions
+- [x] Built-in `specifiedByURL` on scalars
+- [x] Block-string descriptions attached to definitions
 
 ### Validation
 
@@ -168,7 +169,7 @@ sections below.
 - [x] Field exists on parent type
 - [x] Leaf field selection rule
 - [x] Composite field selection rule
-- [ ] Field selection merging
+- [x] Field selection merging
 - [x] Argument exists on field/directive
 - [x] Argument uniqueness
 - [x] Required argument presence
@@ -188,9 +189,9 @@ sections below.
 - [x] Directive uniqueness where non-repeatable
 - [ ] Variable uniqueness
 - [ ] Variables are input types
-- [ ] Variable use is defined
+- [x] Variable use is defined
 - [ ] Variable use is allowed by location/type
-- [ ] Variables are used
+- [x] Variables are used
 - [x] Unknown operation name error
 - [x] Multiple operations require operation name
 - [ ] Oneof input object exactly-one-field rule
@@ -216,16 +217,16 @@ sections below.
 - [x] Inline fragment type-condition matching
 - [x] `@skip(if:)`
 - [x] `@include(if:)`
-- [ ] Serial mutation field execution guarantee
-- [ ] Parallel query field execution where safe
+- [x] Serial mutation field execution guarantee
+- [x] Parallel query field execution where safe
 - [x] Operation selection by `operationName`
 - [x] Variable default value coercion
 - [x] Argument default value coercion
 - [x] Input object default value coercion
-- [ ] Scalar result coercion
+- [x] Scalar result coercion
 - [x] Enum result coercion
-- [ ] List input coercion
-- [ ] Non-null error bubbling
+- [x] List input coercion
+- [x] Non-null error bubbling
 - [x] Error path for aliased fields
 - [x] Error locations
 - [x] Interface concrete type resolution
@@ -237,7 +238,7 @@ sections below.
 - [ ] Incremental execution for `@defer`
 - [ ] Incremental execution for `@stream`
 - [x] Resolver panic recovery
-- [ ] Concurrent non-mutation field resolution with deterministic ordering
+- [x] Concurrent non-mutation field resolution with deterministic ordering
 - [ ] Per-request resolver cache / request-scoped memoization
 - [ ] Deferred resolver values (thunk/promise-style futures)
 - [ ] Abstract type runtime resolution hook
@@ -254,31 +255,31 @@ sections below.
 - [x] Input object field metadata
 - [x] Basic type reference metadata
 - [ ] Full introspection through normal execution
-- [ ] Complete `__Schema` fields
-- [ ] Complete `__Type` fields
-- [ ] Complete `__Field` fields
-- [ ] Complete `__InputValue` fields
-- [ ] Complete `__EnumValue` fields
-- [ ] Complete `__Directive` fields
-- [ ] `__TypeKind` enum
-- [ ] `__DirectiveLocation` enum
-- [ ] Built-in directive introspection
-- [ ] Deprecated field filtering through `includeDeprecated`
-- [ ] Deprecated enum filtering through `includeDeprecated`
-- [ ] Description metadata
+- [x] Complete `__Schema` fields
+- [x] Complete `__Type` fields
+- [x] Complete `__Field` fields
+- [x] Complete `__InputValue` fields
+- [x] Complete `__EnumValue` fields
+- [x] Complete `__Directive` fields
+- [x] `__TypeKind` enum
+- [x] `__DirectiveLocation` enum
+- [x] Built-in directive introspection
+- [x] Deprecated field filtering through `includeDeprecated`
+- [x] Deprecated enum filtering through `includeDeprecated`
+- [x] Description metadata
 - [x] Default value string rendering
-- [ ] Custom scalar `specifiedByURL`
-- [ ] Correct introspection type registration in schema
+- [x] Custom scalar `specifiedByURL`
+- [x] Correct introspection type registration in schema
 
 ### Built-in Directives
 
 - [x] `@skip(if: Boolean!)`
 - [x] `@include(if: Boolean!)`
-- [ ] `@deprecated(reason: String)`
-- [ ] `@specifiedBy(url: String!)`
-- [ ] `@oneOf` on input object types
-- [ ] `@defer(if: Boolean, label: String)`
-- [ ] `@stream(if: Boolean, label: String, initialCount: Int)`
+- [x] `@deprecated(reason: String)`
+- [x] `@specifiedBy(url: String!)`
+- [x] `@oneOf` on input object types
+- [x] `@defer(if: Boolean, label: String)`
+- [x] `@stream(if: Boolean, label: String, initialCount: Int)`
 
 ### Response Format
 
@@ -338,6 +339,7 @@ sections below.
 - [x] Redis pub/sub backend (`pkg/pubsub/redis`, separate Go module)
 - [x] Type-safe generic wrapper with pluggable codec (`pkg/pubsub.Typed`)
 - [x] Server-side filters / typed predicates on subscribe
+- [x] Configurable maximum concurrent SSE streams per transport (`sse.Config.MaxActiveSubscriptions`)
 
 ### WebSocket Transport (RFC 6455)
 
@@ -360,7 +362,7 @@ sections below.
       close code `1001`
 - [ ] permessage-deflate compression (RFC 7692)
 - [ ] Maximum concurrent connection limit
-- [ ] Maximum subscriptions-per-connection limit
+- [x] Maximum subscriptions-per-connection limit
 
 ### graphql-transport-ws Subprotocol
 

@@ -9,6 +9,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Executor and server limits for abusive documents: `exec.WithMaxSelectionCount`,
+  `exec.WithMaxAliasCount`, `exec.WithMaxRootFieldCount`, plus matching
+  `server.Config` fields (`MaxSelectionCount`, `MaxAliasCount`,
+  `MaxRootFieldCount`). Zero disables each limit.
+- Optional parse cache for variable-free requests: `exec.WithDocumentCache(limit)`
+  and `server.Config.DocumentCacheSize` (LRU eviction by count; requests with a
+  non-empty variable map bypass the cache because defaults are applied during
+  parsing today).
+- SSE transport tuning: `sse.Config.MaxActiveSubscriptions` limits concurrent
+  streams per `*sse.Transport`; `sse.New(sse.Config{...})` is optional — zero
+  preserves previous behaviour. Over-limit requests receive `429` with a JSON
+  GraphQL error body.
+- WebSocket per-connection cap: `websocket.Config.MaxSubscriptions` rejects
+  additional `subscribe` operations once the limit is reached (error payload plus
+  `complete` for that id).
 - GraphQL HTTP hardening: `OPTIONS /graphql` with `Allow`, per-request
   `RequestTimeout`, optional `DisableIntrospection`, `MaxHTTPRequestBytes` and
   response gzip on the default transport, `GET` rejection of mutation and
@@ -47,8 +62,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 #### Breaking API
 
+- `pkg/sse.New` now accepts optional configuration: use `sse.New()` for the
+  previous zero-value transport, or `sse.New(sse.Config{...})` when limits are
+  needed.
 - `grx.NewServer` no longer takes a positional schema argument — use
   `grx.WithSchema(schema.Config)` in the option list.
+
+#### Validation and parsing
+
+- Parser records every variable reference while building values; a missing entry
+  in the request variable map no longer fails at parse time — undefined or
+  unused variables are rejected during validation instead.
+- Validation records variable use sites during parse and enforces that every
+  `$name` in the document is declared on the selected operation and that every
+  declared variable is used; sibling selections with the same response key must
+  not conflict on field name or arguments.
+- Built-in executable directives validate required / typed arguments where
+  implemented (`@skip` / `@include` `Boolean!` `if`, optional checks for
+  `@defer` / `@stream`).
+- `schema.Field` gains `ArgsByName` for O(1) argument metadata lookup during
+  validation (populated by `schema.Build`).
 
 ### Server &amp; Transports
 

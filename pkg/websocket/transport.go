@@ -68,6 +68,10 @@ type Config struct {
 	// pong; absence of pong combined with ReadIdleTimeout causes the
 	// connection to close.
 	PingInterval time.Duration
+
+	// MaxSubscriptions limits active operations on one WebSocket connection.
+	// Zero disables the limit.
+	MaxSubscriptions int
 }
 
 func (c Config) maxMessageSize() int64 {

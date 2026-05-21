@@ -218,6 +218,12 @@ func (d *dispatcher) startSubscription(msg message) {
 		d.conn.SendClose(wsCloseSubscriberAlreadyExists, "subscriber for id already exists")
 		return
 	}
+	if d.cfg.MaxSubscriptions > 0 && len(d.subscriptions) >= d.cfg.MaxSubscriptions {
+		d.mu.Unlock()
+		_ = d.sendError(msg.ID, fmt.Errorf("active subscription limit %d exceeded", d.cfg.MaxSubscriptions))
+		_ = d.send(message{ID: msg.ID, Type: "complete"})
+		return
+	}
 	subCtx, cancel := context.WithCancel(d.currentConnCtx())
 	d.subscriptions[msg.ID] = cancel
 	d.mu.Unlock()

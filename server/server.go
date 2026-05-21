@@ -130,6 +130,22 @@ type Config struct {
 	// operation.
 	RejectUnknownVariables bool
 
+	// MaxSelectionCount limits total selections in an operation. Zero disables
+	// the limit.
+	MaxSelectionCount int
+
+	// MaxAliasCount limits aliased fields in an operation. Zero disables the
+	// limit.
+	MaxAliasCount int
+
+	// MaxRootFieldCount limits top-level fields in an operation. Zero disables
+	// the limit.
+	MaxRootFieldCount int
+
+	// DocumentCacheSize caches parsed documents for requests without variables.
+	// Zero disables the cache.
+	DocumentCacheSize int
+
 	// SchemaSDLPath enables GET export of a minimal SDL document at this path
 	// (for example "/schema.graphql"). The empty string disables the endpoint.
 	SchemaSDLPath string
@@ -202,6 +218,18 @@ func New(config Config) (*Server, error) {
 	}
 	if config.RejectUnknownVariables {
 		execOpts = append(execOpts, exec.WithRejectUnknownVariables())
+	}
+	if config.MaxSelectionCount > 0 {
+		execOpts = append(execOpts, exec.WithMaxSelectionCount(config.MaxSelectionCount))
+	}
+	if config.MaxAliasCount > 0 {
+		execOpts = append(execOpts, exec.WithMaxAliasCount(config.MaxAliasCount))
+	}
+	if config.MaxRootFieldCount > 0 {
+		execOpts = append(execOpts, exec.WithMaxRootFieldCount(config.MaxRootFieldCount))
+	}
+	if config.DocumentCacheSize > 0 {
+		execOpts = append(execOpts, exec.WithDocumentCache(config.DocumentCacheSize))
 	}
 	executor := exec.New(schemaValue, config.Plugins, execOpts...)
 

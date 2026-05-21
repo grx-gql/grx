@@ -35,6 +35,12 @@ func coerceArguments(defs []schema.InputValue, values map[string]any) (map[strin
 }
 
 func coerceInputValue(inputType schema.Type, raw any) (any, error) {
+	if ref, ok := raw.(variableRef); ok {
+		if !ref.HasValue {
+			return coerceInputValue(inputType, nil)
+		}
+		return coerceInputValue(inputType, ref.Value)
+	}
 	switch typed := inputType.(type) {
 	case *schema.NonNull:
 		if raw == nil {

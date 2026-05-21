@@ -208,15 +208,24 @@ func TestMemoryCloseWhileSubscribersCancel(t *testing.T) {
 	bus := NewMemory()
 	const n = 32
 	channels := make([]<-chan Message, n)
+	var pendingCancel []context.CancelFunc
+	defer func() {
+		for _, c := range pendingCancel {
+			c()
+		}
+	}()
 	for i := 0; i < n; i++ {
 		ctx, cancel := context.WithCancel(context.Background())
 		ch, err := bus.Subscribe(ctx, "topic")
 		if err != nil {
+			cancel()
 			t.Fatalf("Subscribe: %v", err)
 		}
 		channels[i] = ch
 		if i%2 == 0 {
 			cancel()
+		} else {
+			pendingCancel = append(pendingCancel, cancel)
 		}
 	}
 
@@ -270,7 +279,7 @@ func TestMemoryConcurrentPublishSubscribe(t *testing.T) {
 				count++
 			case <-time.After(50 * time.Millisecond):
 				if count == messages {
-					break
+
 				}
 			}
 		}

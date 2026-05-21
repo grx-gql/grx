@@ -77,7 +77,9 @@ srv, _ := grx.NewServer(
             OnConnect:             authorize,
             PingInterval:          25 * time.Second,
         }),
-        sse.New(),
+        sse.New(sse.Config{
+            MaxActiveSubscriptions: 256,
+        }),
         // Optional: register grxhttp.New() yourself when you want to
         // place it ahead of another POST-matching transport.
         // grx.NewServer appends one automatically when you don't.
@@ -104,6 +106,7 @@ from a long-lived connection:
 | `CheckOrigin`             | Origin allowlist hook. Nil accepts every origin; production needs a real allowlist. |
 | `OnConnect`               | Auth hook. Receives the init payload, returns the per-connection context and ack data.  |
 | `PingInterval`            | If non-zero, the server emits application-level pings on this cadence.                   |
+| `MaxSubscriptions`        | Cap active `subscribe` operations per WebSocket; zero means unlimited. When exceeded, the server sends an error and `complete` for that id. |
 
 The framer enforces RFC 6455 strictly: client masking, fragmentation,
 control-frame size, reserved bits, UTF-8 validation, reserved opcodes,
@@ -111,9 +114,14 @@ and continuation ordering all map to the spec-defined close codes.
 
 ## SSE configuration
 
-`sse.New()` is intentionally minimal. It accepts both `POST` requests
-with a JSON body and `GET` requests with `query=`/`variables=`/`operationName=`
-parameters, then streams `event: next` / `event: complete` records back.
+`sse.New()` builds a transport with default limits (none). Pass
+`sse.Config{MaxActiveSubscriptions: N}` when you need a hard cap on concurrent
+SSE streams for that transport value: over-limit handshakes receive `429` with a
+JSON GraphQL error body before the `text/event-stream` response begins.
+
+The handler accepts both `POST` requests with a JSON body and `GET` requests
+with `query=`/`variables=`/`operationName=` parameters, then streams
+`event: next` / `event: complete` records back.
 
 ## When to write a custom transport
 

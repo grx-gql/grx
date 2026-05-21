@@ -5,16 +5,33 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"sync/atomic"
 
 	"github.com/patrickkabwe/grx/core"
 )
 
 // Transport streams GraphQL subscription responses over Server-Sent Events.
 // It is safe to share across requests.
-type Transport struct{}
+type Transport struct {
+	config Config
+	active int64
+}
+
+// Config tunes an SSE transport.
+type Config struct {
+	// MaxActiveSubscriptions limits concurrent SSE streams on this transport.
+	// Zero disables the limit.
+	MaxActiveSubscriptions int64
+}
 
 // New returns a Transport ready to be registered with the server.
-func New() *Transport { return &Transport{} }
+func New(cfg ...Config) *Transport {
+	t := &Transport{}
+	if len(cfg) > 0 {
+		t.config = cfg[0]
+	}
+	return t
+}
 
 // Match reports whether r is asking for a text/event-stream response.
 func (Transport) Match(r *http.Request) bool {
@@ -26,7 +43,17 @@ func (Transport) Match(r *http.Request) bool {
 
 // Serve runs the SSE response loop, forwarding each emitted Response as a
 // "next" event and closing with a "complete" event when the stream ends.
-func (Transport) Serve(w http.ResponseWriter, r *http.Request, executor core.Executor) {
+func (t *Transport) Serve(w http.ResponseWriter, r *http.Request, executor core.Executor) {
+	if t.config.MaxActiveSubscriptions > 0 {
+		next := atomic.AddInt64(&t.active, 1)
+		if next > t.config.MaxActiveSubscriptions {
+			atomic.AddInt64(&t.active, -1)
+			core.WriteJSON(w, http.StatusTooManyRequests, core.Response{Errors: []core.Error{{Message: "active SSE subscription limit exceeded"}}})
+			return
+		}
+		defer atomic.AddInt64(&t.active, -1)
+	}
+
 	body, err := readRequest(r)
 	if err != nil {
 		core.WriteJSON(w, http.StatusBadRequest, core.Response{Errors: []core.Error{{Message: err.Error()}}})

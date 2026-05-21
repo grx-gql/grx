@@ -370,9 +370,10 @@ func (b *Builder) buildMethodField(receiver any, method reflect.Method) (*Field,
 
 	fieldName := lowerFirst(method.Name)
 	field := &Field{
-		Name: fieldName,
-		Type: outputType,
-		Args: args,
+		Name:       fieldName,
+		Type:       outputType,
+		Args:       args,
+		ArgsByName: inputValueMap(args),
 		Resolver: func(ctx context.Context, params ResolveParams) (any, error) {
 			return b.callResolver(ctx, receiver, method, argsType, params.Args)
 		},
@@ -651,6 +652,17 @@ func (b *Builder) graphQLArgs(argsType reflect.Type) ([]InputValue, error) {
 		args = append(args, InputValue{Name: argName, Type: argType, DefaultValue: defaultValue})
 	}
 	return args, nil
+}
+
+func inputValueMap(values []InputValue) map[string]InputValue {
+	if len(values) == 0 {
+		return nil
+	}
+	out := make(map[string]InputValue, len(values))
+	for _, value := range values {
+		out[value.Name] = value
+	}
+	return out
 }
 
 func (b *Builder) graphQLInputType(goType reflect.Type) (Type, error) {

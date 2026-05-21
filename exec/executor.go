@@ -38,6 +38,9 @@ type Executor struct {
 	Plugins              []plugin.Plugin
 	disableIntrospection bool
 	maxSelectionDepth    int
+	maxSelectionCount    int
+	maxAliasCount        int
+	maxRootFieldCount    int
 	maskInternalErrors   bool
 	clientErrorMessage   string
 	operationAuthorizer  OperationAuthorizer
@@ -45,6 +48,10 @@ type Executor struct {
 	rateLimiter          RateLimiter
 	trustedDocuments     map[string]string
 	rejectUnknownVars    bool
+	documentCache        map[string]documentBundle
+	documentCacheOrder   []string
+	documentCacheLimit   int
+	documentCacheMu      sync.RWMutex
 }
 
 // New returns an [Executor] bound to schemaValue and plugins. plugins
@@ -90,7 +97,7 @@ func (e *Executor) Execute(ctx context.Context, req core.Request) (response core
 		return e.sendResponse(ctx, core.Response{Data: introspectionData(e.Schema, req)})
 	}
 
-	bundle, err := parseDocumentBundle(req.Query, req.Variables, e.maxSelectionDepth)
+	bundle, err := e.parseBundle(req)
 	if err != nil {
 		e.notifyError(ctx, err)
 		return e.failResponse(ctx, err)
@@ -165,7 +172,7 @@ func (e *Executor) Subscribe(ctx context.Context, req core.Request) (responses <
 		return nil, e.maskError(err, false)
 	}
 
-	bundle, err := parseDocumentBundle(req.Query, req.Variables, e.maxSelectionDepth)
+	bundle, err := e.parseBundle(req)
 	if err != nil {
 		e.notifyError(ctx, err)
 		return nil, err
@@ -269,6 +276,40 @@ func (e *Executor) Subscribe(ctx context.Context, req core.Request) (responses <
 	}()
 
 	return out, nil
+}
+
+func (e *Executor) parseBundle(req core.Request) (documentBundle, error) {
+	if e.documentCacheLimit <= 0 || len(req.Variables) > 0 {
+		return parseDocumentBundle(req.Query, req.Variables, e.maxSelectionDepth)
+	}
+	key := fmt.Sprintf("%d:%s", e.maxSelectionDepth, req.Query)
+	e.documentCacheMu.RLock()
+	if cached, ok := e.documentCache[key]; ok {
+		e.documentCacheMu.RUnlock()
+		return cached, nil
+	}
+	e.documentCacheMu.RUnlock()
+
+	bundle, err := parseDocumentBundle(req.Query, nil, e.maxSelectionDepth)
+	if err != nil {
+		return documentBundle{}, err
+	}
+
+	e.documentCacheMu.Lock()
+	defer e.documentCacheMu.Unlock()
+	if e.documentCache == nil {
+		e.documentCache = make(map[string]documentBundle, e.documentCacheLimit)
+	}
+	if _, exists := e.documentCache[key]; !exists {
+		if len(e.documentCacheOrder) >= e.documentCacheLimit {
+			oldest := e.documentCacheOrder[0]
+			e.documentCacheOrder = e.documentCacheOrder[1:]
+			delete(e.documentCache, oldest)
+		}
+		e.documentCache[key] = bundle
+		e.documentCacheOrder = append(e.documentCacheOrder, key)
+	}
+	return bundle, nil
 }
 
 func (e *Executor) sendResponse(ctx context.Context, res core.Response) core.Response {
@@ -560,6 +601,9 @@ func (e *Executor) notifyError(ctx context.Context, err error) {
 }
 
 func (e *Executor) validateDocumentSecurity(ctx context.Context, req core.Request, doc document) error {
+	if err := e.validateDocumentLimits(doc); err != nil {
+		return err
+	}
 	if e.rejectUnknownVars {
 		if err := rejectUnknownVariables(req, doc); err != nil {
 			return err
@@ -587,6 +631,53 @@ func (e *Executor) validateDocumentSecurity(ctx context.Context, req core.Reques
 		}
 	}
 	return nil
+}
+
+func (e *Executor) validateDocumentLimits(doc document) error {
+	if e.maxSelectionCount <= 0 && e.maxAliasCount <= 0 && e.maxRootFieldCount <= 0 {
+		return nil
+	}
+	stats := documentLimitStats{}
+	collectLimitStats(doc.Selections, &stats)
+	if e.maxRootFieldCount > 0 && stats.rootFields > e.maxRootFieldCount {
+		return fmt.Errorf("root field count %d exceeds limit of %d", stats.rootFields, e.maxRootFieldCount)
+	}
+	if e.maxSelectionCount > 0 && stats.selections > e.maxSelectionCount {
+		return fmt.Errorf("selection count %d exceeds limit of %d", stats.selections, e.maxSelectionCount)
+	}
+	if e.maxAliasCount > 0 && stats.aliases > e.maxAliasCount {
+		return fmt.Errorf("alias count %d exceeds limit of %d", stats.aliases, e.maxAliasCount)
+	}
+	return nil
+}
+
+type documentLimitStats struct {
+	selections int
+	aliases    int
+	rootFields int
+}
+
+func collectLimitStats(selections []selection, stats *documentLimitStats) {
+	for _, selected := range selections {
+		stats.selections++
+		if selected.isField() {
+			stats.rootFields++
+			if selected.Alias != "" {
+				stats.aliases++
+			}
+		}
+		collectNestedLimitStats(selected.Selections, stats)
+	}
+}
+
+func collectNestedLimitStats(selections []selection, stats *documentLimitStats) {
+	for _, selected := range selections {
+		stats.selections++
+		if selected.isField() && selected.Alias != "" {
+			stats.aliases++
+		}
+		collectNestedLimitStats(selected.Selections, stats)
+	}
 }
 
 func (e *Executor) validateTrustedDocument(query string) error {

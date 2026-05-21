@@ -306,9 +306,9 @@ type nonFlusherResponseWriter struct {
 	body   strings.Builder
 }
 
-func (w *nonFlusherResponseWriter) Header() http.Header        { return w.header }
+func (w *nonFlusherResponseWriter) Header() http.Header         { return w.header }
 func (w *nonFlusherResponseWriter) Write(b []byte) (int, error) { return w.body.Write(b) }
-func (w *nonFlusherResponseWriter) WriteHeader(status int)     { w.status = status }
+func (w *nonFlusherResponseWriter) WriteHeader(status int)      { w.status = status }
 
 func TestSatisfiesCoreTransport(t *testing.T) {
 	var _ core.Transport = grxsse.New()
