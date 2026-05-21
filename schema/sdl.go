@@ -209,6 +209,8 @@ func formatField(f *Field, input bool) string {
 	return sb.String()
 }
 
+func FormatSDLDefault(v any) (string, bool) { return formatSDLDefault(v) }
+
 func formatSDLDefault(v any) (string, bool) {
 	if v == nil {
 		return "", false
