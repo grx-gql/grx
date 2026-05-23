@@ -20,3 +20,4 @@ examples/**/tmp/
 .vscode/
 *.swp
 .claude/settings.local.json
+benchmark/.benchstat-results.txt
