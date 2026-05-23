@@ -27,19 +27,21 @@ bun run preview
 
 ## Layout
 
+The sidebar is grouped for readers: **Learn** (first-time path), **Guides** (task walkthroughs), **Internals** (runtime detail), **Project** (benchmarks, roadmap, changelog), then **API reference** (generated package docs).
+
 ```
 docs/
 ├── .vitepress/
 │   ├── config.ts           # site + sidebar + theme options
 │   └── theme/
 │       ├── index.ts        # extends the default theme
-│       └── custom.css      # accent tweaks
+│       └── custom.css      # accent + home layout tweaks
 ├── package.json            # bun deps + scripts
 ├── public/                 # static assets (favicon, hero image, …)
-├── index.md                # home page (layout: home)
+├── index.md                # landing (layout: home)
 ├── getting-started.md
-├── concepts/               # architecture, schema, executor, …
-├── guides/                 # task-oriented walkthroughs
+├── concepts/               # learn + internals topics
+├── guides/                 # how-to walkthroughs
 ├── reference/              # API reference (hand-maintained + mirrored)
 ├── benchmarks.md
 ├── changelog.md            # generated — see below

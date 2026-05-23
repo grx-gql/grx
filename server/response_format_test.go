@@ -1,12 +1,22 @@
 package server
 
 import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"fmt"
+	"io"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 
 	subscriptiongraph "github.com/patrickkabwe/grx/examples/subscriptions/graph"
+	"github.com/patrickkabwe/grx/exec"
 	grxclient "github.com/patrickkabwe/grx/pkg/client"
+	grxhttp "github.com/patrickkabwe/grx/pkg/http"
 	"github.com/patrickkabwe/grx/pkg/pubsub"
+	"github.com/patrickkabwe/grx/schema"
 )
 
 func TestServeHTTPReturnsRequestIDInResponseExtensions(t *testing.T) {
@@ -67,5 +77,68 @@ func TestServeHTTPRequestErrorResponseOmitsDataKeyOnWire(t *testing.T) {
 	}
 	if !strings.Contains(body, `"classification":"request"`) && !strings.Contains(body, `"classification": "request"`) {
 		t.Fatalf("expected request error classification on wire, got %s", body)
+	}
+}
+
+type nonNullErrorQuery struct{}
+
+func (nonNullErrorQuery) FailNonNull(context.Context) (string, error) {
+	return "", fmt.Errorf("non-null example error")
+}
+
+func TestServeHTTPExecutionErrorSerializesTopLevelDataNull(t *testing.T) {
+	schemaValue, err := schema.Build(schema.Config{Query: nonNullErrorQuery{}})
+	if err != nil {
+		t.Fatalf("build schema: %v", err)
+	}
+
+	fn := schemaValue.Query.Fields["failNonNull"]
+	if fn == nil {
+		t.Fatal("expected failNonNull field on query")
+	}
+	fn.Type = &schema.NonNull{OfType: schemaValue.Types["String"]}
+
+	executor := exec.New(schemaValue, nil)
+	tr := grxhttp.New(grxhttp.Config{Path: "/graphql"})
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/graphql" && r.Method == http.MethodPost {
+			tr.Serve(w, r, executor)
+			return
+		}
+		http.NotFound(w, r)
+	}))
+	t.Cleanup(ts.Close)
+
+	payload, err := json.Marshal(grxclient.Request{Query: `query Fail { failNonNull }`})
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+
+	httpResp, err := http.Post(ts.URL+"/graphql", "application/json", bytes.NewReader(payload))
+	if err != nil {
+		t.Fatalf("post: %v", err)
+	}
+	raw, err := io.ReadAll(httpResp.Body)
+	_ = httpResp.Body.Close()
+	if err != nil {
+		t.Fatalf("read body: %v", err)
+	}
+	if httpResp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d body = %s", httpResp.StatusCode, raw)
+	}
+	var body map[string]any
+	if err := json.Unmarshal(raw, &body); err != nil {
+		t.Fatalf("decode: %v body=%s", err, raw)
+	}
+	dataVal, hasData := body["data"]
+	if !hasData {
+		t.Fatalf("expected data key in execution response, got %#v", body)
+	}
+	if dataVal != nil {
+		t.Fatalf("expected data:null, got %#v", dataVal)
+	}
+	errs := graphQLErrors(t, body)
+	if len(errs) == 0 {
+		t.Fatalf("expected field errors, body=%s", raw)
 	}
 }

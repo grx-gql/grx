@@ -5,10 +5,9 @@ outline: [2, 4]
 lastUpdated: false
 ---
 
-
+# pkg/pubsub
 
 ```go
-import "github.com/patrickkabwe/grx/pkg/pubsub"
 ```
 
 Package pubsub defines the publish/subscribe primitive used by GraphQL subscription resolvers to fan messages out to connected clients.

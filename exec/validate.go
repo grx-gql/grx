@@ -434,7 +434,7 @@ func fieldArg(field *schema.Field, name string) (schema.InputValue, bool) {
 var executableDirectiveLocations = map[string]map[string]bool{
 	"skip":    {"FIELD": true, "FRAGMENT_SPREAD": true, "INLINE_FRAGMENT": true},
 	"include": {"FIELD": true, "FRAGMENT_SPREAD": true, "INLINE_FRAGMENT": true},
-	"defer":   {"FIELD": true, "FRAGMENT_SPREAD": true},
+	"defer":   {"FIELD": true, "FRAGMENT_SPREAD": true, "INLINE_FRAGMENT": true},
 	"stream":  {"FIELD": true},
 }
 

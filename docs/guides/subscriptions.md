@@ -1,18 +1,26 @@
 ---
-title: Add Subscriptions
-description: Wire up a subscription endpoint backed by both WebSocket and SSE.
-outline: [2, 3]
+title: Realtime subscriptions
+description: WebSocket and SSE transports, securing long-lived subscription connections, and pub/sub fan-out from mutations.
+outline: deep
 ---
 
+# Realtime subscriptions
+
 This guide takes the
-[Query &amp; Mutation Server](/guides/query-mutation-server) and adds a
+[Queries and mutations](/guides/query-mutation-server) walkthrough and adds a
 real-time subscription that emits a `User` value once a second over both
 WebSocket and SSE.
 
 ## 1. Add the subscription resolver
 
 ```go
-// graph/user.go (additions)
+package graph
+
+import (
+	"context"
+	"fmt"
+	"time"
+)
 
 type UserSubscription struct{}
 
@@ -51,11 +59,12 @@ when the consumer is gone before the next tick.
 ## 2. Add the subscription root
 
 ```go
-// graph/schema.go
+package graph
+
 import "github.com/patrickkabwe/grx/schema"
 
 type Subscription struct {
-    UserSubscription
+	UserSubscription
 }
 
 func NewSchema() schema.Config {
@@ -67,39 +76,50 @@ func NewSchema() schema.Config {
 }
 ```
 
-## 3. Register the transports
+## 3. Register the transports {#register-subscription-transports}
 
 Subscriptions are opt-in. With no transports configured, subscription
 endpoints return `404`. Enable WebSocket and SSE on the server:
 
 ```go
+package main
+
 import (
-    "net/http"
-    "time"
+	"log"
+	"net/http"
+	"time"
 
-    "github.com/patrickkabwe/grx"
-    "github.com/patrickkabwe/grx/pkg/sse"
-    "github.com/patrickkabwe/grx/pkg/websocket"
+	"example.com/hello-grx/graph"
+
+	"github.com/patrickkabwe/grx"
+	"github.com/patrickkabwe/grx/pkg/sse"
+	"github.com/patrickkabwe/grx/pkg/websocket"
 )
 
-srv, err := grx.NewServer(
-    grx.WithSchema(graph.NewSchema()),
-    grx.WithPlaygroundPath("/"),
-    grx.WithTransports(
-        websocket.New(websocket.Config{
-            ConnectionInitTimeout: 3 * time.Second,
-            ReadIdleTimeout:       60 * time.Second,
-            WriteTimeout:          10 * time.Second,
-            MaxMessageSize:        1 << 20,
-            CheckOrigin: func(r *http.Request) bool {
-                origin := r.Header.Get("Origin")
-                return origin == "https://app.example.com"
-            },
-            PingInterval:          25 * time.Second,
-        }),
-        sse.New(),
-    ),
-)
+func main() {
+	srv, err := grx.NewServer(
+		grx.WithSchema(graph.NewSchema()),
+		grx.WithPlaygroundPath("/"),
+		grx.WithTransports(
+			websocket.New(websocket.Config{
+				ConnectionInitTimeout: 3 * time.Second,
+				ReadIdleTimeout:       60 * time.Second,
+				WriteTimeout:          10 * time.Second,
+				MaxMessageSize:        1 << 20,
+				CheckOrigin: func(r *http.Request) bool {
+					origin := r.Header.Get("Origin")
+					return origin == "https://app.example.com"
+				},
+				PingInterval: 25 * time.Second,
+			}),
+			sse.New(),
+		),
+	)
+	if err != nil {
+		log.Fatal(err)
+	}
+	_ = srv
+}
 ```
 
 To **split** the subscription wire path from `POST /graphql` (for example
@@ -110,18 +130,36 @@ That is an organizational choice; it is also common to keep a **single**
 URL for both HTTP and `graphql-transport-ws`.
 
 ```go
-srv, err := grx.NewServer(
-    grx.WithSchema(graph.NewSchema()),
-    grx.WithPlaygroundPath("/"),
-    grx.WithSubscriptionPath("/graphql/ws"),
-    grx.WithTransports(websocket.New(/* ... */), sse.New()),
+package main
+
+import (
+	"log"
+	"time"
+
+	"example.com/hello-grx/graph"
+
+	"github.com/patrickkabwe/grx"
+	"github.com/patrickkabwe/grx/pkg/sse"
+	"github.com/patrickkabwe/grx/pkg/websocket"
 )
+
+func main() {
+	srv, err := grx.NewServer(
+		grx.WithSchema(graph.NewSchema()),
+		grx.WithPlaygroundPath("/"),
+		grx.WithSubscriptionPath("/graphql/ws"),
+		grx.WithTransports(websocket.New(websocket.Config{ReadIdleTimeout: 60 * time.Second}), sse.New()),
+	)
+	if err != nil {
+		log.Fatal(err)
+	}
+	_ = srv
+}
 ```
 
-In production you almost certainly want a real `CheckOrigin` function on
-the WebSocket transport. A nil `CheckOrigin` accepts every origin, which
-is convenient for local development but too broad for browser-facing
-deployments.
+For browser clients, treat WebSocket as a **long‑lived ingress**: lock down
+TLS, origins, connection auth, and sizing—see **[Securing subscriptions](#securing-subscriptions)**
+after the walkthrough.
 
 ## 4. Try it from the playground
 
@@ -163,27 +201,121 @@ curl -N -H "Accept: text/event-stream" \
   http://localhost:4000/graphql  # or your subscription path when split
 ```
 
-## Authentication on connect
+## Securing subscriptions
 
-For WebSocket subscriptions, the auth decision happens once when the
-client opens the connection, not per message. Wire it up via
-`websocket.Config.OnConnect`:
+Subscriptions are **another front door** beside `POST /graphql`: clients can
+keep a socket or SSE stream open indefinitely, so apply the same severity you
+would at the HTTP layer—and read **[Security](/guides/production-security)**,
+**[Authentication & authorization](/guides/auth)**, **[Limits](/guides/request-limits)**,
+and **[CORS & browsers](/guides/cors-browsers)** for the full picture.
+
+### TLS, paths, and proxies
+
+Use **`wss://`** (TLS) in production. Putting WebSocket and HTTP behind a reverse
+proxy is normal; ensure upgrade headers and idle timeouts are tuned for long
+lived connections (`WithSubscriptionPath` helps isolate subscription traffic for
+routing and WAF rules—see [section 3](#register-subscription-transports)).
+
+### Origin policy (`CheckOrigin`)
+
+Browsers send an `Origin` header on the upgrade request. A **nil** `CheckOrigin`
+accepts **every** origin (handy for localhost, unsafe on the public internet).
+Implement an allowlist keyed on `r.Header.Get("Origin")`, mirroring your CORS
+policy for `POST` GraphQL:
 
 ```go
-websocket.New(websocket.Config{
-    OnConnect: func(ctx context.Context, payload map[string]any) (context.Context, map[string]any, error) {
-        token, _ := payload["authToken"].(string)
-        user, err := authenticate(ctx, token)
-        if err != nil {
-            return nil, nil, err
-        }
-        return context.WithValue(ctx, userKey{}, user), map[string]any{"ok": true}, nil
-    },
-})
+package main
+
+import (
+	"net/http"
+
+	"github.com/patrickkabwe/grx/pkg/websocket"
+)
+
+func corsOriginExample() websocket.Config {
+	return websocket.Config{
+		CheckOrigin: func(r *http.Request) bool {
+			origin := r.Header.Get("Origin")
+			return origin == "https://app.example.com"
+		},
+	}
+}
+
 ```
 
-The returned context is propagated to every subscription on the
+### Authenticate on WebSocket connect (`OnConnect`)
+
+For **`graphql-transport-ws`**, the natural place to validate identity is
+**once per connection**, inside `websocket.Config.OnConnect`, using the
+client’s `connection_init` payload—**not** once per subscription message.
+
+```go
+package main
+
+import (
+	"context"
+
+	"github.com/patrickkabwe/grx/pkg/websocket"
+)
+
+type userKey struct{}
+
+func authenticate(ctx context.Context, token string) (any, error) {
+	// Resolve token for your deployment.
+	return "subject", nil
+}
+
+func subscriptionAuthExample() {
+	websocket.New(websocket.Config{
+		OnConnect: func(ctx context.Context, payload map[string]any) (context.Context, map[string]any, error) {
+			token, _ := payload["authToken"].(string)
+			user, err := authenticate(ctx, token)
+			if err != nil {
+				return nil, nil, err
+			}
+			return context.WithValue(ctx, userKey{}, user), map[string]any{"ok": true}, nil
+		},
+	})
+}
+
+```
+
+The returned **context** reaches every subscription resolver on that
 connection; the map becomes the `connection_ack` payload.
+
+Pair with HTTP middleware patterns from the [auth guide](/guides/auth) so the
+same **`context` values** keys are used across `Query` / `Mutation` and
+`Subscription` resolvers where possible.
+
+### SSE and HTTP-layer auth
+
+SSE uses normal HTTP requests (`Accept: text/event-stream`). **Cookies**,
+**`Authorization`**, and **path-level middleware** behave like any other
+handler: authenticate in `http.Handler` wrappers before the request reaches
+grx. You do **not** get a separate `connection_init` handshake; plan token
+refresh or short-lived streams accordingly.
+
+### Authorization for subscription fields
+
+**Operation** and **field** authorizers wired on the executor still apply to
+subscription selections. A client that passed `OnConnect` must still be
+allowed to subscribe to each field you expose—reuse the same guards you use
+for queries. See **[Authentication & authorization](/guides/auth)**.
+
+### Timeouts and abuse
+
+`websocket.Config` exposes **connection init**, **read/write**, **ping**, and
+**`MaxMessageSize`** limits—set them so a single client cannot hold unbounded
+memory or CPU (**[`websocket.Config` sample](#register-subscription-transports)**). At the edge, add
+**rate limits** and **connection quotas** the same way you would for any
+public streaming API; **[Limits](/guides/request-limits)** covers HTTP body
+and executor caps that complement subscription transports.
+
+### Fan-out isolation
+
+When using **[pub/sub](/concepts/pubsub)**, keep predicates and topic naming
+structured so tenants cannot subscribe to each other’s events—defense in depth
+beyond transport auth.
 
 ## Cross-resolver fan-out with `pubsub`
 
@@ -196,15 +328,16 @@ produced by a `postMessage` mutation. grx ships
 ### Wire a typed bus
 
 ```go
-// graph/message.go
-import (
-    "context"
-    "fmt"
-    "strings"
-    "sync/atomic"
-    "time"
+package graph
 
-    "github.com/patrickkabwe/grx/pkg/pubsub"
+import (
+	"context"
+	"fmt"
+	"strings"
+	"sync/atomic"
+	"time"
+
+	"github.com/patrickkabwe/grx/pkg/pubsub"
 )
 
 const messagePostedTopic = "message.posted"
@@ -265,32 +398,66 @@ func (s MessageSubscription) MessagePosted(ctx context.Context, args MessagePost
 ### Construct the bus once and share it
 
 ```go
-// graph/schema.go
-func NewSchema(bus pubsub.PubSub) schema.Config {
-    messages := pubsub.NewTyped[*Message](bus)
+package graph
 
-    return schema.Config{
-        Query: Query{},
-        Mutation: Mutation{
-            MessageMutation: &MessageMutation{Bus: messages},
-        },
-        Subscription: Subscription{
-            MessageSubscription: MessageSubscription{Bus: messages},
-        },
-    }
+import (
+	"github.com/patrickkabwe/grx/pkg/pubsub"
+	"github.com/patrickkabwe/grx/schema"
+)
+
+func NewSchema(bus pubsub.PubSub) schema.Config {
+	messages := pubsub.NewTyped[*Message](bus)
+
+	return schema.Config{
+		Query: Query{},
+		Mutation: Mutation{
+			MessageMutation: &MessageMutation{Bus: messages},
+		},
+		Subscription: Subscription{
+			MessageSubscription: MessageSubscription{Bus: messages},
+		},
+	}
+}
+```
+
+```go
+package main
+
+import (
+	"log"
+	"net/http"
+	"time"
+
+	"example.com/hello-grx/graph"
+
+	"github.com/patrickkabwe/grx"
+	"github.com/patrickkabwe/grx/pkg/pubsub"
+	"github.com/patrickkabwe/grx/pkg/sse"
+	"github.com/patrickkabwe/grx/pkg/websocket"
+)
+
+func allowOrigin(r *http.Request) bool {
+	origin := r.Header.Get("Origin")
+	return origin == "https://app.example.com" || origin == "http://localhost:4000"
 }
 
-// main.go
-bus := pubsub.NewMemory()
-defer bus.Close()
+func main() {
+	bus := pubsub.NewMemory()
+	defer bus.Close()
 
-srv, _ := grx.NewServer(
-    grx.WithSchema(graph.NewSchema(bus)),
-    grx.WithTransports(
-        websocket.New(websocket.Config{CheckOrigin: allowOrigin}),
-        sse.New(),
-    ),
-)
+	srv, err := grx.NewServer(
+		grx.WithSchema(graph.NewSchema(bus)),
+		grx.WithTransports(
+			websocket.New(websocket.Config{ReadIdleTimeout: 60 * time.Second, CheckOrigin: allowOrigin}),
+			sse.New(),
+		),
+	)
+	if err != nil {
+		log.Fatal(err)
+	}
+	_ = srv
+}
+
 ```
 
 ### Try it
@@ -323,13 +490,32 @@ When you outgrow a single process, swap `pubsub.NewMemory()` for the
 Redis backend — nothing else changes:
 
 ```go
+package main
+
 import (
-    redispubsub "github.com/patrickkabwe/grx/pkg/pubsub/redis"
-    "github.com/redis/go-redis/v9"
+	"log"
+
+	redisps "github.com/patrickkabwe/grx/pkg/pubsub/redis"
+
+	rd "github.com/redis/go-redis/v9"
 )
 
-rdb := redis.NewClient(&redis.Options{Addr: "localhost:6379"})
-bus, _ := redispubsub.New(redispubsub.Config{Client: rdb, Prefix: "chat:"})
+func redisBusSnippet() {
+	rdb := rd.NewClient(&rd.Options{Addr: "localhost:6379"})
+	bus, err := redisps.New(redisps.Config{Client: rdb, Prefix: "chat:"})
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	defer func() {
+		if err := bus.Close(); err != nil {
+			log.Printf("redis pubsub shutdown: %v", err)
+		}
+	}()
+
+}
+
 ```
+
 
 See [Pub/Sub](/concepts/pubsub) for the full surface.

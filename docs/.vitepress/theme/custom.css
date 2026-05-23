@@ -1,27 +1,54 @@
-/* Brand accent on top of the default VitePress theme */
-
-:root {
-  --vp-c-brand-1: #6366f1;
-  --vp-c-brand-2: #4f46e5;
-  --vp-c-brand-3: #4338ca;
-  --vp-c-brand-soft: rgba(99, 102, 241, 0.14);
+/**
+ * Top nav accents inspired by minimalist doc sites (e.g. hono.dev):
+ * highlight the active item with a warm brand tone.
+ */
+.VPNavBarMenu .VPNavBarMenuLink.active {
+  font-weight: 600;
 }
 
-.dark {
-  --vp-c-brand-1: #a5b4fc;
-  --vp-c-brand-2: #818cf8;
-  --vp-c-brand-3: #6366f1;
-  --vp-c-brand-soft: rgba(129, 140, 248, 0.16);
+.VPNavBarMenu .VPNavBarMenuLink.active .VPNavBarMenuLinkText {
+  color: var(--grx-nav-active, #c2410c);
 }
 
-/* Home hero: soft glow behind the hero image */
-.VPHero .image-bg {
-  opacity: 1;
-  filter: blur(48px);
+.dark .VPNavBarMenu .VPNavBarMenuLink.active .VPNavBarMenuLinkText {
+  color: var(--grx-nav-active-dark, #fb923c);
 }
 
-.VPHero .image-src {
-  filter: drop-shadow(
-    0 16px 40px color-mix(in oklab, var(--vp-c-brand-1) 25%, transparent)
-  );
+/* Doc body links: amber accents similar to hono.dev-style hubs. */
+.vp-doc main a:not(.header-anchor) {
+  font-weight: 500;
+  color: var(--grx-doc-link, #c2410c);
+}
+
+.dark .vp-doc main a:not(.header-anchor) {
+  color: var(--grx-doc-link-dark, #fb923c);
+}
+
+.vp-doc main a:not(.header-anchor):hover {
+  color: var(--grx-doc-link-hover, #9a3412);
+}
+
+.dark .vp-doc main a:not(.header-anchor):hover {
+  color: var(--grx-doc-link-hover-dark, #ffd6a8);
+}
+
+/* Sidebar: active leaf link — warm accent (hono-style active items). */
+#VPSidebarNav .VPSidebarItem.level-1.is-active > .item > .link > .text,
+#VPSidebarNav .VPSidebarItem.level-2.is-active > .item > .link > .text {
+  color: var(--grx-nav-active, #c2410c) !important;
+  font-weight: 600;
+}
+
+.dark #VPSidebarNav .VPSidebarItem.level-1.is-active > .item > .link > .text,
+.dark #VPSidebarNav .VPSidebarItem.level-2.is-active > .item > .link > .text {
+  color: var(--grx-nav-active-dark, #fb923c) !important;
+}
+
+/* Divider between collapsible sidebar groups (subtle) */
+#VPSidebarNav > .group + .group {
+  border-top-color: rgba(148, 163, 184, 0.2);
+}
+
+.dark #VPSidebarNav > .group + .group {
+  border-top-color: rgba(255, 255, 255, 0.06);
 }

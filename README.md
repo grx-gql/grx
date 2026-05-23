@@ -6,7 +6,7 @@
 
 Requirements:
 
-- Go `1.22+`
+- Go `1.25+` (see root `go.mod`)
 - Bun for building the [VitePress](https://vitepress.dev/) documentation site
 
 Run the basic example server:
@@ -23,6 +23,12 @@ Run the subscription example when you want pub/sub, WebSocket, and SSE wiring:
 go run ./examples/subscriptions
 ```
 
+For Bearer authentication, context-scoped identity, and a field authorizer, run:
+
+```bash
+go run ./examples/auth
+```
+
 Useful local commands:
 
 ```bash
@@ -37,6 +43,14 @@ make fmt
 Full documentation is available at:
 
 - https://patrickkabwe.github.io/grx/
+
+### AI-assisted development
+
+- **`AGENT.md`** at the repo root is the operational guide for **agents working inside this repository**.
+- **`AGENTS.md`** is a stub for tools that look for **`AGENTS.md`**; it points **`AGENT.md`** vs **`.cursor/skills/graphql-grx/`** for **app developers** importing **`grx`**.
+- **`/.cursor/skills/graphql-grx/SKILL.md`** is a reusable **Cursor skill** describing public API patterns (`schema.Config`, **`grx.NewServer`**, transports, subscriptions, hardening)—copy it to **`~/.cursor/skills/graphql-grx`** in your Go project.
+
+See **[AI assistants](https://patrickkabwe.github.io/grx/guides/ai-assistants)** on the docs site for setup steps.
 
 ## Contributing
 

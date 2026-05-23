@@ -2,10 +2,7 @@ package benchmark
 
 import "github.com/graphql-go/graphql"
 
-// newGraphQLGoSchema builds the equivalent schema using the code-first
-// graphql-go/graphql library. Idiomatic usage: explicit Object/Field
-// definitions and per-field Resolve callbacks. Resolvers return Go values
-// from the shared fixture so the comparison measures library overhead.
+// newGraphQLGoSchema builds an equivalent schema via graphql-go/graphql.
 func newGraphQLGoSchema() graphql.Schema {
 	userType := graphql.NewObject(graphql.ObjectConfig{
 		Name: "User",
@@ -40,7 +37,8 @@ func newGraphQLGoSchema() graphql.Schema {
 			"user": &graphql.Field{
 				Type: userType,
 				Args: graphql.FieldConfigArgument{
-					"id": &graphql.ArgumentConfig{Type: graphql.NewNonNull(graphql.ID)},
+					// String! matches grx's Go string resolver args (benchmark parity).
+					"id": &graphql.ArgumentConfig{Type: graphql.NewNonNull(graphql.String)},
 				},
 				Resolve: func(p graphql.ResolveParams) (any, error) {
 					id, _ := p.Args["id"].(string)
@@ -50,7 +48,7 @@ func newGraphQLGoSchema() graphql.Schema {
 			"post": &graphql.Field{
 				Type: postType,
 				Args: graphql.FieldConfigArgument{
-					"id": &graphql.ArgumentConfig{Type: graphql.NewNonNull(graphql.ID)},
+					"id": &graphql.ArgumentConfig{Type: graphql.NewNonNull(graphql.String)},
 				},
 				Resolve: func(p graphql.ResolveParams) (any, error) {
 					id, _ := p.Args["id"].(string)
@@ -67,14 +65,18 @@ func newGraphQLGoSchema() graphql.Schema {
 					return fixtureUsers(count), nil
 				},
 			},
+			"feed": &graphql.Field{
+				Type: graphql.NewNonNull(graphql.NewList(graphql.NewNonNull(postType))),
+				Args: graphql.FieldConfigArgument{
+					"limit": &graphql.ArgumentConfig{Type: graphql.NewNonNull(graphql.Int)},
+				},
+				Resolve: func(p graphql.ResolveParams) (any, error) {
+					limit, _ := p.Args["limit"].(int)
+					return fixtureFeed(limit), nil
+				},
+			},
 		},
 	})
-
-	// graphql-go's default field resolver reads exported struct fields by
-	// name, so User fields don't need explicit resolvers. The wrapping
-	// types, however, expose the data as *User pointers from the shared
-	// fixture, so we add an Email accessor only if needed via reflection
-	// fall-through provided by graphql-go.
 
 	s, err := graphql.NewSchema(graphql.SchemaConfig{Query: queryType})
 	if err != nil {

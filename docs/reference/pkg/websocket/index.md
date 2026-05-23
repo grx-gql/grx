@@ -5,10 +5,9 @@ outline: [2, 4]
 lastUpdated: false
 ---
 
-
+# pkg/websocket
 
 ```go
-import "github.com/patrickkabwe/grx/pkg/websocket"
 ```
 
 Package websocket provides an RFC 6455 WebSocket implementation tailored for GraphQL subscription transports. It implements core.Transport for both the modern graphql\-transport\-ws subprotocol and the legacy graphql\-ws \(Apollo subscriptions\-transport\-ws\) subprotocol.

@@ -5,9 +5,7 @@
 package core
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 )
 
 // Request is the executor-facing representation of a single GraphQL
@@ -27,10 +25,12 @@ type Request struct {
 }
 
 // Response is the canonical GraphQL response envelope. Either Data,
-// Errors, or both may be set. The omitempty JSON tags ensure that absent
-// fields are not serialised, matching the GraphQL spec.
+// Errors, or both may be set. [Response.MarshalJSON] serialises absent data
+// (request/validation failures) without a top-level key, partial or full null
+// data with "data":null when [Response.DataNull] is true.
 type Response struct {
 	Data        any                  `json:"data,omitempty"`
+	DataNull    bool                 `json:"-"`
 	Errors      []Error              `json:"errors,omitempty"`
 	Incremental []IncrementalPayload `json:"incremental,omitempty"`
 	HasNext     *bool                `json:"hasNext,omitempty"`
@@ -83,8 +83,14 @@ func NewOrderedObject(capacity int) *OrderedObject {
 	return &OrderedObject{fields: make([]OrderedField, 0, capacity)}
 }
 
-// Set appends a field/value pair to the object in output order.
+// Set assigns or appends a field/value pair preserving selection order.
+// Duplicates overwrite the earliest matching name.
 func (o *OrderedObject) Set(name string, value any) {
+	n := len(o.fields)
+	if n > 0 && o.fields[n-1].Name == name {
+		o.fields[n-1].Value = value
+		return
+	}
 	for index := range o.fields {
 		if o.fields[index].Name == name {
 			o.fields[index].Value = value
@@ -106,35 +112,6 @@ func (o *OrderedObject) Map() map[string]any {
 		result[field.Name] = field.Value
 	}
 	return result
-}
-
-// MarshalJSON writes the object while preserving insertion order.
-func (o *OrderedObject) MarshalJSON() ([]byte, error) {
-	var buffer bytes.Buffer
-	buffer.Grow(len(o.fields) * 16)
-	buffer.WriteByte('{')
-
-	for index, field := range o.fields {
-		if index > 0 {
-			buffer.WriteByte(',')
-		}
-
-		key, err := json.Marshal(field.Name)
-		if err != nil {
-			return nil, err
-		}
-		buffer.Write(key)
-		buffer.WriteByte(':')
-
-		value, err := json.Marshal(field.Value)
-		if err != nil {
-			return nil, err
-		}
-		buffer.Write(value)
-	}
-
-	buffer.WriteByte('}')
-	return buffer.Bytes(), nil
 }
 
 // OperationKind enumerates the three GraphQL executable operation kinds.
@@ -172,4 +149,18 @@ type Executor interface {
 	// rely on it to dispatch a single GraphQL-over-WS "subscribe" frame
 	// to either Execute or Subscribe based on the actual operation kind.
 	OperationKind(req Request) (OperationKind, error)
+}
+
+// IncrementalExecutor is an optional capability implemented by executors that
+// support GraphQL incremental delivery (@defer / @stream). Transports type-assert
+// the Executor to this interface to negotiate a multipart/mixed response.
+type IncrementalExecutor interface {
+	// HasIncrementalDirectives reports whether the operation selected by req
+	// uses @defer or @stream, so the transport can decide whether to stream an
+	// incremental-delivery response.
+	HasIncrementalDirectives(req Request) bool
+
+	// ExecuteIncremental runs the operation and returns the initial response
+	// (with HasNext set) plus the ordered incremental payloads that follow.
+	ExecuteIncremental(ctx context.Context, req Request) (Response, []IncrementalPayload)
 }

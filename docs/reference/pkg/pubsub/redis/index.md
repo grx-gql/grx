@@ -5,10 +5,9 @@ outline: [2, 4]
 lastUpdated: false
 ---
 
-
+# pkg/pubsub/redis
 
 ```go
-import "github.com/patrickkabwe/grx/pkg/pubsub/redis"
 ```
 
 Package redis is a Redis\-backed implementation of github.com/patrickkabwe/grx/pkg/pubsub.PubSub.

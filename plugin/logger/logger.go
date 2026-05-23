@@ -7,11 +7,40 @@ package logger
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
+	"time"
 
 	"github.com/patrickkabwe/grx/core"
 	"github.com/patrickkabwe/grx/plugin"
 )
+
+type requestStartedAtCtxKey struct{}
+
+func requestElapsed(ctx context.Context) (time.Duration, bool) {
+	v := ctx.Value(requestStartedAtCtxKey{})
+	if v == nil {
+		return 0, false
+	}
+	started, ok := v.(time.Time)
+	if !ok {
+		return 0, false
+	}
+	return time.Since(started), true
+}
+
+func graphqlResponseTimeAttr(d time.Duration) slog.Attr {
+	const key = "graphql.response.time"
+	switch {
+	case d >= time.Second:
+		return slog.String(key, fmt.Sprintf("%.3fs", d.Seconds()))
+	case d <= 0:
+		return slog.String(key, "0ms")
+	default:
+		ms := float64(d) / float64(time.Millisecond)
+		return slog.String(key, fmt.Sprintf("%.3fms", ms))
+	}
+}
 
 // Config configures a [Logger]. Logger is required.
 type Config struct {
@@ -39,14 +68,16 @@ func New(config Config) (*Logger, error) {
 	return &Logger{logger: config.Logger}, nil
 }
 
-// RequestStart logs that a request has begun and returns ctx unchanged.
+// RequestStart logs that a request has begun and returns a derived context that
+// records the wall-clock start time used for graphql.response.time on
+// graphql.response.send and graphql.error.
 func (l *Logger) RequestStart(ctx context.Context, req core.Request) (context.Context, error) {
 	l.logger.InfoContext(ctx, "graphql.request.start",
 		slog.String("operation_name", req.OperationName),
 		slog.Int("query_length", len(req.Query)),
 		slog.Int("variables_count", len(req.Variables)),
 	)
-	return ctx, nil
+	return context.WithValue(ctx, requestStartedAtCtxKey{}, time.Now()), nil
 }
 
 // ParsingStart logs the start of the parsing phase.
@@ -87,16 +118,22 @@ func (l *Logger) FieldResolveStart(ctx context.Context, field plugin.FieldContex
 // ResponseSend logs that a response is about to be returned to the
 // client.
 func (l *Logger) ResponseSend(ctx context.Context, res core.Response) error {
-	l.logger.InfoContext(ctx, "graphql.response.send",
+	attrs := []slog.Attr{
 		slog.Bool("has_data", res.Data != nil),
 		slog.Int("errors_count", len(res.Errors)),
-	)
+	}
+	if d, ok := requestElapsed(ctx); ok {
+		attrs = append(attrs, graphqlResponseTimeAttr(d))
+	}
+	l.logger.LogAttrs(ctx, slog.LevelInfo, "graphql.response.send", attrs...)
 	return nil
 }
 
 // Error logs an error that aborted the request.
 func (l *Logger) Error(ctx context.Context, err error) {
-	l.logger.ErrorContext(ctx, "graphql.error",
-		slog.String("error", err.Error()),
-	)
+	attrs := []slog.Attr{slog.String("error", err.Error())}
+	if d, ok := requestElapsed(ctx); ok {
+		attrs = append(attrs, graphqlResponseTimeAttr(d))
+	}
+	l.logger.LogAttrs(ctx, slog.LevelError, "graphql.error", attrs...)
 }

@@ -146,6 +146,11 @@ type Config struct {
 	// Zero disables the cache.
 	DocumentCacheSize int
 
+	// LexerCacheSize bounds an LRU map of shared token streams per normalized
+	// query. Zero means: when DocumentCacheSize is positive, use that same
+	// capacity for the lexer cache; otherwise lexer reuse is disabled.
+	LexerCacheSize int
+
 	// SchemaSDLPath enables GET export of a minimal SDL document at this path
 	// (for example "/schema.graphql"). The empty string disables the endpoint.
 	SchemaSDLPath string
@@ -230,6 +235,13 @@ func New(config Config) (*Server, error) {
 	}
 	if config.DocumentCacheSize > 0 {
 		execOpts = append(execOpts, exec.WithDocumentCache(config.DocumentCacheSize))
+	}
+	lexSize := config.LexerCacheSize
+	if lexSize <= 0 && config.DocumentCacheSize > 0 {
+		lexSize = config.DocumentCacheSize
+	}
+	if lexSize > 0 {
+		execOpts = append(execOpts, exec.WithLexerCache(lexSize))
 	}
 	executor := exec.New(schemaValue, config.Plugins, execOpts...)
 

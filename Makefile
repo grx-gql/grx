@@ -84,16 +84,34 @@ docs-clean: ## Remove the built docs site and node_modules.
 validate-issue-templates: ## Validate .github/ISSUE_TEMPLATE YAML (stdlib Ruby).
 	ruby .github/scripts/validate_issue_templates.rb
 
-## ---- Benchmark -----------------------------------------------------------
+## ---- Benchmark & profiling ----------------------------------------------
+
+PROFILE_DIR ?= .profiles
 
 .PHONY: benchmark
-benchmark: ## Run the benchmarks.
-	$(GO) test -bench=. ./...
+benchmark: ## Comparative GraphQL benchmarks (benchmark/ sibling module, -benchmem).
+	cd benchmark && $(GO) test -bench=. -benchmem ./...
 
 .PHONY: benchmark-race
-benchmark-race: ## Run the benchmarks with race detection.
-	$(GO) test -race -bench=. ./...
+benchmark-race: ## Comparative benchmarks under the race detector.
+	cd benchmark && $(GO) test -race -bench=. ./...
 
 .PHONY: benchmark-mem
-benchmark-mem: ## Run the benchmarks with memory profiling.
-	$(GO) test -bench=. -memprofile=mem.prof ./...
+benchmark-mem: ## Alias for benchmark-mem-prof (writes .profiles/benchmark-mem.prof).
+	@$(MAKE) benchmark-mem-prof
+
+.PHONY: benchmark-mem-prof
+benchmark-mem-prof: ## Comparative benchmarks + heap allocation profile (.profiles/).
+	@mkdir -p $(PROFILE_DIR)
+	cd benchmark && $(GO) test -bench=. -benchmem -memprofile=../$(PROFILE_DIR)/benchmark-mem.prof ./...
+
+.PHONY: profile-exec-lex-cpu
+profile-exec-lex-cpu: ## CPU profile exec.BenchmarkLex into .profiles/exec-lex.cpu.prof.
+	@mkdir -p $(PROFILE_DIR)
+	$(GO) test ./exec -run=^$$ -bench=BenchmarkLex -cpuprofile=$(PROFILE_DIR)/exec-lex.cpu.prof
+
+.PHONY: profile-bench-simple-grx-cpu
+profile-bench-simple-grx-cpu: ## CPU profile benchmark PersistedCompound/grx (.profiles/).
+	@mkdir -p $(PROFILE_DIR)
+	cd benchmark && $(GO) test -run=^$$ -bench='BenchmarkPersistedCompound/grx' \
+		-cpuprofile=../$(PROFILE_DIR)/bench-persisted-grx.cpu.prof ./...

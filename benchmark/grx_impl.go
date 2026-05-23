@@ -8,23 +8,6 @@ import (
 	"github.com/patrickkabwe/grx/schema"
 )
 
-// grxUser, grxPost mirror the canonical fixture types but carry the gql tags
-// the grx schema builder expects. Keeping them as separate types from the
-// neutral User/Post avoids leaking grx-specific tags into the other
-// implementations.
-type grxUser struct {
-	ID    string  `gql:"id,nonNull"`
-	Name  string  `gql:"name,nonNull"`
-	Email *string `gql:"email"`
-}
-
-type grxPost struct {
-	ID     string   `gql:"id,nonNull"`
-	Title  string   `gql:"title,nonNull"`
-	Body   string   `gql:"body,nonNull"`
-	Author *grxUser `gql:"author,nonNull"`
-}
-
 type grxIDArgs struct {
 	ID string `gql:"id,nonNull"`
 }
@@ -35,40 +18,28 @@ type grxUsersArgs struct {
 
 type grxQuery struct{}
 
-func (grxQuery) User(ctx context.Context, args grxIDArgs) (*grxUser, error) {
-	u := fixtureUser(args.ID)
-	return toGrxUser(u), nil
+func (grxQuery) User(ctx context.Context, args grxIDArgs) (*User, error) {
+	return fixtureUser(args.ID), nil
 }
 
-func (grxQuery) Post(ctx context.Context, args grxIDArgs) (*grxPost, error) {
-	return toGrxPost(fixturePost(args.ID)), nil
+func (grxQuery) Post(ctx context.Context, args grxIDArgs) (*Post, error) {
+	return fixturePost(args.ID), nil
 }
 
-func (grxQuery) Users(ctx context.Context, args grxUsersArgs) ([]*grxUser, error) {
-	src := fixtureUsers(args.Count)
-	out := make([]*grxUser, len(src))
-	for i, u := range src {
-		out[i] = toGrxUser(u)
-	}
-	return out, nil
+func (grxQuery) Users(ctx context.Context, args grxUsersArgs) ([]*User, error) {
+	// Same shape as graph-gophers: return shared fixture pointers, no copying.
+	return fixtureUsers(args.Count), nil
 }
 
-func toGrxUser(u *User) *grxUser {
-	if u == nil {
-		return nil
-	}
-	return &grxUser{ID: u.ID, Name: u.Name, Email: u.Email}
+type grxFeedArgs struct {
+	Limit int `gql:"limit,nonNull"`
 }
 
-func toGrxPost(p *Post) *grxPost {
-	if p == nil {
-		return nil
-	}
-	return &grxPost{ID: p.ID, Title: p.Title, Body: p.Body, Author: toGrxUser(p.Author)}
+func (grxQuery) Feed(ctx context.Context, args grxFeedArgs) ([]*Post, error) {
+	return fixtureFeed(args.Limit), nil
 }
 
-// newGRXExecutor builds the grx executor once so the benchmark loop only
-// measures request execution.
+// newGRXExecutor builds an executor for benchmark loops.
 func newGRXExecutor() core.Executor {
 	s, err := schema.Build(schema.Config{Query: grxQuery{}})
 	if err != nil {

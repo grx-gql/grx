@@ -5,10 +5,9 @@ outline: [2, 4]
 lastUpdated: false
 ---
 
-
+# pkg/http
 
 ```go
-import "github.com/patrickkabwe/grx/pkg/http"
 ```
 
 Package http provides the default GraphQL\-over\-HTTP\+JSON transport.

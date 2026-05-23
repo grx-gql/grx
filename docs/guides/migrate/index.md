@@ -4,6 +4,8 @@ description: Pick the right migration guide based on which Go GraphQL library yo
 outline: [2, 3]
 ---
 
+# Migrate to grx
+
 This section walks through migrating an existing Go GraphQL service to
 grx. Pick the guide that matches the library you're leaving:
 
@@ -19,16 +21,15 @@ shape intact while you switch executors.
 
 ## What you gain
 
-- **Performance.** On the [bundled benchmarks](/benchmarks), grx is
-  **~25× faster** with **22× fewer allocations** than `graphql-go` on
-  simple queries, and **~3.7× faster** with **~2.8× fewer allocations**
-  than `graph-gophers/graphql-go` on nested queries.
+- **Performance.** The [`benchmark/`](https://github.com/patrickkabwe/grx/tree/main/benchmark)
+  module compares **`Executor.Execute`** to `graphql-go` and `graph-gophers` on realistic
+  operations; profile **your** workload for decisive numbers.
 - **Zero runtime dependencies.** grx is a single Go module that imports
   only the standard library. The whole runtime is auditable, vendorable,
   and easy to upgrade.
 - **First-class subscriptions.** WebSocket (`graphql-transport-ws`) and
   Server-Sent Events transports ship in the box. See
-  [Add Subscriptions](/guides/subscriptions).
+  [Realtime subscriptions](/guides/subscriptions).
 - **Plugin lifecycle hooks** for logging, tracing, auth, and request-id
   propagation without reaching into the executor. See
   [Write a Custom Plugin](/guides/custom-plugin).

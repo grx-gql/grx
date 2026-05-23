@@ -4,6 +4,8 @@ description: Step-by-step migration from the graph-gophers/graphql-go schema-fir
 outline: [2, 3]
 ---
 
+# Migrate from graph-gophers/graphql-go
+
 [`github.com/graph-gophers/graphql-go`](https://github.com/graph-gophers/graphql-go)
 is schema-first — you ship an SDL string and a tree of resolver structs
 that mirror it. grx is code-first; the schema is *derived* from your Go
@@ -69,8 +71,8 @@ In grx the SDL doesn't exist as a string. The struct definitions in
 the next steps *are* the schema; grx derives the equivalent SDL from
 them at startup. Delete the SDL.
 
-:::caution[`@deprecated` / `@specifiedBy` directives]
-If your SDL carries directives, see the
+::: warning Builtin directives in SDL
+If your SDL carries **`@deprecated`**, **`@specifiedBy`**, or similar built-in directives, see the
 [Roadmap](/roadmap#built-in-directives) — directive support and
 description metadata aren't through the executor yet. You'll lose them
 in the migration today.
@@ -212,7 +214,7 @@ type Query struct {
 ```
 
 Each entity now lives in one file. See
-[Build a Query and Mutation Server](/guides/query-mutation-server) for
+[Queries and mutations](/guides/query-mutation-server) for
 the full pattern.
 
 ## Step 5 — Replace `graphql.ParseSchema` and `relay.Handler`

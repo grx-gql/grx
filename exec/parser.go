@@ -653,11 +653,15 @@ func (p *parser) next() token {
 	return current
 }
 
-// lex tokenises a GraphQL source string. It is the single hot path; the
-// implementation favours raw byte indexing over rune iteration and only falls
-// back to UTF-8 decoding when a non-ASCII byte is encountered.
+// lex tokenises GraphQL query text after stripping an optional UTF-8 BOM at the
 func lex(input string) ([]token, error) {
-	input = normalizeSource(input)
+	return lexNormalizedSource(normalizeSource(input))
+}
+
+// lexNormalizedSource tokenises GraphQL query text already normalised via
+// [normalizeSource]. Callers caching token slices MUST use this string as the
+// cache key.
+func lexNormalizedSource(input string) ([]token, error) {
 	// Heuristic: roughly one token per ~4 source bytes for typical operations.
 	tokens := make([]token, 0, len(input)/4+1)
 	n := len(input)
@@ -809,11 +813,33 @@ func (e parseError) GraphQLLocations() []core.Location {
 	return e.locations
 }
 
+// normalizeSource prepares GraphQL source text for lexing by stripping an
+// optional leading UTF-8 BOM and normalizing line terminators per the spec.
+//
+// The GraphQL specification (https://spec.graphql.org/October2021/#sec-Line-Terminators)
+// treats LF (U+000A), CR (U+000D), and CR LF as equivalent line terminators.
+// Collapsing CR and CR LF to a single LF lets the lexer, error-location
+// tracking, and block-string handling all operate on one canonical form.
 func normalizeSource(source string) string {
 	if len(source) >= 3 && source[0] == 0xEF && source[1] == 0xBB && source[2] == 0xBF {
-		return source[3:]
+		source = source[3:]
 	}
-	return source
+	if strings.IndexByte(source, '\r') < 0 {
+		return source
+	}
+	var b strings.Builder
+	b.Grow(len(source))
+	for i := 0; i < len(source); i++ {
+		if source[i] == '\r' {
+			b.WriteByte('\n')
+			if i+1 < len(source) && source[i+1] == '\n' {
+				i++
+			}
+			continue
+		}
+		b.WriteByte(source[i])
+	}
+	return b.String()
 }
 
 func newParseError(source string, offset int, format string, args ...any) error {

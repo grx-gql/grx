@@ -41,9 +41,14 @@ func NewValidationError(err error) Error {
 // NewFieldError builds a field execution error with path and optional
 // source location per spec Section 7.
 func NewFieldError(message string, path []any, location Location) Error {
+	pathCopy := path
+	if len(path) > 0 {
+		pathCopy = append([]any(nil), path...)
+	}
+
 	result := Error{
 		Message: message,
-		Path:    path,
+		Path:    pathCopy,
 		Extensions: map[string]any{
 			"classification": "field",
 		},

@@ -33,6 +33,7 @@ import (
 	"time"
 
 	"github.com/patrickkabwe/grx/core"
+	"github.com/patrickkabwe/grx/exec"
 	"github.com/patrickkabwe/grx/pkg/cors"
 	"github.com/patrickkabwe/grx/plugin"
 	"github.com/patrickkabwe/grx/schema"
@@ -46,6 +47,18 @@ var ErrMissingSchema = errors.New("grx.NewServer requires grx.WithSchema(...)")
 // [server.Server] so callers can refer to it without importing the
 // `server` package directly.
 type Server = server.Server
+
+// OperationContext describes the selected operation passed to [OperationAuthorizer].
+type OperationContext = exec.OperationContext
+
+// FieldAuthorizationContext describes a field about to resolve for [FieldAuthorizer].
+type FieldAuthorizationContext = exec.FieldAuthorizationContext
+
+// OperationAuthorizer runs during parsed-document validation, before field execution.
+type OperationAuthorizer = exec.OperationAuthorizer
+
+// FieldAuthorizer runs once per resolved field before the resolver executes.
+type FieldAuthorizer = exec.FieldAuthorizer
 
 // Option configures a [Server] built by [NewServer]. Options are applied
 // in the order they are supplied; later options override earlier ones for
@@ -167,6 +180,21 @@ func WithResponseGzip() Option {
 func WithPersistedQueries(queries map[string]string) Option {
 	return func(c *server.Config) {
 		c.PersistedQueries = queries
+	}
+}
+
+// WithOperationAuthorizer registers a hook invoked while validating the parsed
+// document (before any field resolves). Return a non-nil error to reject the request.
+func WithOperationAuthorizer(auth OperationAuthorizer) Option {
+	return func(c *server.Config) {
+		c.OperationAuthorizer = auth
+	}
+}
+
+// WithFieldAuthorizer registers a hook that authorizes each field before its resolver runs.
+func WithFieldAuthorizer(auth FieldAuthorizer) Option {
+	return func(c *server.Config) {
+		c.FieldAuthorizer = auth
 	}
 }
 

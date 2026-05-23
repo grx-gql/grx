@@ -1,34 +1,36 @@
 ---
-title: Schema Mapping
-description: How grx turns plain Go structs and methods into a GraphQL schema.
+title: Organize your code
+description: How to grow your Query, Mutation, and Subscription across files while keeping the same GraphQL API shape.
 outline: [2, 3]
 ---
 
-grx is a code-first GraphQL server. You don't write SDL; you write Go, and
-the `schema` package reflects your types into the metadata the executor uses
-at runtime.
+# Organize your code
 
-## Root types
+You already know [how grx maps GraphQL to Go](/concepts/schema-basics). This page is about **project layout**: where to put types and resolvers when the app gets bigger.
 
-The schema container is `schema.Config`:
+## Roots in GraphQL terms
+
+In GraphQL you always have a `Query` type; `Mutation` and `Subscription` are optional. In grx you supply Go values for those same three ideas:
+
+- **`Query`** — required. Its methods are your top-level **queries**.
+- **`Mutation`** — optional. Its methods are your top-level **mutations**.
+- **`Subscription`** — optional. Its methods are your top-level **subscriptions** (each returns a channel; see [Realtime subscriptions](/guides/subscriptions)).
+
+You bundle them in `schema.Config` and pass that to `grx.WithSchema(...)`. Most apps only set `Query`, `Mutation`, and `Subscription`. Extra slices on the same struct register enums, unions, custom scalars, and so on—see the [schema package reference](/reference/schema/#Config) when you need them.
 
 ```go
-// schema/builder.go
 type Config struct {
-    Query        any
-    Mutation     any
-    Subscription any
+    Query          any
+    Mutation       any
+    Subscription   any
+    Scalars        []ScalarConfig
+    Enums          []EnumConfig
+    Interfaces     []InterfaceConfig
+    Unions         []UnionConfig
 }
 ```
 
-`Query` is required. `Mutation` and `Subscription` are optional. Pass
-the resolver bundle via `grx.WithSchema(schema.Config{...})`; the runtime
-calls `schema.Build` for you.
-
-Each root is a plain user-defined struct; its **exported methods** become
-the fields on the corresponding root type. Method names are lowercased to
-produce the GraphQL field name — `User` becomes `user`, `CreatePost` becomes
-`createPost`.
+Each root value is a struct; **exported methods** become root fields (`CreateUser` → `createUser`).
 
 ```go
 type Query struct{}
@@ -38,12 +40,9 @@ func (Query) Hello(ctx context.Context) (string, error) {
 }
 ```
 
-That is enough to expose `{ hello }`.
+## Objects, inputs, and the `gql` tag
 
-## Object types
-
-Object types come from struct types referenced by your resolvers — either as
-return types or as nested fields on other return types.
+Output types are structs you return from resolvers. Arguments and nested inputs are structs you use as method parameters. Field names, `!`, defaults, and hiding fields use the **`gql`** tag—see [**Define your schema**](/concepts/schema-basics#gql-tags) for the full cheat sheet.
 
 ```go
 type User struct {
@@ -51,22 +50,7 @@ type User struct {
     Name  string  `gql:"name,nonNull"`
     Email *string `gql:"email"`
 }
-```
 
-The `gql` struct tag controls two things:
-
-- **Name override.** `gql:"id"` exposes the field as `id` regardless of the
-  Go field name.
-- **Non-null.** `gql:",nonNull"` (or `nonNull` in the comma list) wraps the
-  type with `!`. Pointer fields are nullable by default; non-pointer values
-  are nullable unless tagged otherwise.
-
-## Input types
-
-Resolver argument types are plain Go structs. Nested input objects work the
-same way:
-
-```go
 type UserCreateInput struct {
     Name  string  `gql:"name,nonNull"`
     Email *string `gql:"email"`
@@ -77,17 +61,11 @@ type UserCreateArgs struct {
 }
 ```
 
-A resolver receiving `UserCreateArgs` exposes a single `input` argument of
-type `UserCreateInput!`.
+## Splitting across files (embedding)
 
-## Scaling to many entities
-
-`schema.Build` enumerates root methods via `reflect.Type.NumMethod()`, which
-includes promoted methods from embedded fields. That gives you a clean
-one-file-per-entity layout:
+A common pattern: one small struct for `Query`, `Mutation`, or `Subscription` that **embeds** one struct per area of your product (`UserQuery`, `PostQuery`, …). In Go, embedded types **promote** their methods to the outer type, so those methods still become top-level GraphQL fields—no second registration step.
 
 ```go
-// graph/schema.go
 type Query struct {
     UserQuery
     PostQuery
@@ -97,56 +75,15 @@ type Mutation struct {
     UserMutation
     PostMutation
 }
-
-type Subscription struct {
-    UserSubscription
-}
 ```
 
-```go
-// graph/user.go
-type UserQuery struct{}
-func (UserQuery) User(ctx context.Context, args UserArgs) (*User, error) { /* ... */ }
+Put dependencies you need in resolvers (database pool, config, clients) on **`UserQuery`**, **`PostQuery`**, and so on—not on the tiny root struct that only embeds them.
 
-type UserMutation struct{}
-func (UserMutation) CreateUser(ctx context.Context, args UserCreateArgs) (*UserCreatePayload, error) { /* ... */ }
-```
-
-Per-entity dependencies (services, repositories, loaders) belong as fields
-on the per-entity resolver struct, not on the root types.
-
-:::caution[Method-name collisions]
-Two embedded structs that expose the same method name on the same root will
-silently lose one — `reflect` drops ambiguous methods. Treat collisions as a
-design smell and rename one side.
+::: warning Duplicate method names
+If two embedded types both expose a method with the **same** name on the same root, Go’s method rules hide one of them. Rename a resolver so each top-level field name is unique.
 :::
 
-## Built-in scalars
+## See also
 
-The following Go types map to GraphQL scalars out of the box:
-
-| Go type              | GraphQL  |
-| -------------------- | -------- |
-| `string`             | `String` |
-| `int`, `int32`       | `Int`    |
-| `float32`, `float64` | `Float`  |
-| `bool`               | `Boolean`|
-
-For nullability: pointers (`*string`, `*int`) are nullable. Non-pointer
-fields default to nullable in the absence of `nonNull`. Use the tag to
-require values.
-
-## What isn't supported yet
-
-The following are tracked on the [Roadmap](/roadmap) and are not yet
-usable:
-
-- Enum types
-- Interface types and `implements` lists
-- Union types
-- Custom scalar registration
-- Schema/type/field directives, descriptions, and deprecation metadata
-- Default argument values
-
-If you need any of these today, please file an issue on GitHub so the
-roadmap reflects the priority.
+- [Resolver methods](/concepts/resolvers) — `context`, errors, subscription streams.
+- [Roadmap](/roadmap) — feature coverage.

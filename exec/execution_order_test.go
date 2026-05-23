@@ -2,7 +2,9 @@ package exec
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -51,44 +53,46 @@ func TestMutationRootFieldsExecuteSerially(t *testing.T) {
 	}
 }
 
-type parallelQuery struct{}
+type sequentialQuerySleep struct{}
 
 var (
-	parallelPeak    int32
-	parallelCurrent int32
+	sleepPeakConcurrent int32
+	sleepCurrent        int32
 )
 
-func (parallelQuery) A(ctx context.Context) (string, error) {
-	n := atomic.AddInt32(&parallelCurrent, 1)
+func (sequentialQuerySleep) A(ctx context.Context) (string, error) {
+	n := atomic.AddInt32(&sleepCurrent, 1)
 	for {
-		old := atomic.LoadInt32(&parallelPeak)
-		if n <= old || atomic.CompareAndSwapInt32(&parallelPeak, old, n) {
+		old := atomic.LoadInt32(&sleepPeakConcurrent)
+		if n <= old || atomic.CompareAndSwapInt32(&sleepPeakConcurrent, old, n) {
 			break
 		}
 	}
 	time.Sleep(40 * time.Millisecond)
-	atomic.AddInt32(&parallelCurrent, -1)
+	atomic.AddInt32(&sleepCurrent, -1)
 	return "a", nil
 }
 
-func (parallelQuery) B(ctx context.Context) (string, error) {
-	n := atomic.AddInt32(&parallelCurrent, 1)
+func (sequentialQuerySleep) B(ctx context.Context) (string, error) {
+	n := atomic.AddInt32(&sleepCurrent, 1)
 	for {
-		old := atomic.LoadInt32(&parallelPeak)
-		if n <= old || atomic.CompareAndSwapInt32(&parallelPeak, old, n) {
+		old := atomic.LoadInt32(&sleepPeakConcurrent)
+		if n <= old || atomic.CompareAndSwapInt32(&sleepPeakConcurrent, old, n) {
 			break
 		}
 	}
 	time.Sleep(40 * time.Millisecond)
-	atomic.AddInt32(&parallelCurrent, -1)
+	atomic.AddInt32(&sleepCurrent, -1)
 	return "b", nil
 }
 
-func TestQuerySiblingFieldsMayExecuteInParallel(t *testing.T) {
-	atomic.StoreInt32(&parallelPeak, 0)
-	atomic.StoreInt32(&parallelCurrent, 0)
+// Production executor runs sibling fields sequentially (deterministic resolver
+// order; no speculative goroutine parallelism at the root selection set).
+func TestQuerySiblingFieldsExecuteSerially(t *testing.T) {
+	atomic.StoreInt32(&sleepPeakConcurrent, 0)
+	atomic.StoreInt32(&sleepCurrent, 0)
 
-	schemaValue, err := schema.Build(schema.Config{Query: parallelQuery{}})
+	schemaValue, err := schema.Build(schema.Config{Query: sequentialQuerySleep{}})
 	if err != nil {
 		t.Fatalf("build schema: %v", err)
 	}
@@ -103,11 +107,11 @@ func TestQuerySiblingFieldsMayExecuteInParallel(t *testing.T) {
 	if len(response.Errors) != 0 {
 		t.Fatalf("unexpected errors: %#v", response.Errors)
 	}
-	if atomic.LoadInt32(&parallelPeak) < 2 {
-		t.Fatalf("expected parallel sibling execution (peak concurrency %d)", parallelPeak)
+	if atomic.LoadInt32(&sleepPeakConcurrent) != 1 {
+		t.Fatalf("expected serial sibling execution (peak concurrency got %d, want 1)", sleepPeakConcurrent)
 	}
-	if elapsed >= 70*time.Millisecond {
-		t.Fatalf("expected parallel query to finish faster than serial sleep, took %v", elapsed)
+	if elapsed < 70*time.Millisecond {
+		t.Fatalf("expected ~two consecutive sleeps (>70ms serial), took %v", elapsed)
 	}
 }
 
@@ -149,8 +153,11 @@ func TestNonNullFieldErrorBubblesToParent(t *testing.T) {
 	if len(response.Errors) == 0 {
 		t.Fatal("expected field error")
 	}
-	data := responseObject(t, response.Data)
-	if data["requiredItem"] != nil {
-		t.Fatalf("expected non-null parent bubbled to null, got %#v", data["requiredItem"])
+	raw, err := json.Marshal(response)
+	if err != nil {
+		t.Fatalf("marshal response: %v", err)
+	}
+	if !strings.Contains(string(raw), `"data":null`) {
+		t.Fatalf("expected top-level data:null when non-null field bubbles, got %s", raw)
 	}
 }

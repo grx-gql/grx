@@ -223,6 +223,13 @@ func (o *Object) Kind() Kind {
 	return ObjectKind
 }
 
+// ReflectType returns the Go struct type this object was derived from when
+// the schema was built from code-first structs; arbitrary nil when the object
+// is SDL-only without a backing Go shape.
+func (o *Object) ReflectType() reflect.Type {
+	return o.goType
+}
+
 // Interface describes a GraphQL interface type.
 type Interface struct {
 	TypeName      string

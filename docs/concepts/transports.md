@@ -1,8 +1,10 @@
 ---
-title: Transports
-description: How protocol handlers attach to the server.
+title: HTTP, WebSocket, and SSE
+description: How transports attach to the server and why order matters when more than one matches a request.
 outline: [2, 3]
 ---
+
+# HTTP, WebSocket, and SSE
 
 A **transport** is a protocol implementation that sits in front of the
 executor: HTTP+JSON, WebSocket, SSE, and anything else that can carry
@@ -13,7 +15,6 @@ a transport, including the canonical `POST /graphql` JSON request.
 ## The interface
 
 ```go
-// core/transport.go
 type Transport interface {
     Match(r *http.Request) bool
     Serve(w http.ResponseWriter, r *http.Request, executor Executor)

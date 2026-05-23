@@ -91,6 +91,12 @@ func parseAcceptCandidate(part string) (acceptCandidate, bool) {
 		return acceptCandidate{mediaType: MediaTypeJSON, quality: quality}, true
 	case "*/*":
 		return acceptCandidate{mediaType: MediaTypeGraphQLResponse, quality: quality}, true
+	case "multipart/mixed":
+		// Incremental delivery clients advertise multipart/mixed. The transport
+		// upgrades to a streamed response only when the operation uses
+		// @defer/@stream; otherwise it serves a normal JSON body, so negotiate
+		// JSON here to keep the non-incremental path valid.
+		return acceptCandidate{mediaType: MediaTypeJSON, quality: quality}, true
 	default:
 		return acceptCandidate{}, false
 	}

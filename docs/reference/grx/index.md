@@ -1,11 +1,11 @@
 ---
-title: grx
+title: Package grx
 description: API reference for the top-level grx package, generated from Go doc comments.
 outline: [2, 4]
 lastUpdated: false
 ---
 
-
+# Package grx
 
 ```go
 import "github.com/patrickkabwe/grx"
@@ -44,11 +44,19 @@ Apply options in any order — only `WithSchema` is required (`grx.ErrMissingSch
 - [var ErrMissingSchema](<#ErrMissingSchema>)
 - [type Option](<#Option>)
   - [func WithGraphQLPath\(path string\) Option](<#WithGraphQLPath>)
+  - [func WithMiddleware\(middleware ...Middleware\) Option](<#WithMiddleware>)
   - [func WithPlugins\(plugins ...plugin.Plugin\) Option](<#WithPlugins>)
   - [func WithPlaygroundPath\(path string\) Option](<#WithPlaygroundPath>)
   - [func WithSchema\(schemaConfig schema.Config\) Option](<#WithSchema>)
   - [func WithSubscriptionPath\(path string\) Option](<#WithSubscriptionPath>)
   - [func WithTransports\(transports ...core.Transport\) Option](<#WithTransports>)
+  - [func WithOperationAuthorizer\(auth OperationAuthorizer\) Option](<#WithOperationAuthorizer>)
+  - [func WithFieldAuthorizer\(auth FieldAuthorizer\) Option](<#WithFieldAuthorizer>)
+- [type FieldAuthorizationContext](<#FieldAuthorizationContext>)
+- [type FieldAuthorizer](<#FieldAuthorizer>)
+- [type Middleware](<#Middleware>)
+- [type OperationAuthorizer](<#OperationAuthorizer>)
+- [type OperationContext](<#OperationContext>)
 - [type Server](<#Server>)
   - [func NewServer\(opts ...Option\) \(\*Server, error\)](<#NewServer>)
 
@@ -118,6 +126,52 @@ func WithPlaygroundPath(path string) Option
 ```go
 func WithTransports(transports ...core.Transport) Option
 ```
+
+<a name="WithMiddleware"></a>
+### func WithMiddleware
+
+```go
+func WithMiddleware(middleware ...Middleware) Option
+```
+
+<a name="WithOperationAuthorizer"></a>
+### func WithOperationAuthorizer
+
+```go
+func WithOperationAuthorizer(auth OperationAuthorizer) Option
+```
+
+<a name="WithFieldAuthorizer"></a>
+### func WithFieldAuthorizer
+
+```go
+func WithFieldAuthorizer(auth FieldAuthorizer) Option
+```
+
+<a name="Middleware"></a>
+## type Middleware
+
+Alias of [`server.Middleware`](https://pkg.go.dev/github.com/patrickkabwe/grx/server#Middleware).
+
+<a name="FieldAuthorizationContext"></a>
+## type FieldAuthorizationContext
+
+Alias of [`exec.FieldAuthorizationContext`](https://pkg.go.dev/github.com/patrickkabwe/grx/exec#FieldAuthorizationContext).
+
+<a name="OperationContext"></a>
+## type OperationContext
+
+Alias of [`exec.OperationContext`](https://pkg.go.dev/github.com/patrickkabwe/grx/exec#OperationContext).
+
+<a name="OperationAuthorizer"></a>
+## type OperationAuthorizer
+
+Runs during parsed-document validation, before resolving fields. Alias of [`exec.OperationAuthorizer`](https://pkg.go.dev/github.com/patrickkabwe/grx/exec#OperationAuthorizer).
+
+<a name="FieldAuthorizer"></a>
+## type FieldAuthorizer
+
+Runs immediately before field argument coercion / resolver invocation. Alias of [`exec.FieldAuthorizer`](https://pkg.go.dev/github.com/patrickkabwe/grx/exec#FieldAuthorizer).
 
 <a name="Server"></a>
 ## type Server

@@ -61,7 +61,7 @@ func introspectionBuiltinDirectives() []any {
 			{Name: "url", Type: &schema.NonNull{OfType: strType}},
 		}),
 		introspectionDirectiveRepeatable("oneOf", []string{"INPUT_OBJECT"}, nil, false),
-		introspectionDirectiveRepeatable("defer", []string{"FRAGMENT_SPREAD", "FIELD"}, []schema.InputValue{
+		introspectionDirectiveRepeatable("defer", []string{"FRAGMENT_SPREAD", "INLINE_FRAGMENT", "FIELD"}, []schema.InputValue{
 			{Name: "if", Type: boolType, DefaultValue: true},
 			{Name: "label", Type: strType},
 		}, false),

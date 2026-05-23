@@ -67,3 +67,34 @@ func TestResponseMarshalsIncrementalPayloadFields(t *testing.T) {
 		t.Fatalf("expected label friends-stream, got %#v", entry["label"])
 	}
 }
+
+func TestResponseMarshalJSONIncludesDataNull(t *testing.T) {
+	payload := Response{
+		DataNull: true,
+		Errors:   []Error{{Message: "field failed"}},
+	}
+	raw, err := json.Marshal(payload)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	var decoded map[string]any
+	if err := json.Unmarshal(raw, &decoded); err != nil {
+		t.Fatalf("unmap: %v", err)
+	}
+	if data, ok := decoded["data"]; !ok {
+		t.Fatal("missing data key")
+	} else if data != nil {
+		t.Fatalf("expected decoded data null any, got %#v", data)
+	}
+
+	var round Response
+	if err := json.Unmarshal(raw, &round); err != nil {
+		t.Fatalf("unmarshal into Response: %v", err)
+	}
+	if !round.DataNull || round.Data != nil {
+		t.Fatalf("round-trip Data/DataNull mismatch: Data=%#v DataNull=%v", round.Data, round.DataNull)
+	}
+	if len(round.Errors) != 1 || round.Errors[0].Message != "field failed" {
+		t.Fatalf("errors mismatch: %#v", round.Errors)
+	}
+}

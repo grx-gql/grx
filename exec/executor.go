@@ -2,6 +2,9 @@
 // introspection fast-path. It is the hot per-request execution path and
 // is deliberately transport-agnostic: callers communicate with the
 // executor through [core.Request] and [core.Response].
+//
+// Resolver runs are ordered: sibling fields execute sequentially within each
+// selection set (deterministic semantics for side-effecting code).
 package exec
 
 import (
@@ -12,6 +15,7 @@ import (
 	"fmt"
 	"reflect"
 	"runtime/debug"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -24,11 +28,6 @@ import (
 // document defines a subscription operation. Subscriptions must be run
 // through [Executor.Subscribe] so callers receive a streaming channel.
 var ErrSubscriptionOperation = errors.New("subscription operations must use the streaming Subscribe entry point")
-
-const (
-	parallelFieldThreshold       = 2
-	maxConcurrentFieldGoroutines = 64
-)
 
 // Executor runs GraphQL operations against a built [schema.Schema] and
 // notifies the registered plugins at each lifecycle phase. It satisfies
@@ -52,6 +51,11 @@ type Executor struct {
 	documentCacheOrder   []string
 	documentCacheLimit   int
 	documentCacheMu      sync.RWMutex
+
+	lexTokenCache map[string][]token
+	lexCacheOrder []string
+	lexCacheLimit int
+	lexMu         sync.RWMutex
 }
 
 // New returns an [Executor] bound to schemaValue and plugins. plugins
@@ -80,75 +84,110 @@ func (e *Executor) Execute(ctx context.Context, req core.Request) (response core
 		}
 	}()
 
-	ctx, err := e.startRequest(ctx, req)
-	if err != nil {
-		return e.failResponse(ctx, e.maskError(err, false))
-	}
-	if err := e.notifyParsing(ctx, req); err != nil {
-		return e.failResponse(ctx, e.maskError(err, false))
+	preparedCtx, root, doc, short := e.prepareExecution(ctx, req)
+	ctx = preparedCtx
+	if short != nil {
+		return *short
 	}
 
-	if isIntrospectionQuery(req.Query) {
-		if e.disableIntrospection {
-			err := fmt.Errorf("introspection is disabled")
-			e.notifyError(ctx, err)
-			return e.failResponse(ctx, err)
-		}
-		return e.sendResponse(ctx, core.Response{Data: introspectionData(e.Schema, req)})
-	}
-
-	bundle, err := e.parseBundle(req)
-	if err != nil {
-		e.notifyError(ctx, err)
-		return e.failResponse(ctx, err)
-	}
-	doc, err := selectOperation(bundle, req.OperationName)
-	if err != nil {
-		e.notifyError(ctx, err)
-		return e.failResponse(ctx, err)
-	}
-	if verrs := ValidateDocument(e.Schema, bundle, doc); len(verrs) > 0 {
-		return e.validationFailResponse(ctx, verrs)
-	}
-	if err := e.validateDocumentSecurity(ctx, req, doc); err != nil {
-		e.notifyError(ctx, err)
-		return e.failResponse(ctx, e.maskError(err, false))
-	}
-
-	if doc.Kind == operationSubscription {
-		e.notifyError(ctx, ErrSubscriptionOperation)
-		return e.failResponse(ctx, ErrSubscriptionOperation)
-	}
-
-	if err := e.notifyValidation(ctx, req); err != nil {
-		return e.failResponse(ctx, err)
-	}
-	if err := e.notifyExecution(ctx, req); err != nil {
-		return e.failResponse(ctx, err)
-	}
-
-	ctx = withFieldExecutionMode(ctx, doc.Kind == operationMutation)
-
-	root, err := e.rootObject(doc.Kind)
-	if err != nil {
-		e.notifyError(ctx, err)
-		return e.failResponse(ctx, e.maskError(err, false))
-	}
+	ctx = withPathArena(ctx)
+	defer recyclePathArena(ctx)
 
 	data, fieldErrors := e.executeSelectionSet(ctx, root, nil, doc.Selections, doc.Fragments, nil)
-	res := core.Response{Data: data, Errors: fieldErrors}
+	res := core.Response{Errors: fieldErrors}
+	if data == nil && len(fieldErrors) > 0 {
+		res.DataNull = true
+	} else {
+		res.Data = data
+	}
 	if len(fieldErrors) == 0 {
 		res.Errors = nil
 	}
 	return e.sendResponse(ctx, res)
 }
 
+// prepareExecution runs the shared query/mutation preamble: request start,
+// parsing, introspection short-circuit, parsing/validation/security checks, and
+// root-object resolution. It returns the (possibly updated) context plus the
+// root object and selected operation. When a non-nil *core.Response is
+// returned, the caller must return it directly — it represents an introspection
+// result or a request-level failure that ends the operation early.
+func (e *Executor) prepareExecution(ctx context.Context, req core.Request) (context.Context, *schema.Object, document, *core.Response) {
+	ctx, err := e.startRequest(ctx, req)
+	if err != nil {
+		return e.shortResponse(ctx, e.maskError(err, false))
+	}
+	if err := e.notifyParsing(ctx, req); err != nil {
+		return e.shortResponse(ctx, e.maskError(err, false))
+	}
+
+	if isIntrospectionQuery(req.Query) {
+		if e.disableIntrospection {
+			err := fmt.Errorf("introspection is disabled")
+			e.notifyError(ctx, err)
+			return e.shortResponse(ctx, err)
+		}
+		res := e.sendResponse(ctx, core.Response{Data: introspectionData(e.Schema, req)})
+		return ctx, nil, document{}, &res
+	}
+
+	bundle, err := e.parseBundle(req)
+	if err != nil {
+		e.notifyError(ctx, err)
+		return e.shortResponse(ctx, err)
+	}
+	doc, err := selectOperation(bundle, req.OperationName)
+	if err != nil {
+		e.notifyError(ctx, err)
+		return e.shortResponse(ctx, err)
+	}
+	if verrs := ValidateDocument(e.Schema, bundle, doc); len(verrs) > 0 {
+		res := e.validationFailResponse(ctx, verrs)
+		return ctx, nil, document{}, &res
+	}
+	if err := e.validateDocumentSecurity(ctx, req, doc); err != nil {
+		e.notifyError(ctx, err)
+		return e.shortResponse(ctx, e.maskError(err, false))
+	}
+
+	if doc.Kind == operationSubscription {
+		e.notifyError(ctx, ErrSubscriptionOperation)
+		return e.shortResponse(ctx, ErrSubscriptionOperation)
+	}
+
+	if err := e.notifyValidation(ctx, req); err != nil {
+		return e.shortResponse(ctx, err)
+	}
+	if err := e.notifyExecution(ctx, req); err != nil {
+		return e.shortResponse(ctx, err)
+	}
+
+	root, err := e.rootObject(doc.Kind)
+	if err != nil {
+		e.notifyError(ctx, err)
+		return e.shortResponse(ctx, e.maskError(err, false))
+	}
+	return ctx, root, doc, nil
+}
+
+func (e *Executor) shortResponse(ctx context.Context, err error) (context.Context, *schema.Object, document, *core.Response) {
+	res := e.failResponse(ctx, err)
+	return ctx, nil, document{}, &res
+}
+
 // OperationKind parses req and reports the kind of the selected operation.
 // It performs no plugin notifications and runs no resolvers, so transports
 // can call it cheaply to decide whether to dispatch a request to Execute
-// or Subscribe.
+// or Subscribe. With [WithLexerCache], tokenisation is LRU-cached per
+// normalised query so a transport that checks OperationKind before Execute can
+// share one lexical pass across both steps.
 func (e *Executor) OperationKind(req core.Request) (core.OperationKind, error) {
-	return parseOperationKind(req.Query, req.OperationName)
+	source := normalizeSource(req.Query)
+	tokens, err := e.sharedLexNormalized(source)
+	if err != nil {
+		return "", err
+	}
+	return operationKindFromTokens(source, tokens, req.OperationName)
 }
 
 // Subscribe parses a subscription operation, invokes the source-stream resolver,
@@ -203,7 +242,7 @@ func (e *Executor) Subscribe(ctx context.Context, req core.Request) (responses <
 		return nil, err
 	}
 
-	flat, flatErrs := e.flattenSelections(root, doc.Selections, doc.Fragments)
+	flat, _, flatErrs := e.flattenSelections(false, root, doc.Selections, doc.Fragments)
 	if len(flatErrs) > 0 {
 		return nil, errors.New(flatErrs[0].Message)
 	}
@@ -224,8 +263,6 @@ func (e *Executor) Subscribe(ctx context.Context, req core.Request) (responses <
 	if err := e.notifyExecution(ctx, req); err != nil {
 		return nil, err
 	}
-
-	ctx = withFieldExecutionMode(ctx, true)
 
 	source, err := field.Resolver(ctx, schema.ResolveParams{Args: rootField.Arguments})
 	if err != nil {
@@ -280,9 +317,10 @@ func (e *Executor) Subscribe(ctx context.Context, req core.Request) (responses <
 
 func (e *Executor) parseBundle(req core.Request) (documentBundle, error) {
 	if e.documentCacheLimit <= 0 || len(req.Variables) > 0 {
-		return parseDocumentBundle(req.Query, req.Variables, e.maxSelectionDepth)
+		return parseDocumentBundleWithLexer(e, req.Query, req.Variables, e.maxSelectionDepth)
 	}
-	key := fmt.Sprintf("%d:%s", e.maxSelectionDepth, req.Query)
+	normQuery := normalizeSource(req.Query)
+	key := fmt.Sprintf("%d:%s", e.maxSelectionDepth, normQuery)
 	e.documentCacheMu.RLock()
 	if cached, ok := e.documentCache[key]; ok {
 		e.documentCacheMu.RUnlock()
@@ -290,7 +328,7 @@ func (e *Executor) parseBundle(req core.Request) (documentBundle, error) {
 	}
 	e.documentCacheMu.RUnlock()
 
-	bundle, err := parseDocumentBundle(req.Query, nil, e.maxSelectionDepth)
+	bundle, err := parseDocumentBundleWithLexer(e, req.Query, nil, e.maxSelectionDepth)
 	if err != nil {
 		return documentBundle{}, err
 	}
@@ -310,6 +348,42 @@ func (e *Executor) parseBundle(req core.Request) (documentBundle, error) {
 		e.documentCacheOrder = append(e.documentCacheOrder, key)
 	}
 	return bundle, nil
+}
+
+func (e *Executor) sharedLexNormalized(source string) ([]token, error) {
+	if e.lexCacheLimit <= 0 {
+		return lexNormalizedSource(source)
+	}
+
+	e.lexMu.RLock()
+	if tokens, ok := e.lexTokenCache[source]; ok {
+		e.lexMu.RUnlock()
+		return tokens, nil
+	}
+	e.lexMu.RUnlock()
+
+	tokens, err := lexNormalizedSource(source)
+	if err != nil {
+		return nil, err
+	}
+
+	e.lexMu.Lock()
+	defer e.lexMu.Unlock()
+
+	if cached, dup := e.lexTokenCache[source]; dup {
+		return cached, nil
+	}
+	if e.lexTokenCache == nil {
+		e.lexTokenCache = make(map[string][]token, e.lexCacheLimit)
+	}
+	if len(e.lexCacheOrder) >= e.lexCacheLimit {
+		evictKey := e.lexCacheOrder[0]
+		e.lexCacheOrder = e.lexCacheOrder[1:]
+		delete(e.lexTokenCache, evictKey)
+	}
+	e.lexTokenCache[source] = tokens
+	e.lexCacheOrder = append(e.lexCacheOrder, source)
+	return tokens, nil
 }
 
 func (e *Executor) sendResponse(ctx context.Context, res core.Response) core.Response {
@@ -345,67 +419,52 @@ func (e *Executor) rootObject(kind operationKind) (*schema.Object, error) {
 	}
 }
 
-func (e *Executor) executeSelectionSet(ctx context.Context, object *schema.Object, source any, selections []selection, fragments map[string]*fragmentDef, path []any) (*core.OrderedObject, []core.Error) {
-	flat, flatErrs := e.flattenSelections(object, selections, fragments)
-	errors := append([]core.Error{}, flatErrs...)
-
-	data := core.NewOrderedObject(len(flat))
-	if fieldExecutionSerial(ctx) || len(path) > 0 || len(flat) < parallelFieldThreshold {
-		for _, selected := range flat {
-			key, value, fieldErrors, ok := e.resolveSelectedField(ctx, object, source, selected, fragments, path)
-			if len(fieldErrors) > 0 {
-				errors = append(errors, fieldErrors...)
-			}
-			if !ok {
-				continue
-			}
-			data.Set(key, value)
-		}
-		return data, errors
-	}
-
-	type resolvedField struct {
-		index  int
-		key    string
-		value  any
-		errors []core.Error
-		ok     bool
-	}
-
-	results := make([]resolvedField, len(flat))
-	var wg sync.WaitGroup
-	limit := maxConcurrentFieldGoroutines
-	if len(flat) < limit {
-		limit = len(flat)
-	}
-	sem := make(chan struct{}, limit)
-	for index, selected := range flat {
-		wg.Add(1)
-		sem <- struct{}{}
-		go func(index int, selected selection) {
-			defer func() {
-				<-sem
-				wg.Done()
-			}()
-			key, value, fieldErrors, ok := e.resolveSelectedField(ctx, object, source, selected, fragments, path)
-			results[index] = resolvedField{index: index, key: key, value: value, errors: fieldErrors, ok: ok}
-		}(index, selected)
-	}
-	wg.Wait()
-
-	for _, result := range results {
-		if len(result.errors) > 0 {
-			errors = append(errors, result.errors...)
-		}
-		if !result.ok {
-			continue
-		}
-		data.Set(result.key, result.value)
+func finalizeSelectionObject(data *core.OrderedObject, errors []core.Error) (*core.OrderedObject, []core.Error) {
+	if len(errors) > 0 && len(data.Fields()) == 0 {
+		return nil, errors
 	}
 	return data, errors
 }
 
-func (e *Executor) resolveSelectedField(ctx context.Context, object *schema.Object, source any, selected selection, fragments map[string]*fragmentDef, path []any) (string, any, []core.Error, bool) {
+func isNullableGraphQLType(t schema.Type) bool {
+	_, isNN := t.(*schema.NonNull)
+	return !isNN
+}
+
+func (e *Executor) executeSelectionSet(ctx context.Context, object *schema.Object, source any, selections []selection, fragments map[string]*fragmentDef, path []any) (*core.OrderedObject, []core.Error) {
+	arena := lookupPathArena(ctx)
+	collector := (*incrementalCollector)(nil)
+	if arena != nil {
+		collector = arena.collector
+	}
+
+	flat, defers, flatErrs := e.flattenSelections(collector != nil, object, selections, fragments)
+	var errors []core.Error
+	if len(flatErrs) > 0 {
+		errors = append(errors, flatErrs...)
+	}
+
+	if collector != nil {
+		for _, d := range defers {
+			collector.addDefer(object, source, d.selections, fragments, clonePath(path), d.label)
+		}
+	}
+
+	data := core.NewOrderedObject(len(flat))
+	for _, selected := range flat {
+		key, value, fieldErrors, wire := e.resolveSelectedField(ctx, object, source, selected, fragments, path, arena)
+		if len(fieldErrors) > 0 {
+			errors = append(errors, fieldErrors...)
+		}
+		if !wire {
+			continue
+		}
+		data.Set(key, value)
+	}
+	return finalizeSelectionObject(data, errors)
+}
+
+func (e *Executor) resolveSelectedField(ctx context.Context, object *schema.Object, source any, selected selection, fragments map[string]*fragmentDef, path []any, arena *pathArena) (string, any, []core.Error, bool) {
 	if err := ctx.Err(); err != nil {
 		return "", nil, []core.Error{newFieldError(err.Error(), path, core.Location{})}, false
 	}
@@ -419,15 +478,22 @@ func (e *Executor) resolveSelectedField(ctx context.Context, object *schema.Obje
 	if !ok {
 		return key, nil, []core.Error{newFieldError(
 			fmt.Sprintf(`Cannot query field "%s" on type "%s".`, selected.Name, object.Name()),
-			appendPath(path, key), selected.Location)}, false
+			extendAppendedPath(arena, path, key), selected.Location)}, false
 	}
 
-	fieldPath := appendPath(path, key)
+	fieldPath := extendAppendedPath(arena, path, key)
+
+	needPathStrings := e.fieldAuthorizer != nil || len(e.Plugins) > 0
+	var pathParts []string
+	if needPathStrings {
+		pathParts = pathStrings(fieldPath)
+	}
+
 	if e.fieldAuthorizer != nil {
 		err := e.fieldAuthorizer(ctx, FieldAuthorizationContext{
 			ParentType: object.Name(),
 			FieldName:  selected.Name,
-			Path:       pathStrings(fieldPath),
+			Path:       pathParts,
 		})
 		if err != nil {
 			e.notifyError(ctx, err)
@@ -436,7 +502,7 @@ func (e *Executor) resolveSelectedField(ctx context.Context, object *schema.Obje
 	}
 
 	for _, hook := range e.Plugins {
-		if err := hook.FieldResolveStart(ctx, plugin.FieldContext{Path: pathStrings(fieldPath), FieldName: selected.Name}); err != nil {
+		if err := hook.FieldResolveStart(ctx, plugin.FieldContext{Path: pathParts, FieldName: selected.Name}); err != nil {
 			e.notifyError(ctx, err)
 			return key, nil, []core.Error{newFieldError(e.maskError(err, false).Error(), fieldPath, selected.Location)}, false
 		}
@@ -448,14 +514,41 @@ func (e *Executor) resolveSelectedField(ctx context.Context, object *schema.Obje
 		return key, nil, []core.Error{newFieldError(e.maskError(err, false).Error(), fieldPath, selected.Location)}, false
 	}
 
-	value, err := field.Resolver(ctx, schema.ResolveParams{Source: source, Args: args})
-	if err != nil {
-		e.notifyError(ctx, err)
-		return key, nil, []core.Error{newFieldError(e.maskError(err, true).Error(), fieldPath, selected.Location)}, false
+	value, resolverErr := field.Resolver(ctx, schema.ResolveParams{Source: source, Args: args})
+	var resolverMsgs []core.Error
+	if resolverErr != nil {
+		e.notifyError(ctx, resolverErr)
+		resolverMsgs = []core.Error{newFieldError(e.maskError(resolverErr, true).Error(), fieldPath, selected.Location)}
+		value = nil
 	}
 
-	resolved, nestedErrors := e.completeValue(ctx, field.Type, value, selected.Selections, fragments, fieldPath)
-	return key, resolved, nestedErrors, true
+	var resolved any
+	var nestedErrors []core.Error
+	streamed := false
+	if collector := arenaCollector(arena); collector != nil && resolverErr == nil && value != nil {
+		if active, initialCount, label := streamDirective(selected.Directives); active {
+			if itemType, ok := listItemType(field.Type); ok {
+				resolved, nestedErrors = e.completeListStreamed(ctx, itemType, value, selected.Selections, fragments, fieldPath, initialCount, label, collector)
+				streamed = true
+			}
+		}
+	}
+	if !streamed {
+		resolved, nestedErrors = e.completeValue(ctx, field.Type, value, selected.Selections, fragments, fieldPath)
+	}
+	errs := append(resolverMsgs, nestedErrors...)
+	var wire bool
+	switch {
+	case resolverErr != nil:
+		wire = false // omit nullable key so root can serialize as full data:null
+	case len(errs) == 0:
+		wire = true
+	case resolved == nil && !isNullableGraphQLType(field.Type):
+		wire = false
+	default:
+		wire = true
+	}
+	return key, resolved, errs, wire
 }
 
 func (e *Executor) completeValue(ctx context.Context, fieldType schema.Type, value any, selections []selection, fragments map[string]*fragmentDef, path []any) (any, []core.Error) {
@@ -526,7 +619,9 @@ func (e *Executor) completeValue(ctx context.Context, fieldType schema.Type, val
 	}
 }
 
-func (e *Executor) completeList(ctx context.Context, itemType schema.Type, value any, selections []selection, fragments map[string]*fragmentDef, path []any) ([]any, []core.Error) {
+func (e *Executor) completeList(ctx context.Context, itemType schema.Type, value any, selections []selection, fragments map[string]*fragmentDef, path []any) (any, []core.Error) {
+	arena := lookupPathArena(ctx)
+
 	raw := reflect.ValueOf(value)
 	if raw.Kind() == reflect.Pointer {
 		raw = raw.Elem()
@@ -537,18 +632,42 @@ func (e *Executor) completeList(ctx context.Context, itemType schema.Type, value
 		return nil, []core.Error{newFieldError(e.maskError(err, true).Error(), path, core.Location{})}
 	}
 
-	items := make([]any, 0, raw.Len())
-	errors := []core.Error{}
-	for index := 0; index < raw.Len(); index++ {
-		if err := ctx.Err(); err != nil {
-			return items, append(errors, newFieldError(err.Error(), path, core.Location{}))
+	n := raw.Len()
+
+	if gqlObj, ok := schemaObjectLeaf(itemType); ok {
+		got := raw.Type().Elem()
+		want := gqlObj.ReflectType()
+		if want != nil && got.Kind() == reflect.Pointer && got.AssignableTo(reflect.PointerTo(want)) {
+			objs := make([]*core.OrderedObject, n)
+			var errors []core.Error
+			for index := 0; index < n; index++ {
+				if err := ctx.Err(); err != nil {
+					return objs[:index], append(errors, newFieldError(err.Error(), path, core.Location{}))
+				}
+				itemPath := extendAppendedPath(arena, path, index)
+				item, itemErrors := e.executeSelectionSet(ctx, gqlObj, raw.Index(index).Interface(), selections, fragments, itemPath)
+				objs[index] = item
+				if len(itemErrors) > 0 {
+					errors = append(errors, itemErrors...)
+				}
+			}
+			return objs, errors
 		}
-		itemPath := appendPath(path, index)
-		item, itemErrors := e.completeValue(ctx, itemType, raw.Index(index).Interface(), selections, fragments, itemPath)
-		items = append(items, item)
-		errors = append(errors, itemErrors...)
 	}
 
+	items := make([]any, n)
+	var errors []core.Error
+	for index := 0; index < n; index++ {
+		if err := ctx.Err(); err != nil {
+			return items[:index], append(errors, newFieldError(err.Error(), path, core.Location{}))
+		}
+		itemPath := extendAppendedPath(arena, path, index)
+		item, itemErrors := e.completeValue(ctx, itemType, raw.Index(index).Interface(), selections, fragments, itemPath)
+		items[index] = item
+		if len(itemErrors) > 0 {
+			errors = append(errors, itemErrors...)
+		}
+	}
 	return items, errors
 }
 
@@ -733,19 +852,64 @@ func (e *Executor) maskError(err error, internal bool) error {
 	return errors.New(message)
 }
 
+func schemaObjectLeaf(t schema.Type) (*schema.Object, bool) {
+	for {
+		switch x := t.(type) {
+		case *schema.NonNull:
+			t = x.OfType
+		case *schema.Object:
+			return x, true
+		default:
+			return nil, false
+		}
+	}
+}
+
 func appendPath(path []any, item any) []any {
-	next := make([]any, 0, len(path)+1)
-	next = append(next, path...)
-	next = append(next, item)
+	next := make([]any, len(path)+1)
+	copy(next, path)
+	next[len(path)] = item
 	return next
 }
 
 func pathStrings(path []any) []string {
-	result := make([]string, 0, len(path))
-	for _, item := range path {
-		result = append(result, fmt.Sprint(item))
+	if len(path) == 0 {
+		return nil
+	}
+	result := make([]string, len(path))
+	for index, item := range path {
+		result[index] = pathSegmentString(item)
 	}
 	return result
+}
+
+func pathSegmentString(segment any) string {
+	switch typed := segment.(type) {
+	case string:
+		return typed
+	case int:
+		return strconv.Itoa(typed)
+	case int8:
+		return strconv.Itoa(int(typed))
+	case int16:
+		return strconv.Itoa(int(typed))
+	case int32:
+		return strconv.FormatInt(int64(typed), 10)
+	case int64:
+		return strconv.FormatInt(typed, 10)
+	case uint:
+		return strconv.FormatUint(uint64(typed), 10)
+	case uint8:
+		return strconv.FormatUint(uint64(typed), 10)
+	case uint16:
+		return strconv.FormatUint(uint64(typed), 10)
+	case uint32:
+		return strconv.FormatUint(uint64(typed), 10)
+	case uint64:
+		return strconv.FormatUint(typed, 10)
+	default:
+		return fmt.Sprint(segment)
+	}
 }
 
 func (e *Executor) failResponse(ctx context.Context, err error) core.Response {
