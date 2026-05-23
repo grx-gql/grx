@@ -1,14 +1,16 @@
 ---
-title: Build a Query and Mutation Server
-description: A walkthrough that builds a small grx server with both queries and mutations, organised by entity.
+title: Queries and mutations
+description: Build a small GraphQL API with multiple entities—queries, mutations, and clean file layout.
 outline: [2, 3]
 ---
 
-This guide builds the `examples/basic` shape from scratch: a `User` and a
-`Post` entity, each with its own query and mutation surface, composed into
-the root types via embedding.
+# Queries and mutations
 
-## Layout
+This guide builds a small server with a `User` and a `Post` entity, each
+with its own query and mutation surface, composed into the root types via
+embedding.
+
+If you think in GraphQL SDL, you are building two object types plus `Query` and `Mutation` roots; in grx that is the same shape, but each entity’s resolvers live in one Go file and get **composed** into the roots with embedding instead of a central “register everything” list.
 
 ```
 hello-grx/
@@ -210,6 +212,8 @@ query {
 
 1. Create `graph/<entity>.go` with the entity struct, input/payload
    structs, `XQuery`, and `XMutation`.
-2. Embed `XQuery` in `Query` and `XMutation` in `Mutation` in
-   `graph/schema.go`.
-3. That's it — no central registration step.
+
+## See also
+
+- **[Testing with the HTTP client](/guides/testing)** — **`httptest.Server`** plus **`pkg/client`** for integration tests against your handler.
+

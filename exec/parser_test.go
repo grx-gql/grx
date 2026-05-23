@@ -571,6 +571,51 @@ func TestLexStripsBOM(t *testing.T) {
 	}
 }
 
+func TestNormalizeSourceLineTerminators(t *testing.T) {
+	cases := []struct {
+		name string
+		in   string
+		want string
+	}{
+		{"crlf", "a\r\nb", "a\nb"},
+		{"lone cr", "a\rb", "a\nb"},
+		{"mixed", "a\r\nb\rc\nd", "a\nb\nc\nd"},
+		{"trailing cr", "a\r", "a\n"},
+		{"bom and crlf", "\uFEFFa\r\nb", "a\nb"},
+		{"no cr fast path", "a\nb", "a\nb"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := normalizeSource(tc.in); got != tc.want {
+				t.Fatalf("normalizeSource(%q) = %q, want %q", tc.in, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestLocationTrackingAfterCRLFNormalization(t *testing.T) {
+	// A CRLF-delimited document must report the same line/column as its
+	// LF-delimited equivalent, since both normalize to LF before lexing.
+	crlf := "query {\r\n  bad!\r\n}"
+	lf := "query {\n  bad!\n}"
+	_, errCRLF := parseDocument(crlf, nil)
+	_, errLF := parseDocument(lf, nil)
+	if errCRLF == nil || errLF == nil {
+		t.Fatalf("expected parse errors for both forms")
+	}
+	locCRLF := errCRLF.(parseError).locations
+	locLF := errLF.(parseError).locations
+	if len(locCRLF) == 0 || len(locLF) == 0 {
+		t.Fatalf("expected locations on both errors")
+	}
+	if locCRLF[0] != locLF[0] {
+		t.Fatalf("CRLF location %+v != LF location %+v", locCRLF[0], locLF[0])
+	}
+	if locCRLF[0].Line != 2 {
+		t.Fatalf("expected error on line 2, got %d", locCRLF[0].Line)
+	}
+}
+
 func TestLexAdditionalPunctuators(t *testing.T) {
 	tokens, err := lex(`... = @ & |`)
 	if err != nil {

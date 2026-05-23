@@ -5,7 +5,7 @@ outline: [2, 4]
 lastUpdated: false
 ---
 
-
+# exec
 
 ```go
 import "github.com/patrickkabwe/grx/exec"

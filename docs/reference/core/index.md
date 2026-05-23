@@ -5,10 +5,9 @@ outline: [2, 4]
 lastUpdated: false
 ---
 
-
+# core
 
 ```go
-import "github.com/patrickkabwe/grx/core"
 ```
 
 Package core defines the transport\-agnostic types shared by the server, executor, and transport implementations. It deliberately has no upward imports so that schema, exec, server, plugin, and core sub\-packages can all depend on it without creating an import cycle.

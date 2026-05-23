@@ -5,10 +5,9 @@ outline: [2, 4]
 lastUpdated: false
 ---
 
-
+# plugin
 
 ```go
-import "github.com/patrickkabwe/grx/plugin"
 ```
 
 Package plugin defines the lifecycle hook interface that observers and middleware implement to participate in GraphQL request processing. A plugin is consulted at each phase of a request \(parsing, validation, execution, response, errors\). Embed [Base](<#Base>) when implementing only a subset of the hooks.

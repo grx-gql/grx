@@ -1,12 +1,18 @@
 # AGENT.md
 
-Operational guide for AI coding agents working in this repository. Read this in full before making changes. The authoritative feature scope and roadmap live in `README.md`; this file describes how to work inside the codebase.
+Operational guide for **AI coding agents** working **in this `grx` repository** (the library source). Read it in full before making changes here.
+
+> **Consumers of the library:** If someone builds an application with **`go get github.com/patrickkabwe/grx`**, point them at the reusable Cursor skill at **`.cursor/skills/graphql-grx/`** (copy or symlink the folder into **`~/.cursor/skills/graphql-grx`**). That skill summarizes **public `grx` API** patterns; **AGENT.md** is for contributors changing **this** repository only.
+
+The authoritative feature scope and roadmap live in **`README.md`** and **`ROADMAP.md`**; **this file** describes **how** to change the codebase without breaking layering or performance budgets.
 
 ## Project Summary
 
-`grx` is a Go GraphQL server/runtime aiming for production-grade GraphQL feature parity (October 2021 spec) with fast, predictable execution. It is a single Go module, no external runtime dependencies, targeting `go 1.22`.
+`grx` is a Go GraphQL server/runtime targeting [GraphQL October 2021](https://spec.graphql.org/October2021/) parity with predictable execution and `net/http` integration.
 
-Module path: `github.com/patrickkabwe/grx`
+- **Language:** Go **`1.25+`** (see root **`go.mod`**).
+- **Module path:** `github.com/patrickkabwe/grx`
+- **Dependencies:** deliberately small surface; **`go.sum`** reflects what is shipped—avoid new external packages unless there is explicit maintainer consensus and parity justification.
 
 ## Repository Layout
 
@@ -24,15 +30,18 @@ Module path: `github.com/patrickkabwe/grx`
 | `plugin/` | Plugin lifecycle interface (`RequestStart`, `ParsingStart`, `ValidationStart`, `ExecutionStart`, `FieldResolveStart`, `ResponseSend`, `Error`) and built-in plugins like `Logger`. Embed `plugin.Base` for partial implementations. |
 | `examples/basic/` | End-to-end example wiring resolvers, schema, plugin, transports, and server. Mirror this structure when adding new examples. |
 
+Human-facing documentation: **`https://patrickkabwe.github.io/grx/`**
+
 ## Build, Run, Test
 
-Run from the repo root.
+Run from the repo root. Preferred shortcuts:
 
 ```bash
-go build ./...
-go test ./...
-go test -race ./...
-go vet ./...
+make build
+make test           # root module + pkg/pubsub/redis submodule
+make test-race      # before risky concurrency changes
+make vet
+make fmt            # gofmt -w repository tree
 ```
 
 Run the example server:
@@ -43,7 +52,13 @@ go run ./examples/basic
 # GraphQL endpoint: http://localhost:4000/graphql
 ```
 
-There is no separate lint config; rely on `go vet` and `gofmt`. Always run `gofmt -w` (or `goimports`) on touched Go files before finishing.
+Use **`go vet`** and **`gofmt`** (**`make fmt`**) on touched Go files before finishing.
+
+```bash
+go build ./...
+go test ./...
+go test -race ./...
+```
 
 ## Architectural Conventions
 
@@ -59,7 +74,7 @@ There is no separate lint config; rely on `go vet` and `gofmt`. Always run `gofm
 
 Follow the `examples/basic` shape:
 
-- The schema container is `core.Schema { Query, Mutation, Subscription any }`. App code never defines its own schema wrapper; it returns or constructs a `core.Schema`. Mutation and Subscription are optional; Query is required.
+- The schema wiring type is **`schema.Config`** **`{ Query, Mutation, Subscription }`** passed through **`grx.WithSchema`** (or **`server.Config.Schema`**). **`Query`** is required; **`Mutation`** and **`Subscription`** are optional.
 - `Query`, `Mutation`, and `Subscription` are plain user-defined structs. Their exported methods are the GraphQL fields on the corresponding root type. Method names are lowercased for the GraphQL field name (`User` → `user`).
 - Resolver method signatures are `func(ctx context.Context, args TArgs) (*TResult, error)` for queries and mutations, and `func(ctx context.Context, args TArgs) (<-chan *TResult, error)` for subscriptions. `ctx` and `args` are both optional in that order; omit either when the resolver does not need it.
 - Argument structs are plain Go structs; field names map to GraphQL argument names. Use the `gql:"name,nonNull"` tag to override the field name or mark non-null.
@@ -108,7 +123,7 @@ These are restated from `README.md` because they constrain implementation choice
 - The handler is a plain `http.Handler` returned by `grx.NewServer` or `server.New`. Do not add framework dependencies.
 - The GraphiQL playground is served from CDN-hosted assets via an inlined HTML template. Keep it self-contained; no asset bundling.
 - `/favicon.ico` must continue to return 204 to avoid noisy logs.
-- New transports (SSE, WebSocket, custom HTTP variants) implement `core.Transport` and live in a subpackage under `core/`. Wire them in by appending to `server.Config.Transports`; the server consults transports in order and appends the default `pkg/http` transport last, so `POST /graphql` always has a handler. To override default HTTP behaviour, register your own POST-matching transport before the others.
+- New transports (SSE, WebSocket, custom HTTP variants) implement **`core.Transport`** and live in **`pkg/...`** (not under **`core/`**). Wire them in by appending to **`server.Config.Transports`**; the server consults transports **in order** and appends the default **`pkg/http`** transport **last**, so **`POST /graphql`** always has a handler. To override default HTTP behaviour, register your own **`POST`**-matching transport **before** the others.
 - Default behavior must remain backward compatible: with no `Transports` configured, the server still answers `POST /graphql`, the playground, and `/favicon.ico` — that POST is now routed through the auto-appended `pkg/http` transport rather than an inline handler.
 
 ## Plugin Conventions
@@ -133,7 +148,7 @@ These are restated from `README.md` because they constrain implementation choice
 - Do not turn the GraphiQL HTML into a separate file or asset pipeline; it is intentionally inlined.
 - Do not change `server.Config` field semantics without updating `examples/basic` and any tests that construct it.
 - Do not mark a `README.md` checklist item complete unless it is fully implemented, tested, and reachable from the public API. Partial support stays unchecked.
-- Do not introduce third-party dependencies. The module is intentionally dependency-free; adding one requires explicit justification.
+- Avoid introducing third-party modules; keep the dependency graph as thin as **`go.mod`** already allows (`go mod why` helps review impact). Larger additions require maintainer-visible justification tied to roadmap items.
 
 ## GitHub (issues and CI)
 

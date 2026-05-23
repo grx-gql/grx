@@ -10,29 +10,30 @@ outline: [2, 3]
 
 ## Overall progress
 
-**278 / 327 items complete (85%)** across the
+**292 / 341 items complete (85%)** across the
 sections below.
 
 ## Progress at a glance
 
 | Area | Done / Total | % |
 | --- | --- | --- |
-| Server HTTP Transport | 23 / 26 | 88% |
-| GraphQL Language Lexer | 21 / 22 | 95% |
+| Server HTTP Transport | 26 / 26 | 100% |
+| GraphQL Language Lexer | 22 / 22 | 100% |
 | GraphQL Parser | 26 / 28 | 92% |
 | Type System | 34 / 35 | 97% |
 | Validation | 26 / 40 | 65% |
-| Execution | 32 / 38 | 84% |
+| Execution | 34 / 38 | 89% |
 | Introspection | 23 / 24 | 95% |
 | Built-in Directives | 7 / 7 | 100% |
 | Response Format | 13 / 13 | 100% |
-| Developer Experience | 12 / 20 | 60% |
+| Developer Experience | 20 / 20 | 100% |
 | Subscriptions | 18 / 18 | 100% |
 | WebSocket Transport (RFC 6455) | 16 / 19 | 84% |
 | graphql-transport-ws Subprotocol | 12 / 12 | 100% |
 | Security | 11 / 11 | 100% |
 | Observability | 4 / 9 | 44% |
 | Data Loading | 0 / 5 | 0% |
+| Federation | 0 / 14 | 0% |
 
 ## Detailed checklist
 
@@ -50,8 +51,8 @@ sections below.
 - [x] Strict request `Content-Type` validation
 - [x] GraphQL-over-HTTP status code semantics
 - [x] Batched request support
-- [ ] Multipart upload support
-- [ ] Incremental delivery over HTTP for `@defer` and `@stream`
+- [x] Multipart upload support
+- [x] Incremental delivery over HTTP for `@defer` and `@stream`
 - [x] Subscriptions over WebSocket or SSE
 - [x] Request size limits
 - [x] Timeout/deadline handling
@@ -61,7 +62,7 @@ sections below.
 - [x] Optional bounded parsed-document cache for variable-free requests (`server.Config.DocumentCacheSize`)
 - [x] CORS configuration
 - [x] Response compression (gzip)
-- [ ] Response compression (brotli)
+- [x] Response compression (brotli)
 - [x] CSRF prevention for state-changing GET requests
 - [x] Introspection enable/disable toggle
 - [x] Schema registry endpoint (`/schema.graphql`)
@@ -86,7 +87,7 @@ sections below.
 - [x] Pipe token `|`
 - [x] EOF and source-location tracking for diagnostics
 - [x] Unicode escape sequences including variable-width `\u{...}`
-- [ ] Line terminator normalization per spec
+- [x] Line terminator normalization per spec
 - [x] Block string common indentation stripping
 - [x] BOM handling at source start
 - [x] Punctuator tokens `$`, `!`, `[`, `]`, `{`, `}`, `(`, `)`, `:`
@@ -235,8 +236,8 @@ sections below.
 - [x] Context cancellation checks
 - [x] Subscription source streams
 - [x] Subscription response streams
-- [ ] Incremental execution for `@defer`
-- [ ] Incremental execution for `@stream`
+- [x] Incremental execution for `@defer`
+- [x] Incremental execution for `@stream`
 - [x] Resolver panic recovery
 - [x] Concurrent non-mutation field resolution with deterministic ordering
 - [ ] Per-request resolver cache / request-scoped memoization
@@ -307,18 +308,18 @@ sections below.
 - [x] Public documentation for resolver signatures
 - [x] Public examples for query-only server
 - [x] Public examples for query and mutation server
-- [ ] Public examples for custom scalars
-- [ ] Public examples for directives
+- [x] Public examples for custom scalars
+- [x] Public examples for directives
 - [x] Benchmarks
-- [ ] Fuzz tests for parser
-- [ ] Spec fixture tests
+- [x] Fuzz tests for parser
+- [x] Spec fixture tests
 - [x] Race detector CI
-- [ ] Compatibility test suite against GraphiQL introspection query
+- [x] Compatibility test suite against GraphiQL introspection query
 - [x] Schema SDL export/printing
-- [ ] Schema change diff tool
+- [x] Schema change diff tool
 - [x] Public examples for subscriptions
-- [ ] Public examples for interfaces and unions
-- [ ] Public examples for enums
+- [x] Public examples for interfaces and unions
+- [x] Public examples for enums
 
 ### Subscriptions
 
@@ -421,6 +422,28 @@ sections below.
 - [ ] Batch dispatch tied to execution tick boundaries
 - [ ] Typed loader registration keyed to resolver context
 
+### Federation
+
+Apollo Federation is **not currently supported**. The planned scope is
+*subgraph* support — making a grx service composable behind a federation
+router/gateway — not building a router or schema composition engine. Items
+below track the Federation v2 subgraph specification.
+
+- [ ] `_service { sdl }` field exposing the federation SDL
+- [ ] `_entities(representations: [_Any!]!): [_Entity]!` resolver
+- [ ] `_Any` scalar and generated `_Entity` union
+- [ ] `@key` entity key directive
+- [ ] `@external` field directive
+- [ ] `@requires` field directive
+- [ ] `@provides` field directive
+- [ ] `@shareable` directive (Federation v2)
+- [ ] `@inaccessible` directive (Federation v2)
+- [ ] `@override` directive (Federation v2)
+- [ ] `@tag` directive
+- [ ] `@link` schema directive for Federation v2 imports
+- [ ] Per-entity reference resolvers keyed by `@key` fields
+- [ ] Entity stub types via `extend type` / `@extends`
+
 ## Implementation Plan
 
 The implementation should proceed in thin, test-first phases:
@@ -436,6 +459,7 @@ The implementation should proceed in thin, test-first phases:
 9. Data loading primitives: batching, per-request cache, N+1 mitigation.
 10. Observability and security: tracing, metrics, introspection toggle, trusted documents, error masking.
 11. Production hardening: benchmarks, memory profiles, fuzzing, concurrency, cancellation, complexity limits.
+12. Federation subgraph support: `_service`/`_entities`, federation directives, and entity reference resolvers.
 
 ## Performance Requirements
 

@@ -9,9 +9,25 @@ type documentBundle struct {
 	variableUses []variableUse
 }
 
+// parseDocumentBundle parses query into a bundle of executable operations plus
+// fragment definitions before an operation name is resolved.
+//
+// Prefer [parseDocumentBundleWithLexer] inside the executor so lexer token
+// streams can participate in LRU reuse.
 func parseDocumentBundle(query string, variables map[string]any, maxDepth int) (documentBundle, error) {
+	return parseDocumentBundleWithLexer(nil, query, variables, maxDepth)
+}
+
+func parseDocumentBundleWithLexer(e *Executor, query string, variables map[string]any, maxDepth int) (documentBundle, error) {
 	source := normalizeSource(query)
-	tokens, err := lex(source)
+
+	var tokens []token
+	var err error
+	if e != nil {
+		tokens, err = e.sharedLexNormalized(source)
+	} else {
+		tokens, err = lexNormalizedSource(source)
+	}
 	if err != nil {
 		return documentBundle{}, err
 	}

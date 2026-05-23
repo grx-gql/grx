@@ -1,0 +1,49 @@
+---
+title: Introspection
+description: Control schema discovery, bundled GraphiQL, and plaintext SDL endpoints when tightening deployments.
+outline: deep
+---
+
+# Introspection & GraphiQL
+
+Clients rely on **`__schema`**, **`__type(name: …)`**, and related fields to introspect the graph. Bundled GraphiQL issues those queries over **`GET`**, so **dev‑first defaults** (**on**) usually flip to **`off`** (or network‑segmented equivalents) alongside hardened **`POST`** traffic.
+
+Companion guides: **[Security](/guides/production-security)** · **[Limits](/guides/request-limits)**
+
+---
+
+## Disable introspection
+
+```go
+srv, err := grx.NewServer(
+	grx.WithSchema(graph.NewSchema()),
+	grx.WithDisableIntrospection(),
+)
+```
+
+Executors respond with GraphQL **`errors`** for introspection documents when masking is armed.
+
+::: info Exposure beyond **`__schema`  
+
+Git/SDL artifacts, codegen dumps, **`WithSchemaSDLPath`**, leaked mobile binaries—coordinate release hygiene independent of **`WithDisableIntrospection`** alone.
+
+:::
+
+## Turn off bundled GraphiQL
+
+```go
+srv, err := grx.NewServer(
+	grx.WithSchema(graph.NewSchema()),
+	grx.WithPlaygroundPath(""), // no GET explorer
+)
+```
+
+Assume **`POST /graphql`** is the supported API when production facing; host explorers internally (auth + SSO) whenever teams still crave UI assistance.
+
+Keeping GraphiQL while disabling introspection is rarely productive—explorer panes stall without schema queries.
+
+---
+
+## SDL export mirrors
+
+[**`WithSchemaSDLPath**](/reference/grx/)** publishes schema text **`GET`** when configured. Omit it—or wrap with auth/proxy ACLs—as part of tightening schema disclosure.

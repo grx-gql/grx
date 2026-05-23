@@ -1,8 +1,10 @@
 ---
-title: Execution
-description: How the executor turns a parsed operation into a response.
+title: Execution pipeline
+description: Parse, validate, execute, and respond—where plugin hooks fire and what the executor owns.
 outline: [2, 3]
 ---
+
+# Execution pipeline
 
 The `exec` package owns the GraphQL hot path: lex, parse, validate,
 execute. It is intentionally transport-agnostic — it sees a `core.Request`
@@ -45,8 +47,10 @@ definitions, lone anonymous operation, unique operation names, fragment rules,
 directive locations and uniqueness, sibling field merge conflicts for the same
 response key, variable definitions vs `$` uses (every reference declared, every
 declaration used), required arguments on fields, and typed arguments on the
-built-in executable directives the runtime recognises (`@skip`, `@include`, and
-basic checks for `@defer` / `@stream`).
+built-in executable directives the runtime recognises (`@skip`, `@include`,
+`@defer`, and `@stream`).
+
+For schema-side introspection builtins (**`@deprecated`**, **`@specifiedBy`**, **`@oneOf`**) plus HTTP **`multipart/mixed`** behaviour, see **[Built-in directives](/guides/schema-directives)**.
 
 ## Execute
 
@@ -85,19 +89,24 @@ document bundles (eviction is FIFO by insertion order when full). Requests that
 supply a variable map skip the cache because variable defaults are still applied
 during parsing.
 
+Additionally, `exec.WithLexerCache` / `server.Config.LexerCacheSize` caches the
+lexical `[]token` stream per normalized query text. **When `DocumentCacheSize` is
+positive and `LexerCacheSize` is zero, the HTTP server uses the same capacity
+for both**, so GraphQL-over-HTTP handlers that call `OperationKind` before
+`Execute` do not pay two full lex passes. Cached token slices are immutable;
+the parser keeps its own index into the shared slice.
+
 ## Introspection
 
-`__schema` and `__type(name:)` are served by a fast-path implementation in
-`exec/introspection.go` so GraphiQL and other introspecting clients work
-out of the box. The slower, fully spec-compliant implementation that
-exposes introspection as normal schema fields is on the roadmap.
+`__schema` and `__type(name:)` are served by a dedicated introspection
+implementation so GraphiQL and other introspecting clients work out of the
+box. A slower, fully spec-compliant path that exposes introspection as
+ordinary schema fields is on the roadmap. To disable introspection in
+deployments, configure **`DisableIntrospection`** / **`grx.WithDisableIntrospection`**
+(**[Introspection guide](/guides/introspection#disable-introspection)**).
 
 ## What it doesn't do (yet)
 
-Notable gaps and follow-ups:
-
-- No incremental (`@defer` / `@stream`) execution over HTTP or in the executor response stream.
-- No request-scoped resolver cache (DataLoader-style batching is planned).
 - Variable and value validation is not yet complete vs the full GraphQL spec
   (see the [Roadmap](/roadmap) validation section).
 

@@ -1,8 +1,10 @@
 ---
-title: Write a Custom Transport
-description: Implement core.Transport to support a wire format the built-ins don't cover.
+title: Custom transport
+description: Implement core.Transport when the built-in HTTP, WebSocket, or SSE handlers are not enough.
 outline: [2, 3]
 ---
+
+# Custom transport
 
 If you need a wire format the built-in HTTP+JSON, WebSocket, or SSE
 transports don't cover, you implement `core.Transport`. This guide
@@ -13,9 +15,16 @@ to show the shape.
 ## The interface, in two methods
 
 ```go
+import (
+	"net/http"
+
+	"github.com/patrickkabwe/grx/core"
+)
+
+// Mirrors [core.Transport].
 type Transport interface {
-    Match(r *http.Request) bool
-    Serve(w http.ResponseWriter, r *http.Request, executor Executor)
+	Match(r *http.Request) bool
+	Serve(w http.ResponseWriter, r *http.Request, executor core.Executor)
 }
 ```
 
@@ -84,10 +93,28 @@ The server consults transports in **order**. Register your custom
 transport in the position you want it considered:
 
 ```go
-srv, _ := grx.NewServer(
-    grx.WithSchema(graph.NewSchema()),
-    grx.WithTransports(httpget.New()),
+package main
+
+import (
+	"log"
+
+	"github.com/example/myproject/httpget"
+
+	"github.com/patrickkabwe/grx"
+
+	"example.com/hello-grx/graph"
 )
+
+func main() {
+	srv, err := grx.NewServer(
+		grx.WithSchema(graph.NewSchema()),
+		grx.WithTransports(httpget.New()),
+	)
+	if err != nil {
+		log.Fatal(err)
+	}
+	_ = srv
+}
 ```
 
 `grx.NewServer` always appends the built-in `pkg/http` transport at the
@@ -100,11 +127,34 @@ If you also want WebSocket and SSE, list them in the order you want them
 considered — the first `Match` wins:
 
 ```go
-grx.WithTransports(
-    websocket.New(),
-    sse.New(),
-    httpget.New(),
+package main
+
+import (
+	"log"
+
+	"github.com/example/myproject/httpget"
+
+	"github.com/patrickkabwe/grx"
+	"github.com/patrickkabwe/grx/pkg/sse"
+	"github.com/patrickkabwe/grx/pkg/websocket"
+
+	"example.com/hello-grx/graph"
 )
+
+func main() {
+	srv, err := grx.NewServer(
+		grx.WithSchema(graph.NewSchema()),
+		grx.WithTransports(
+			websocket.New(),
+			sse.New(),
+			httpget.New(),
+		),
+	)
+	if err != nil {
+		log.Fatal(err)
+	}
+	_ = srv
+}
 ```
 
 ## Rules of thumb

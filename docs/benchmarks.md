@@ -1,162 +1,123 @@
 ---
 title: Benchmarks
-description: Comparative micro-benchmarks for grx vs graphql-go and graph-gophers/graphql-go.
+description: grx vs graphql-go vs graph-gophers on shared production-shaped fixtures.
 outline: [2, 3]
 ---
 
-These numbers come from the
-[`benchmark/`](https://github.com/patrickkabwe/grx/tree/main/benchmark)
-sibling Go module, which exercises the same three queries through `grx`
-and the two most widely-used Go GraphQL libraries:
+# Benchmarks
 
-| Library                                  | Style                                       |
-| ---------------------------------------- | ------------------------------------------- |
-| `github.com/patrickkabwe/grx`            | Code-first, reflected struct methods        |
-| `github.com/graphql-go/graphql`          | Code-first, builder API                     |
-| `github.com/graph-gophers/graphql-go`    | Schema-first (SDL) + resolver methods       |
+The sibling [`benchmark/`](https://github.com/patrickkabwe/grx/tree/main/benchmark)
+module runs **parse → validate → execute → JSON** for **`grx`**, **`graphql-go/graphql`** (`v0.8.1`),
+and **`graph-gophers/graphql-go`** (`v1.5.0`) on identical operations and resolver data (`replace` points
+`grx` at the workspace root).
 
-Each iteration runs `parse → validate → execute → JSON-encode` so the
-result includes serialization overhead. Schemas are constructed once
-outside the timed region; only request-time work is measured.
+**Apps only call [`Executor.Execute`](https://pkg.go.dev/github.com/patrickkabwe/grx/exec#Executor.Execute).**
+There is no separate prepared/slow execution API.
 
-:::note[How to read these tables]
-Lower is better for every column. Multipliers next to each cell are
-relative to `grx` for that scenario. Numbers are the mean of 5 runs from
-the benchmark output committed at
-[`bench.txt`](https://github.com/patrickkabwe/grx/blob/main/bench.txt);
-your numbers will vary by hardware and Go version.
-:::
-
-## Headline ratios
-
-| Scenario               | grx     | graph-gophers   | graphql-go        |
-| ---------------------- | ------- | --------------- | ----------------- |
-| Simple query           | 1.00×   | **3.79× slower**  | **25.20× slower** |
-| Nested query           | 1.00×   | **3.74× slower**  | **23.79× slower** |
-| List query (50 items)  | 1.00×   | **2.18× slower**  | **3.97× slower**  |
-
-Allocation counts on the same scenarios:
-
-| Scenario               | grx       | graph-gophers       | graphql-go            |
-| ---------------------- | --------- | ------------------- | --------------------- |
-| Simple query           | 39 allocs | 102 allocs (2.6×)   | 857 allocs (22.0×)    |
-| Nested query           | 60 allocs | 168 allocs (2.8×)   | 1,322 allocs (22.0×)  |
-| List query (50 items)  | 1,117 allocs | 2,026 allocs (1.8×) | 3,816 allocs (3.4×) |
-
-## Detailed results
-
-### Simple query
-
-```graphql
-query { user(id: "user_1") { id name email } }
-```
-
-| Library         | Time / op   | Bytes / op  | Allocs / op |
-| --------------- | ----------- | ----------- | ----------- |
-| **grx**         | **2.7 µs**  | **3,329 B** | **39**      |
-| graph-gophers   | 10.4 µs     | 7,519 B     | 102         |
-| graphql-go      | 68.9 µs     | 50,044 B    | 857         |
-
-### Nested query
-
-```graphql
-query { post(id: "post_1") { id title body author { id name email } } }
-```
-
-| Library         | Time / op   | Bytes / op  | Allocs / op |
-| --------------- | ----------- | ----------- | ----------- |
-| **grx**         | **4.2 µs**  | **4,994 B** | **60**      |
-| graph-gophers   | 15.6 µs     | 13,751 B    | 168         |
-| graphql-go      | 99.0 µs     | 80,094 B    | 1,322       |
-
-### List query (50 items)
-
-```graphql
-query { users(count: 50) { id name email } }
-```
-
-| Library         | Time / op    | Bytes / op    | Allocs / op |
-| --------------- | ------------ | ------------- | ----------- |
-| **grx**         | **59.5 µs**  | **53,645 B**  | **1,117**   |
-| graph-gophers   | 129.9 µs     | 79,555 B      | 2,026       |
-| graphql-go      | 235.9 µs     | 256,284 B     | 3,816       |
-
-## Hardware and method
-
-- **CPU**: Apple M1 Pro (`darwin/arm64`)
-- **Go module**: `go 1.22`
-- **Runs per case**: 5
-- **Measured**: `parse → validate → execute → encoding/json.Marshal`
-- **Schema construction**: outside the timed region (`b.ResetTimer()`
-  after schema build)
-- **Fairness knobs**: `graph-gophers/graphql-go` is configured with
-  `MaxParallelism(1)` so its executor is single-threaded, matching the
-  synchronous execution model of the other two and removing
-  goroutine-scheduling noise from the numbers. Each library uses its
-  idiomatic resolver style — we deliberately do not contort one library
-  to mimic another.
-
-## Why grx is fast on these workloads
-
-- **No reflection on the hot path.** The `schema` package builds
-  per-field metadata at startup; `exec` uses precomputed indices and
-  typed accessors at request time.
-- **One pass per field.** No intermediate maps, no repeated `interface{}`
-  unwrapping, no JSON-as-AST.
-- **Allocation-aware completion.** Result objects are built directly into
-  a single response shape; lists pre-size their backing slices.
-- **No third-party runtime dependencies.** The whole executor is the Go
-  standard library plus `grx` itself.
-
-These choices show up clearly in the **allocations** column more than the
-nanoseconds — `grx` does 22× fewer allocations than `graphql-go` on the
-nested query, which is what the GC ultimately bills you for under load.
-
-## Reproducing locally
-
-`benchmark/` is its own Go module so the comparison libraries never enter
-the main `go.mod`. Run from inside the module:
+## Running
 
 ```bash
-cd benchmark
-go test -bench=. -benchmem ./...
-```
-
-Or from the repo root with `go`'s `-C` flag:
-
-```bash
+make benchmark
 go test -C benchmark -bench=. -benchmem ./...
 ```
 
-For tighter numbers:
+## Scenarios (current harness)
+
+| Benchmark | What it exercises |
+| --------- | ---------------- |
+| `BenchmarkPersistedCompound` | Named op, fragment spread, aliases, variables: roster list + highlighted post + viewer fields |
+| `BenchmarkParameterizedNested` | Single parameterized root field with nested post → author selection |
+| `BenchmarkFeedTimeline` | List of posts with nested `author` per row |
+
+Full documents and variables: [`benchmark/scenarios.go`](https://github.com/patrickkabwe/grx/tree/main/benchmark/scenarios.go).
+
+Production **grx** executes **sibling selections sequentially** within each selection set (predictable resolver order).
+`graph-gophers` is built with **`MaxParallelism(1)`** in the harness so numbers stay comparable to serial engines.
+
+## Latest results (representative run)
+
+Captured **2026-05-21** on **Apple M1 Pro**, **darwin/arm64**, **Go 1.25.0**, with:
 
 ```bash
-cd benchmark
-go test -bench=. -benchmem -benchtime=3s -count=5 ./...
+go test -C benchmark -bench=. -benchmem -benchtime=2s -count=3 ./...
 ```
 
-A single scenario across all libraries:
+Values are the **arithmetic mean** of the three `count` runs (`ns/op`, `B/op`, `allocs/op`). Rounded for display; reproducing on your hardware is expected to differ.
 
-```bash
-go test -C benchmark -bench=BenchmarkNestedQuery -benchmem ./...
-```
+### Wall time & heap (mean)
 
-A single library across one scenario:
+| Scenario | Implementation | Time / op | Bytes / op | Allocs / op |
+| -------- | -------------- | --------- | ---------- | ----------- |
+| **PersistedCompound** | grx | **66.8 µs** | 81,026 | 670 |
+| | graphql-go | 275.8 µs | 231,659 | 3,806 |
+| | graph-gophers | 101.3 µs | 56,825 | 1,250 |
+| **ParameterizedNested** | grx | **9.49 µs** | 9,251 | 74 |
+| | graphql-go | 120.2 µs | 88,659 | 1,486 |
+| | graph-gophers | 18.56 µs | 14,319 | 181 |
+| **FeedTimeline** | grx | **52.5 µs** | 64,069 | 645 |
+| | graphql-go | 236.0 µs | 235,505 | 3,436 |
+| | graph-gophers | 102.0 µs | 67,190 | 1,509 |
 
-```bash
-go test -C benchmark -bench=BenchmarkSimpleQuery/grx -benchmem ./...
-```
+### Relative time (mean ÷ grx mean)
 
-## Sanity check
+| Scenario | graphql-go | graph-gophers |
+| -------- | ---------: | ------------: |
+| PersistedCompound | **4.13×** | **1.52×** |
+| ParameterizedNested | **12.7×** | **1.96×** |
+| FeedTimeline | **4.49×** | **1.94×** |
 
-Before running any benchmark, run the unit test that asserts every
-implementation returns identical, error-free responses for every query
-— this prevents shipping a fast-but-wrong number:
+### Relative allocations (allocs/op ÷ grx)
 
-```bash
-cd benchmark
-go test ./...
-```
+| Scenario | graphql-go | graph-gophers |
+| -------- | ---------: | ------------: |
+| PersistedCompound | **5.68×** | **1.87×** |
+| ParameterizedNested | **20.1×** | **2.45×** |
+| FeedTimeline | **5.33×** | **2.34×** |
 
-`TestImplementationsAgree` covers the three queries above against all
-three libraries.
+Re-check with [`benchstat`](https://pkg.go.dev/golang.org/x/perf/cmd/benchstat) once you have exported text output; the means above are computed outside that tool for readability.
+
+_Migrating from older docs:_ scenarios used to be named `BenchmarkSimpleQuery` / `BenchmarkNestedQuery` / `BenchmarkListQuery`. Those are superseded by **PersistedCompound**, **ParameterizedNested**, and **FeedTimeline** (`benchmark/`). Refresh the figures in this page whenever you bump Go, the comparison libraries, or `grx`.
+
+## Interpreting these numbers versus production throughput
+
+The benchmark loop measures **steady-state executor cost on this machine**:
+
+- **`ns/op`** is how long **one isolated iteration** takes (typically one OS thread spinning the benchmark loop)—**not** the same thing as inverse server QPS once you stack HTTP framing, middleware, pooling, contention, profiling, tracing, TLS, geo latency, databases, caches, saturation, retries, timeouts, serialization at the edges, fleet size and autoscaling, **and concurrent client load**.
+- The harness uses **deterministic in-memory fixtures** (“zero-I/O” resolvers returning shared pointers). In real deployments, **`p99` is usually bounded by backends** (RPC, PostgreSQL, Redis, entitlement checks)—the GraphQL engine is often a **small fraction** of wall time unless you are intentionally CPU-heavy on trivial data.
+- `go test -bench` is a **controlled micro-environment**. Treat results as answering: “for this query shape with **no datastore**, how expensive is parsing + validation + execution + encoding relative to alternatives?”—then **reproduce on your workloads** (`go test`/Netflix/load tests, `-trace`, CPU profiles).
+
+A **rough heuristic** engineers sometimes misuse: if you pretend one core were 100 % saturated doing only GraphQL-shaped work shown here, \(\text{near upper bound ops/s} \approx 10^{9} / (\text{ns/op})\)—that still ignores everything above **and ignores that production uses many cores unevenly**.
+
+**Summary:** benchmarks are comparisons of **relative GraphQL-runtime overhead**, not a promise of headline **production HTTP RPS** or revenue-grade SLO rates.
+
+## Why grx often measures faster than `graphql-go/graphql` and `graph-gophers/graphql-go`
+
+Libraries differ in runtime shape; “faster microbench” is not universal at every workload. Below is why **these** workloads tend to skew toward grx—they match how the sibling module is deliberately built (`benchmark/` parity schemas, in-memory resolves).
+
+### 1. **Less material in grx’s hot path**
+
+Root `go.mod` for `patrickkabwe/grx` is **stdlib‑centric on the executor path**: no heavyweight third‑party stacks between lexing → execution → response encoding. Comparable servers often carry richer runtime layers (builders, adaptor trees, concurrency helpers)—which show up more as **instructions + allocations even when correctness is unchanged**.
+
+### 2. **`graphql-go/graphql` allocates and dispatches broadly**
+
+Classic `graphql.NewObject` / `graphql.Field` setups pay for **explicit schema objects**, **widely routed `Resolve` closures**, **`map`-shaped intermediates**, and pervasive interface dispatch. That buys flexibility; it routinely costs extra **heap traffic and branches** versus a schema that was **compiled ahead of execution** once your types are fixed.
+
+### 3. **`graph-gophers/graphql-go` indirection plus wrapper types**
+
+SDL-first ergonomics commonly mean **thin resolver façade types** translating between GraphQL-facing methods and backing models. Listing resolvers tends to manufacture **arrays of adaptor structs**. The benchmark pins `MaxParallelism(1)` because the upstream package may otherwise launch **per-field concurrency** unrelated to datastore parallelism—skewing totals against single-thread‑style engines.
+
+### 4. **grx binds schema from Go structs up front**
+
+`schema.Build` materialises fields, coercion tables, resolver wiring, and introspection artefacts **during startup or cacheable compilation**, reducing **per‑request scaffolding** versus repeatedly walking generic builder graphs or façade layers.
+
+### 5. **Response construction targets GraphQL-shaped output**
+
+Rather than bouncing through generic recursive maps everywhere, responses lean on **`core.OrderedObject`** semantics so serialization can track **explicit field ordering** aligned with selections with less reshaping churn.
+
+### 6. **Execution-time allocation hygiene**
+
+Mechanisms such as pooled **scratch buffers for transient GraphQL paths** during resolution (paired with deterministic copies where errors persist) shave **tiny slice/header allocations** across deep trees and lists—they matter most exactly when backends are intentionally cheap, as here.
+
+---
+
+None of these points replace profiling: **`go tool pprof`**, tracer comparison, **`benchstat` across `-count=` runs**, plus **replay of real persisted operations** (`benchmark/scenarios.go` style) alongside real data sources—that is where production-critical rates are defended.

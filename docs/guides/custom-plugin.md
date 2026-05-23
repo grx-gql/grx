@@ -1,8 +1,10 @@
 ---
-title: Write a Custom Plugin
-description: Implement a request-id plugin that propagates an id through the lifecycle.
+title: Custom plugin
+description: Implement a small plugin that adds a request id and shows where each lifecycle hook runs.
 outline: [2, 3]
 ---
+
+# Custom plugin
 
 Plugins are the right tool for cross-cutting concerns: logging, tracing,
 metrics, request-id propagation, auth checks. This guide implements a
@@ -76,13 +78,35 @@ A few things worth calling out:
 ## Register it
 
 ```go
-srv, _ := grx.NewServer(
-    grx.WithSchema(graph.NewSchema()),
-    grx.WithPlugins(
-        loggerPlugin,
-        extensions.RequestID{},
-    ),
+package main
+
+import (
+	"log"
+	"log/slog"
+
+	"github.com/example/myproject/extensions"
+
+	"github.com/patrickkabwe/grx"
+	"github.com/patrickkabwe/grx/plugin/logger"
+
+	"example.com/hello-grx/graph"
 )
+
+func main() {
+	logPlug, err := logger.New(logger.Config{Logger: slog.Default()})
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	srv, err := grx.NewServer(
+		grx.WithSchema(graph.NewSchema()),
+		grx.WithPlugins(logPlug, extensions.RequestID{}),
+	)
+	if err != nil {
+		log.Fatal(err)
+	}
+	_ = srv
+}
 ```
 
 Plugins run in registration order. Put plugins that produce IDs **before**
@@ -91,8 +115,16 @@ plugins that consume them (e.g. the logger).
 ## Use it from a resolver
 
 ```go
+package graph
+
+import (
+	"context"
+
+	"github.com/example/myproject/extensions"
+)
+
 func (Query) Whoami(ctx context.Context) (string, error) {
-    return extensions.RequestIDFrom(ctx), nil
+	return extensions.RequestIDFrom(ctx), nil
 }
 ```
 

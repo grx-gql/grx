@@ -1,10 +1,7 @@
 module github.com/patrickkabwe/grx/benchmark
 
-go 1.22
+go 1.25
 
-// The benchmark module is intentionally separate from the root grx module so
-// the comparison libraries below do not become runtime dependencies of grx
-// itself. The replace directive points at the working tree.
 replace github.com/patrickkabwe/grx => ../
 
 require (

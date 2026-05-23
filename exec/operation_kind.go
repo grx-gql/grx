@@ -8,11 +8,17 @@ import (
 
 func parseOperationKind(query string, operationName string) (core.OperationKind, error) {
 	source := normalizeSource(query)
-	tokens, err := lex(source)
+	tokens, err := lexNormalizedSource(source)
 	if err != nil {
 		return "", err
 	}
+	return operationKindFromTokens(source, tokens, operationName)
+}
 
+// operationKindFromTokens reports the executable operation kind for the named
+// (or lone anonymous) operation using an already-tokenised query. The caller
+// must pass the normalised query text as source (matching the token offsets).
+func operationKindFromTokens(source string, tokens []token, operationName string) (core.OperationKind, error) {
 	foundOperations := 0
 	var anonymousKind core.OperationKind
 	for index := 0; tokens[index].kind != tokenEOF; {

@@ -1,8 +1,10 @@
 ---
-title: Subscriptions
-description: The grx subscription model — source streams, response streams, and cleanup.
+title: Subscriptions in the runtime
+description: Source streams, response streams, and how the executor pumps values until the context ends.
 outline: [2, 3]
 ---
+
+# Subscriptions in the runtime
 
 Subscriptions in grx are first-class. Resolvers return a Go channel; the
 executor turns each value emitted into a normal field-execution pass and
@@ -124,5 +126,5 @@ return events.Subscribe(ctx, "message.posted", func(m *Message) bool {
 
 Swap `pubsub.NewMemory()` for `pkg/pubsub/redis` when you need to
 deliver events across replicas. See [Pub/Sub](/concepts/pubsub) for
-the full surface and [Add Subscriptions](/guides/subscriptions) for an
+the full surface and [Realtime subscriptions](/guides/subscriptions) for an
 end-to-end chat-room example.

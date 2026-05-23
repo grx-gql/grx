@@ -7,6 +7,14 @@ import (
 	"github.com/patrickkabwe/grx/schema"
 )
 
+// pendingDefer captures a fragment whose execution was deferred by an active
+// @defer directive. The owning selection set supplies the object, source, and
+// path when it registers the deferral with the request's incremental collector.
+type pendingDefer struct {
+	label      string
+	selections []selection
+}
+
 func evalSkipInclude(dirs []directive) (skip bool, include bool, err error) {
 	skip = false
 	include = true
@@ -69,11 +77,9 @@ func fragmentTypeMatches(o *schema.Object, condition string) bool {
 	return false
 }
 
-func (e *Executor) flattenSelections(object *schema.Object, selections []selection, fragments map[string]*fragmentDef) ([]selection, []core.Error) {
-	if fragments == nil {
-		fragments = map[string]*fragmentDef{}
-	}
+func (e *Executor) flattenSelections(collectDefers bool, object *schema.Object, selections []selection, fragments map[string]*fragmentDef) ([]selection, []pendingDefer, []core.Error) {
 	var out []selection
+	var defers []pendingDefer
 	var errs []core.Error
 	for _, s := range selections {
 		skip, include, err := evalSkipInclude(s.Directives)
@@ -95,15 +101,29 @@ func (e *Executor) flattenSelections(object *schema.Object, selections []selecti
 			if !fragmentTypeMatches(object, fd.TypeCondition) {
 				continue
 			}
-			inner, e2 := e.flattenSelections(object, fd.Selections, fragments)
+			if collectDefers {
+				if active, label := deferDirective(s.Directives); active {
+					defers = append(defers, pendingDefer{label: label, selections: fd.Selections})
+					continue
+				}
+			}
+			inner, innerDefers, e2 := e.flattenSelections(collectDefers, object, fd.Selections, fragments)
 			errs = append(errs, e2...)
+			defers = append(defers, innerDefers...)
 			out = appendMergedSelections(out, inner)
 		case s.isInlineFragment():
 			if s.InlineFragmentOn != "" && !fragmentTypeMatches(object, s.InlineFragmentOn) {
 				continue
 			}
-			inner, e2 := e.flattenSelections(object, s.Selections, fragments)
+			if collectDefers {
+				if active, label := deferDirective(s.Directives); active {
+					defers = append(defers, pendingDefer{label: label, selections: s.Selections})
+					continue
+				}
+			}
+			inner, innerDefers, e2 := e.flattenSelections(collectDefers, object, s.Selections, fragments)
 			errs = append(errs, e2...)
+			defers = append(defers, innerDefers...)
 			out = appendMergedSelections(out, inner)
 		case s.isField():
 			out = appendMergedSelection(out, s)
@@ -111,7 +131,75 @@ func (e *Executor) flattenSelections(object *schema.Object, selections []selecti
 			errs = append(errs, newFieldError("invalid selection", nil, s.Location))
 		}
 	}
-	return out, errs
+	return out, defers, errs
+}
+
+// deferDirective reports whether a selection carries an active @defer directive
+// and returns its label. @defer with `if: false` is treated as absent.
+func deferDirective(dirs []directive) (active bool, label string) {
+	for _, d := range dirs {
+		if d.Name != "defer" {
+			continue
+		}
+		active = true
+		if raw, ok := d.Args["if"]; ok {
+			if b, ok := resolveDirectiveValue(raw).(bool); ok && !b {
+				return false, ""
+			}
+		}
+		if raw, ok := d.Args["label"]; ok {
+			if s, ok := resolveDirectiveValue(raw).(string); ok {
+				label = s
+			}
+		}
+	}
+	return active, label
+}
+
+// streamDirective reports whether a selection carries an active @stream
+// directive and returns its initialCount and label. @stream with `if: false`
+// is treated as absent.
+func streamDirective(dirs []directive) (active bool, initialCount int, label string) {
+	for _, d := range dirs {
+		if d.Name != "stream" {
+			continue
+		}
+		active = true
+		if raw, ok := d.Args["if"]; ok {
+			if b, ok := resolveDirectiveValue(raw).(bool); ok && !b {
+				return false, 0, ""
+			}
+		}
+		if raw, ok := d.Args["initialCount"]; ok {
+			switch n := resolveDirectiveValue(raw).(type) {
+			case int:
+				initialCount = n
+			case int64:
+				initialCount = int(n)
+			case float64:
+				initialCount = int(n)
+			}
+		}
+		if raw, ok := d.Args["label"]; ok {
+			if s, ok := resolveDirectiveValue(raw).(string); ok {
+				label = s
+			}
+		}
+	}
+	if initialCount < 0 {
+		initialCount = 0
+	}
+	return active, initialCount, label
+}
+
+func resolveDirectiveValue(v any) any {
+	if ref, ok := v.(variableRef); ok {
+		if ref.HasValue {
+			return ref.Value
+		}
+		return nil
+	}
+	return v
 }
 
 func appendMergedSelections(base []selection, values []selection) []selection {
@@ -122,9 +210,9 @@ func appendMergedSelections(base []selection, values []selection) []selection {
 }
 
 func appendMergedSelection(values []selection, next selection) []selection {
-	key := next.responseKey()
+	keyNext := next.responseKey()
 	for index := range values {
-		if values[index].responseKey() != key {
+		if values[index].responseKey() != keyNext {
 			continue
 		}
 		values[index].Selections = append(values[index].Selections, next.Selections...)

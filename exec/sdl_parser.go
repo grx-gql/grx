@@ -15,7 +15,8 @@ import (
 // implements lists, union members, @specifiedBy, @oneOf, @deprecated,
 // repeatable directive declarations, and extend definitions.
 func ParseSDL(source string) (*schema.Schema, error) {
-	tokens, err := lex(source)
+	source = normalizeSource(source)
+	tokens, err := lexNormalizedSource(source)
 	if err != nil {
 		return nil, err
 	}
@@ -661,6 +662,9 @@ func buildSchemaFromDefs(defs []sdlDef) (*schema.Schema, error) {
 	for _, def := range defs {
 		if def.kind == "directive" || def.kind == "schema" || def.isExtend {
 			continue
+		}
+		if _, exists := types[def.name]; exists {
+			return nil, fmt.Errorf("type %q is defined more than once", def.name)
 		}
 		switch def.kind {
 		case "scalar":

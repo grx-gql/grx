@@ -55,6 +55,20 @@ func WithDocumentCache(limit int) ExecutorOption {
 	}
 }
 
+// WithLexerCache keeps an LRU map of lexical token streams keyed by normalized
+// query source. Parsing reuses immutable []token snapshots so HTTP stacks that
+// call [Executor.OperationKind] before [Executor.Execute] do not lex the query
+// twice.
+//
+// The token cache applies to every execution path (including GraphQL queries
+// with variables). Queries that differ only in variable values share the same
+// lexical stream.
+func WithLexerCache(limit int) ExecutorOption {
+	return func(e *Executor) {
+		e.lexCacheLimit = limit
+	}
+}
+
 // WithClientErrorMasking replaces internal execution errors with message in
 // client-facing responses while preserving raw errors through plugin.Error.
 func WithClientErrorMasking(message string) ExecutorOption {

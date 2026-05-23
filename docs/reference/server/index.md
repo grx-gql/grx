@@ -5,10 +5,9 @@ outline: [2, 4]
 lastUpdated: false
 ---
 
-
+# server
 
 ```go
-import "github.com/patrickkabwe/grx/server"
 ```
 
 Package server is the HTTP entry point for the grx GraphQL runtime. It wires user\-supplied schema values, plugins, and transports into a value that satisfies http.Handler and serves both the GraphiQL playground and the GraphQL endpoint.

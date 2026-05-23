@@ -360,6 +360,35 @@ func TestExecutorCachesNoVariableDocuments(t *testing.T) {
 	}
 }
 
+func TestLexerCacheSharedAcrossOperationKindAndExecute(t *testing.T) {
+	schemaValue, err := schema.Build(schema.Config{Query: testQuery{}})
+	if err != nil {
+		t.Fatalf("build schema: %v", err)
+	}
+
+	query := `{ user(id: "1") { id } }`
+	executor := New(schemaValue, nil, WithLexerCache(4))
+
+	kind, kindErr := executor.OperationKind(core.Request{Query: query})
+	if kindErr != nil {
+		t.Fatalf("OperationKind: %v", kindErr)
+	}
+	if kind != core.OperationQuery {
+		t.Fatalf("unexpected kind %v", kind)
+	}
+	if len(executor.lexTokenCache) != 1 {
+		t.Fatalf("expected one lexical cache entry after OperationKind, got %d", len(executor.lexTokenCache))
+	}
+
+	res := executor.Execute(context.Background(), core.Request{Query: query})
+	if len(res.Errors) != 0 {
+		t.Fatalf("Execute: %+v", res.Errors)
+	}
+	if len(executor.lexTokenCache) != 1 {
+		t.Fatalf("expected one lexical cache entry after Execute, got %d", len(executor.lexTokenCache))
+	}
+}
+
 func TestExecutorHandlesSchemaIntrospectionQueryWithFragments(t *testing.T) {
 	schemaValue, err := schema.Build(schema.Config{Query: testQuery{}, Mutation: testMutation{}})
 	if err != nil {

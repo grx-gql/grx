@@ -1,8 +1,10 @@
 ---
-title: Pub/Sub
-description: How mutation resolvers feed events to subscription resolvers, with backend-agnostic pub/sub.
+title: Events between resolvers
+description: Pub/sub so mutations (or anything else) can fan out data to subscription resolvers without tight coupling.
 outline: [2, 3]
 ---
+
+# Events between resolvers
 
 GraphQL subscriptions need a way for mutation resolvers (or any other
 event source) to hand values to subscription resolvers, ideally without

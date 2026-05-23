@@ -1,24 +1,34 @@
 ---
-title: Resolvers
-description: Resolver method signatures, context propagation, and error semantics.
+title: Resolver methods
+description: How grx turns a GraphQL field into a Go method—arguments, return values, context, errors, and subscriptions.
 outline: [2, 3]
 ---
 
-A resolver in grx is just a method on a root struct. The signature follows
-a small set of rules, both arguments and the result are typed Go values, and
-the GraphQL response is built from what you return.
+# Resolver methods
+
+In GraphQL terms, a **resolver** is the function that runs when a client asks for a field. In grx, that function is almost always a **Go method**: either a method on your `Query` / `Mutation` / `Subscription` struct (top-level fields), or—under the hood—property reads on structs you return (nested object fields are read from the struct, not separate methods you write).
+
+This page covers **methods you write yourself**: legal signatures, `context`, errors, and subscription channels.
 
 ## Signatures
 
 For queries and mutations:
 
 ```go
+package graph
+
+import "context"
+
 func (T) FieldName(ctx context.Context, args TArgs) (*TResult, error)
 ```
 
 For subscriptions:
 
 ```go
+package graph
+
+import "context"
+
 func (T) FieldName(ctx context.Context, args TArgs) (<-chan *TResult, error)
 ```
 
@@ -26,10 +36,21 @@ Both `ctx` and `args` are **optional**, in that order. Omit either when the
 resolver does not need it:
 
 ```go
-func (Query) Hello() (string, error)                       // no ctx, no args
-func (Query) Now(ctx context.Context) (time.Time, error)   // ctx only
-func (Query) User(args UserArgs) (*User, error)            // args only
+package graph
+
+import (
+	"context"
+	"time"
+)
+
+func (Query) Hello() (string, error)
+
+func (Query) Now(ctx context.Context) (time.Time, error)
+
+func (Query) User(args UserArgs) (*User, error)
 ```
+
+(`User`, `UserArgs`, and concrete return handling are declared alongside your schema.)
 
 ## Result types
 
@@ -54,30 +75,38 @@ a `null` field; for required (`T`) results, the zero value is sent as-is.
   closed by either side.
 
 Always propagate `ctx` into downstream calls (database, RPC, channel sends)
-so the cleanup signal reaches them. The `examples/subscriptions` user subscription
-shows the pattern:
+so the cleanup signal reaches them. The subscriptions guide has the full
+walkthrough; the pattern is always the same: honour `ctx.Done()` when sending
+on the stream:
 
 ```go
+package graph
+
+import (
+	"context"
+	"time"
+)
+
 func (UserSubscription) UserCreated(ctx context.Context) (<-chan *User, error) {
-    stream := make(chan *User)
-    go func() {
-        defer close(stream)
-        ticker := time.NewTicker(time.Second)
-        defer ticker.Stop()
-        for {
-            select {
-            case <-ctx.Done():
-                return
-            case <-ticker.C:
-                select {
-                case <-ctx.Done():
-                    return
-                case stream <- &User{ /* ... */ }:
-                }
-            }
-        }
-    }()
-    return stream, nil
+	stream := make(chan *User)
+	go func() {
+		defer close(stream)
+		ticker := time.NewTicker(time.Second)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				select {
+				case <-ctx.Done():
+					return
+				case stream <- &User{ /* ... */ }:
+				}
+			}
+		}
+	}()
+	return stream, nil
 }
 ```
 
@@ -95,13 +124,19 @@ Use `core.Error` directly when you need to control the message that reaches
 the client:
 
 ```go
-return nil, &core.Error{
-    Message: "user not found",
-    Path:    []any{"user"},
+package graph
+
+import "github.com/patrickkabwe/grx/core"
+
+func findUser() (*User, error) {
+	return nil, &core.Error{
+		Message: "user not found",
+		Path:    []any{"user"},
+	}
 }
 ```
 
-:::caution[Don't leak internals]
+::: warning Don't leak internals
 Wrap or sanitize errors before returning them. Stack traces and database
 errors often contain information that should not be sent to clients. The
 [Roadmap](/roadmap) tracks

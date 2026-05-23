@@ -4,6 +4,8 @@ description: All notable changes to grx, in reverse chronological order.
 outline: [2, 3]
 ---
 
+# Changelog
+
 > This page is mirrored from
 > [`CHANGELOG.md`](https://github.com/patrickkabwe/grx/blob/main/CHANGELOG.md)
 > at the repository root. Edit that file, not this one.
@@ -26,6 +28,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and `server.Config.DocumentCacheSize` (LRU eviction by count; requests with a
   non-empty variable map bypass the cache because defaults are applied during
   parsing today).
+- Lexer LRU: `exec.WithLexerCache(limit)` shares token streams keyed by normalized
+  query text so transports that probe `Executor.OperationKind` before `Execute` only
+  lex once. `server.Config.LexerCacheSize` sets capacity explicitly; when it stays
+  zero but `DocumentCacheSize` is positive, the lexer cache uses the same limit.
 - SSE transport tuning: `sse.Config.MaxActiveSubscriptions` limits concurrent
   streams per `*sse.Transport`; `sse.New(sse.Config{...})` is optional — zero
   preserves previous behaviour. Over-limit requests receive `429` with a JSON

@@ -11,9 +11,13 @@ docs/pnpm-lock.yaml
 # Example build artifacts
 examples/**/tmp/
 
+# go tool pprof / make profile-* outputs
+.profiles/
+
 # Editor / OS noise
 .DS_Store
 .idea/
 .vscode/
 *.swp
 .claude/settings.local.json
+benchmark/.benchstat-results.txt

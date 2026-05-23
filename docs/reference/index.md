@@ -4,16 +4,18 @@ description: Generated reference for every public grx package, sourced from Go d
 outline: [2, 3]
 ---
 
-This section is generated from the Go doc comments in the `grx` source
-tree by [`gomarkdoc`](https://github.com/princjef/gomarkdoc) and rebuilt
-on every push to `main`. If a comment looks wrong on this site, fix it in
-the corresponding `.go` file.
+# API Reference
+
+This section is generated from the Go doc comments in the grx module by
+[`gomarkdoc`](https://github.com/princjef/gomarkdoc) and rebuilt on every push
+to `main`. If something reads wrong here, update the doc comment on the symbol
+in the source tree and regenerate.
 
 ## Packages
 
 | Package          | What it covers                                                                                          |
 | ---------------- | ------------------------------------------------------------------------------------------------------- |
-| [`grx`](/reference/grx/)                         | Root package: [`NewServer`](/reference/grx/#NewServer) (`WithSchema`, `WithPlugins`, `WithPlaygroundPath`, optional `WithGraphQLPath` / `WithSubscriptionPath`, `WithTransports`). |
+| [`grx`](/reference/grx/)                         | Root package: [`NewServer`](/reference/grx/#NewServer) (`WithSchema`, [`WithMiddleware`](/reference/grx/#WithMiddleware), plugins, transports, playground paths, [`WithFieldAuthorizer`](/reference/grx/#WithFieldAuthorizer) / [`WithOperationAuthorizer`](/reference/grx/#WithOperationAuthorizer)). |
 | [`core`](/reference/core/)                       | Shared types: `Request`, `Response`, `Error`, `Executor`, `Transport`, `OperationKind`. No upward imports. |
 | [`schema`](/reference/schema/)                   | Code-first schema builder (`schema.Config`, `schema.Build`). Reflects user Go types into runtime metadata. |
 | [`exec`](/reference/exec/)                       | Lexer, parser, AST, executor, introspection fast-path.                                                     |

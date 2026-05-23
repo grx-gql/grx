@@ -34,7 +34,7 @@ func TestLoggerWritesLifecycleEvents(t *testing.T) {
 		Variables:     map[string]any{"id": "1"},
 	}
 
-	_, err = loggerPlugin.RequestStart(ctx, req)
+	ctx, err = loggerPlugin.RequestStart(ctx, req)
 	if err != nil {
 		t.Fatalf("request start: %v", err)
 	}
@@ -63,6 +63,7 @@ func TestLoggerWritesLifecycleEvents(t *testing.T) {
 		"graphql.execution.start",
 		"graphql.field.resolve.start",
 		"graphql.response.send",
+		`"graphql.response.time":`,
 		"graphql.error",
 		"GetUser",
 		"resolver failed",

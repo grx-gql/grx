@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `plugin/logger`: `graphql.response.send` and `graphql.error` include
+  `graphql.response.time` (wall-clock elapsed since this plugin's `RequestStart`,
+  formatted with `ms` or `s` suffix) when hooks run on the derived request context
+  produced by the executor.
+
 - Executor and server limits for abusive documents: `exec.WithMaxSelectionCount`,
   `exec.WithMaxAliasCount`, `exec.WithMaxRootFieldCount`, plus matching
   `server.Config` fields (`MaxSelectionCount`, `MaxAliasCount`,
@@ -17,6 +22,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and `server.Config.DocumentCacheSize` (LRU eviction by count; requests with a
   non-empty variable map bypass the cache because defaults are applied during
   parsing today).
+- Lexer LRU: `exec.WithLexerCache(limit)` shares token streams keyed by normalized
+  query text so transports that probe `Executor.OperationKind` before `Execute` only
+  lex once. `server.Config.LexerCacheSize` sets capacity explicitly; when it stays
+  zero but `DocumentCacheSize` is positive, the lexer cache uses the same limit.
 - SSE transport tuning: `sse.Config.MaxActiveSubscriptions` limits concurrent
   streams per `*sse.Transport`; `sse.New(sse.Config{...})` is optional — zero
   preserves previous behaviour. Over-limit requests receive `429` with a JSON

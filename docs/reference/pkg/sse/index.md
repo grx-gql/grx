@@ -5,10 +5,9 @@ outline: [2, 4]
 lastUpdated: false
 ---
 
-
+# pkg/sse
 
 ```go
-import "github.com/patrickkabwe/grx/pkg/sse"
 ```
 
 ## Index

@@ -1,6 +1,6 @@
 module github.com/patrickkabwe/grx/pkg/pubsub/redis
 
-go 1.22
+go 1.25
 
 // The Redis pubsub backend lives in its own Go module so the root grx
 // module remains free of third-party runtime dependencies. The replace

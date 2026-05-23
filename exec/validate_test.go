@@ -257,8 +257,8 @@ func TestExecutorReturnsValidationErrorsWithCode(t *testing.T) {
 	if code != core.ErrorCodeValidationFailed {
 		t.Fatalf("code = %q", code)
 	}
-	if _, exists := response.Data.(any); exists && response.Data != nil {
-		t.Fatalf("expected no data, got %#v", response.Data)
+	if response.Data != nil || response.DataNull {
+		t.Fatalf("expected no execution data envelope, got Data=%#v DataNull=%v", response.Data, response.DataNull)
 	}
 }
 

@@ -4,6 +4,8 @@ description: Step-by-step migration from the graphql-go/graphql code-first build
 outline: [2, 3]
 ---
 
+# Migrate from graphql-go/graphql
+
 [`github.com/graphql-go/graphql`](https://github.com/graphql-go/graphql)
 is code-first like grx, but builds the type system imperatively with
 `graphql.NewObject` / `graphql.Field` constructors and per-field
@@ -244,7 +246,7 @@ can drop your existing playground wiring.
 `graphql-go/graphql` doesn't ship a subscription executor. If you were
 implementing realtime out-of-band (e.g. Redis pub/sub + WebSocket
 handling on the side), grx replaces both halves. See
-[Add Subscriptions](/guides/subscriptions).
+[Realtime subscriptions](/guides/subscriptions).
 
 Resolver shape for a subscription:
 

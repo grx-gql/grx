@@ -69,9 +69,12 @@ func TestServeHTTPReturnsExampleFieldErrorFromBasicSchema(t *testing.T) {
 	body := responseToMap(t, execGraphQL(t, h, &grxclient.Request{
 		Query: "query ExampleError { errorExample }",
 	}))
-	data := nestedMap(t, body, "data")
-	if len(data) != 0 {
-		t.Fatalf("expected empty partial data for errorExample, got %#v", data)
+	dataRaw, ok := body["data"]
+	if !ok {
+		t.Fatalf("expected data key with null value, got %#v", body)
+	}
+	if dataRaw != nil {
+		t.Fatalf("expected top-level data null, got %#v", dataRaw)
 	}
 
 	errors := graphQLErrors(t, body)
