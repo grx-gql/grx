@@ -16,9 +16,25 @@ Configuration lives in **`release-please-config.json`** and **`.release-please-m
 
 Versioning and tags for the **root** module come only from **release‑please** (Release PR merge creates **`v*`**); the workflow offers **manual dispatch only to re-run release‑please** on **`main`**, not ad-hoc tagging.
 
-### Permissions
+### Permissions (fix “GitHub Actions is not permitted to create … pull requests”)
 
-If **release‑please** fails with *GitHub Actions is not permitted to create or approve pull requests*, enable **Allow GitHub Actions to create and approve pull requests** under **Repository (or Organization) Settings → Actions → General → Workflow permissions**, or add repo secret **`RELEASE_PLEASE_TOKEN`**: a PAT with **`contents`** and **`pull-requests`** on this repository (otherwise the workflow uses **`GITHUB_TOKEN`**).
+The workflow already requests **`pull-requests: write`** for the **`release-please`** job. GitHub **still rejects** [`POST /repos/.../pulls`](https://docs.github.com/en/rest/pulls/pulls?apiVersion=2022-11-28#create-a-pull-request) if the repository or organisation **never allows** **`GITHUB_TOKEN`** to open PRs, or caps workflow token scopes.
+
+**Prefer fixing `GITHUB_TOKEN` (same repo)**
+
+1. **Repository** (**or parent Organisation**) → **Settings** → **Actions** → **General**.
+2. Under **Workflow permissions**, choose **Read and write permissions** (not **Read repository contents and packages permissions** only).
+3. Enable **Allow GitHub Actions to create and approve pull requests** ([**Managing Actions settings**](https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/enabling-features-for-your-repository/managing-github-actions-settings-for-your-repository); search the page for *create and approve pull requests* if the TOC moves).
+
+If steps 2–3 are greyed out, an organisation policy owns this — contact an admin or use the PAT workaround below.
+
+**Workaround: `RELEASE_PLEASE_TOKEN` repository secret**
+
+1. Create a **fine‑grained** PAT scoped to **this repository**: **Contents** *Read and write*, **Issues** *Read and write* (release‑please may attach labels/cards), **Pull requests** *Read and write*.
+2. Or a **classic** PAT with **`repo`** scope.
+3. In the repo → **Settings** → **Secrets and variables** → **Actions** → **New repository secret** → name **`RELEASE_PLEASE_TOKEN`**, paste the PAT.
+
+**.github/workflows/release.yml** passes **`RELEASE_PLEASE_TOKEN`** to release‑please when set (`secrets.RELEASE_PLEASE_TOKEN || github.token`).
 
 ### Commit discipline
 
