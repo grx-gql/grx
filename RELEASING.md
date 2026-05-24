@@ -6,7 +6,7 @@
 
 **What happens**
 
-1. **`Release Please`** (`.github/workflows/release-please.yml`) runs after every push to **`main`**.
+1. **`Release Please`** (`.github/workflows/release-please.yml`) is **manual**: **Actions → Release Please → Run workflow** on **`main`** when you want an up-to-date Release PR (it does **not** run on every merge to **`main`**).
 2. It opens or updates **one Release PR**: bumps **`.release-please-manifest.json`**, rolls forwarded commits under **`CHANGELOG.md`** headings that match **`release-please-config.json`** (emoji‑prefixed sections like **`✨ Added`**, **`🐛 Fixed`**, **`💥 Breaking Changes`**, …), and refreshes GitHub-facing notes.
    - If you tweak the unpublished development heading in **`CHANGELOG.md`** manually (`## [x.y.z] - unpublished`), run **`make docs-changelog`** and commit **`CHANGELOG.md`** **and** **`docs/changelog.md`** together — CI (**`scripts/check-docs-changelog.sh`**) rejects drift.
 3. **Merge that PR** → release-please writes the **`vMAJOR.MINOR.PATCH`** tag and opens the matching **GitHub Release**.
@@ -22,6 +22,8 @@ Squash merges to **`main`** should keep a compliant message (`feat!: …`, `fix:
 ### First automation run
 
 Existing prose above the newest dated **`## [v]`** heading is **not** parsed by release-please—notes come from commits on the Release PR. Keep the unpublished heading aligned with semver you expect next, **or** let the merged Release PR add a dated section and reconcile this file afterward.
+
+If the **`Release Please`** workflow fails with *GitHub Actions is not permitted to create or approve pull requests*, enable **Allow GitHub Actions to create and approve pull requests** under **Repository (or Organization) Settings → Actions → General → Workflow permissions**, or attach a PAT with **`contents`** and **`pull-requests`** access as repo secret **`RELEASE_PLEASE_TOKEN`** (the workflow uses **`RELEASE_PLEASE_TOKEN`** when set, otherwise the default **`GITHUB_TOKEN`**).
 
 ---
 

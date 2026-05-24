@@ -13,6 +13,9 @@ on:
       - ".github/scripts/validate_issue_templates.rb"
       - ".github/workflows/issue-templates.yml"
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
+
 permissions:
   contents: read
 
