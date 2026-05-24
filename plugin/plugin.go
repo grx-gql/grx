@@ -8,7 +8,7 @@ package plugin
 import (
 	"context"
 
-	"github.com/patrickkabwe/grx/core"
+	"github.com/grx-gql/grx/core"
 )
 
 // RequestContext carries per-request data passed to plugin hooks that

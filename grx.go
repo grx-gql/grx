@@ -25,19 +25,19 @@
 //	    ),
 //	)
 //
-// For GraphQL-over-HTTP requests from Go code, use package pkg/client.
+// For GraphQL-over-HTTP requests from Go code, use package github.com/grx-gql/grx/client.
 package grx
 
 import (
 	"errors"
 	"time"
 
-	"github.com/patrickkabwe/grx/core"
-	"github.com/patrickkabwe/grx/exec"
-	"github.com/patrickkabwe/grx/pkg/cors"
-	"github.com/patrickkabwe/grx/plugin"
-	"github.com/patrickkabwe/grx/schema"
-	"github.com/patrickkabwe/grx/server"
+	"github.com/grx-gql/grx/core"
+	"github.com/grx-gql/grx/exec"
+	"github.com/grx-gql/grx/cors"
+	"github.com/grx-gql/grx/plugin"
+	"github.com/grx-gql/grx/schema"
+	"github.com/grx-gql/grx/server"
 )
 
 // ErrMissingSchema is returned by [NewServer] when [WithSchema] was not used.

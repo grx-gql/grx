@@ -1,6 +1,6 @@
 ---
 title: Basic · net/http
-description: Run GraphQL on a standalone listener—the smallest way to inspect grx wiring.
+description: Run GraphQL on a standalone listener - the smallest way to inspect grx wiring.
 outline: [2, 3]
 ---
 
@@ -20,7 +20,7 @@ import (
 	"net/http"
 
 	"example.com/hello-grx/graph"
-	"github.com/patrickkabwe/grx"
+	"github.com/grx-gql/grx"
 )
 
 func main() {
@@ -54,5 +54,5 @@ See **[ServeMux](./servemux)** or pick **[Chi](./chi)** · **[Gin](./gin)** · *
 
 ## Related
 
-- **[Examples › Basic HTTP](../examples/#examples-basic-http)** — runnable repo copy  
+- **[Examples › Basic HTTP](../examples/#examples-basic-http)**  -  runnable repo copy  
 - **[Transports conceptual doc](/concepts/transports)**

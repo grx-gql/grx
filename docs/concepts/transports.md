@@ -9,7 +9,7 @@ outline: [2, 3]
 A **transport** is a protocol implementation that sits in front of the
 executor: HTTP+JSON, WebSocket, SSE, and anything else that can carry
 GraphQL traffic. They share a tiny interface so the server doesn't need to
-know what's on the wire — every byte that crosses the network goes through
+know what's on the wire  -  every byte that crosses the network goes through
 a transport, including the canonical `POST /graphql` JSON request.
 
 ## The interface
@@ -22,12 +22,12 @@ type Transport interface {
 ```
 
 - `Match` is consulted on every incoming request. It must be **cheap and
-  side-effect free** — typically a header or path check.
+  side-effect free**  -  typically a header or path check.
 - `Serve` is only called after `Match` returned true. The transport owns
   the response from there; nothing else writes to `w`.
 
 The server iterates registered transports **in order** and the first one
-to match wins. The default `pkg/http` HTTP+JSON transport is appended to
+to match wins. The default `http` HTTP+JSON transport is appended to
 the chain automatically, so a plain `POST /graphql` request always has a
 handler even when `Transports` is empty.
 
@@ -35,35 +35,35 @@ handler even when `Transports` is empty.
 
 | Package           | Protocol                                                                                                                          |
 | ----------------- | --------------------------------------------------------------------------------------------------------------------------------- |
-| `pkg/http`        | The canonical GraphQL-over-HTTP+JSON `POST /graphql` request. Appended automatically by `grx.NewServer`; register it explicitly only when you need it to run before another transport that also matches POST. |
-| `pkg/sse`         | GraphQL over Server-Sent Events. Activates when the client sends `Accept: text/event-stream` to `/graphql`.                       |
-| `pkg/websocket`   | RFC 6455 WebSockets implementing the `graphql-transport-ws` subprotocol (the modern `graphql-ws` library protocol).               |
+| `http`        | The canonical GraphQL-over-HTTP+JSON `POST /graphql` request. Appended automatically by `grx.NewServer`; register it explicitly only when you need it to run before another transport that also matches POST. |
+| `sse`         | GraphQL over Server-Sent Events. Activates when the client sends `Accept: text/event-stream` to `/graphql`.                       |
+| `websocket`   | RFC 6455 WebSockets implementing the `graphql-transport-ws` subprotocol (the modern `graphql-ws` library protocol).               |
 
 Default behaviour with no transports configured: the server still answers
-`POST /graphql` (via the auto-appended `pkg/http` transport), the
+`POST /graphql` (via the auto-appended `http` transport), the
 playground, and `/favicon.ico`.
 
 ## Splitting query vs subscription paths
 
-If you set [`server.Config.SubscriptionPath`](https://pkg.go.dev/github.com/patrickkabwe/grx/server#Config)
+If you set [`server.Config.SubscriptionPath`](https://pkg.go.dev/github.com/grx-gql/grx/server#Config)
 (or `grx.WithSubscriptionPath`), and it differs from the GraphQL POST path
-(default `/graphql`), **only** concrete `*websocket.Transport` and `*sse.Transport`
+(default `/graphql`), **only** concrete `*websocket.WebSocketTransport` and `*sse.Transport`
 values from your `Transports` slice are moved to the subscription path.
-The default `pkg/http` transport stays on the GraphQL path.
+The default `http` transport stays on the GraphQL path.
 
 Many production setups use a **single URL** for both `POST` queries and
 `graphql-transport-ws` (GraphiQL expects that by default). Splitting paths
-is optional—use it when your gateway or operations team wants HTTP and
+is optional - use it when your gateway or operations team wants HTTP and
 long-lived streams explicitly separated.
 
 ## Registration
 
 ```go
 import (
-    "github.com/patrickkabwe/grx"
-    grxhttp "github.com/patrickkabwe/grx/pkg/http"
-    "github.com/patrickkabwe/grx/pkg/sse"
-    "github.com/patrickkabwe/grx/pkg/websocket"
+    "github.com/grx-gql/grx"
+    grxhttp "github.com/grx-gql/grx/http"
+    "github.com/grx-gql/grx/sse"
+    "github.com/grx-gql/grx/websocket"
 )
 
 srv, _ := grx.NewServer(
@@ -89,7 +89,7 @@ srv, _ := grx.NewServer(
 )
 ```
 
-The `pkg/http` package is named `http`, which collides with the standard
+The `http` package is named `http`, which collides with the standard
 library's `net/http`. Import it under an alias (we use `grxhttp` in the
 docs) when you need both packages in the same file.
 
@@ -126,7 +126,7 @@ with `query=`/`variables=`/`operationName=` parameters, then streams
 
 ## When to write a custom transport
 
-If you need a wire format the built-in transports don't cover —
+If you need a wire format the built-in transports don't cover  - 
 GraphQL-over-HTTP `application/graphql-response+json`, multipart for file
-uploads, gRPC, your own pub/sub bridge — you write a transport. See
+uploads, gRPC, your own pub/sub bridge  -  you write a transport. See
 [Custom Transport](/guides/custom-transport) for a worked example.

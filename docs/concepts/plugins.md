@@ -30,7 +30,7 @@ Two things make this interface comfortable to implement:
 - `RequestStart` is the **only** hook that returns a derived
   `context.Context`. Add request-scoped values here.
 - All hooks but `Error` may return an error. A non-nil error short-circuits
-  the request — useful for auth, rate-limiting, and budget checks.
+  the request  -  useful for auth, rate-limiting, and budget checks.
 
 ## `plugin.Base`
 
@@ -56,8 +56,8 @@ import (
     "log/slog"
     "os"
 
-    "github.com/patrickkabwe/grx"
-    "github.com/patrickkabwe/grx/plugin/logger"
+    "github.com/grx-gql/grx"
+    "github.com/grx-gql/grx/plugin/logger"
 )
 
 loggerPlugin, _ := logger.New(logger.Config{
@@ -73,7 +73,7 @@ srv, _ := grx.NewServer(
 ## Concurrency rules
 
 - Plugins are shared across requests. Do not store per-request state on
-  the plugin struct — put it in the `context.Context` from `RequestStart`
+  the plugin struct  -  put it in the `context.Context` from `RequestStart`
   and read it back from later hooks.
 - Hooks run on the request goroutine. If you need to do I/O, don't block
   unnecessarily; plugins are part of the latency budget.
@@ -82,9 +82,9 @@ srv, _ := grx.NewServer(
 
 ## HTTP auth and middleware
 
-[`core.Request`](https://pkg.go.dev/github.com/patrickkabwe/grx/core#Request) does not expose HTTP headers. Parse `Authorization` in [`WithMiddleware`](/reference/grx/) (or host-router middleware wrapping the GraphQL handler), attach identity with [`context.WithValue`](https://pkg.go.dev/context#WithValue), and reuse that context for the whole GraphQL pipeline.
+[`core.Request`](https://pkg.go.dev/github.com/grx-gql/grx/core#Request) does not expose HTTP headers. Parse `Authorization` in [`WithMiddleware`](/reference/grx/) (or host-router middleware wrapping the GraphQL handler), attach identity with [`context.WithValue`](https://pkg.go.dev/context#WithValue), and reuse that context for the whole GraphQL pipeline.
 
-Pair that with [`WithFieldAuthorizer`](/reference/grx/) / [`WithOperationAuthorizer`](/reference/grx/), or enforce policy inside a plugin hook. The [authentication guide](/guides/auth) shows a Bearer token, context-scoped identity, and a field authorizer guarding a `viewer` field—the same wiring as [`examples/auth`](https://github.com/patrickkabwe/grx/tree/main/examples/auth) in this repository.
+Pair that with [`WithFieldAuthorizer`](/reference/grx/) / [`WithOperationAuthorizer`](/reference/grx/), or enforce policy inside a plugin hook. The [authentication guide](/guides/auth) shows a Bearer token, context-scoped identity, and a field authorizer guarding a `viewer` field - the same wiring as [`examples/auth`](https://github.com/grx-gql/grx/tree/main/examples/auth) in this repository.
 
 ## Built-in plugins
 

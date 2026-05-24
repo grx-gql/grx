@@ -1,6 +1,6 @@
 ---
 title: Custom scalars
-description: Register Parse + Serialize closures on schema.Config.Scalars—DateTime Upload JSON values example patterns.
+description: Register Parse + Serialize closures on schema.Config.Scalars - DateTime Upload JSON values example patterns.
 outline: deep
 ---
 
@@ -25,10 +25,10 @@ package graph
 import (
 	"time"
 
-	"github.com/patrickkabwe/grx/schema"
+	"github.com/grx-gql/grx/schema"
 )
 
-// DateTime is a tiny example carrier — see examples/scalars for a full implementation.
+// DateTime is a tiny example carrier  -  see examples/scalars for a full implementation.
 type DateTime struct{ Time time.Time }
 
 var _ = []schema.ScalarConfig{{
@@ -40,14 +40,14 @@ var _ = []schema.ScalarConfig{{
 }}
 ```
 
-Expose scalars sparingly—they become part of client contracts and tooling must understand coercions. Pair with schema validation tests when changing Parse behaviour.
+Expose scalars sparingly - they become part of client contracts and tooling must understand coercions. Pair with schema validation tests when changing Parse behaviour.
 
 ::: tip Enumerations  
-**`examples/enums`** shows tagging strings as enums and binding Go constants—different mechanism than **`Scalars`**, but complementary when modelling closed sets.
+**`examples/enums`** shows tagging strings as enums and binding Go constants - different mechanism than **`Scalars`**, but complementary when modelling closed sets.
 
 :::
 
 ## Related
 
-- [`schema.Config.Scalars`](https://pkg.go.dev/github.com/patrickkabwe/grx/schema#Config)
+- [`schema.Config.Scalars`](https://pkg.go.dev/github.com/grx-gql/grx/schema#Config)
 - **[Define your schema](/concepts/schema-basics)** (`gql` tags + structs)

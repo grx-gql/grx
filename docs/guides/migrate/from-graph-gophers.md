@@ -7,7 +7,7 @@ outline: [2, 3]
 # Migrate from graph-gophers/graphql-go
 
 [`github.com/graph-gophers/graphql-go`](https://github.com/graph-gophers/graphql-go)
-is schema-first — you ship an SDL string and a tree of resolver structs
+is schema-first  -  you ship an SDL string and a tree of resolver structs
 that mirror it. grx is code-first; the schema is *derived* from your Go
 types, so the SDL string and the per-object resolver wrappers both
 disappear.
@@ -20,14 +20,14 @@ This guide walks through the swap using the schema shared by the
 | graph-gophers/graphql-go                                              | grx                                                                |
 | --------------------------------------------------------------------- | ------------------------------------------------------------------ |
 | SDL string parsed by `graphql.ParseSchema(sdl, root)`                 | Plain Go structs with `gql:"..."` tags                             |
-| Per-object resolver struct (`type userResolver struct{ u *User }`)    | The data type *is* the resolver — no wrapper                       |
-| Methods returning Go scalars/objects mapped to GraphQL fields         | Same shape, but on the **root** struct only — nested fields read directly from struct fields |
+| Per-object resolver struct (`type userResolver struct{ u *User }`)    | The data type *is* the resolver  -  no wrapper                       |
+| Methods returning Go scalars/objects mapped to GraphQL fields         | Same shape, but on the **root** struct only  -  nested fields read directly from struct fields |
 | `func (r *userResolver) ID() graphql.ID`                              | `ID string \`gql:"id,nonNull"\`` field on the struct               |
 | Anonymous arg struct: `func(args struct{ ID graphql.ID })`            | Named arg struct: `type IDArgs struct { ID string \`gql:"id,nonNull"\` }` |
 | `graphql.ID`                                                          | `string`                                                           |
 | `int32` for `Int!` fields                                             | `int` or `int32`                                                   |
-| `relay.Handler{Schema: schema}`                                       | `grx.NewServer(grx.WithSchema(...), ...opts)` — already an `http.Handler`       |
-| `graphql.MaxParallelism(N)`                                           | Not needed — grx executes synchronously by design                  |
+| `relay.Handler{Schema: schema}`                                       | `grx.NewServer(grx.WithSchema(...), ...opts)`  -  already an `http.Handler`       |
+| `graphql.MaxParallelism(N)`                                           | Not needed  -  grx executes synchronously by design                  |
 
 ## Type mapping
 
@@ -41,7 +41,7 @@ This guide walks through the swap using the schema shared by the
 | `*Foo` (nullable resolver result)            | `*Foo`                                        |
 | Resolver method returning `Foo`              | Struct field of type `Foo` on the parent      |
 
-## Step 1 — Drop the SDL string
+## Step 1  -  Drop the SDL string
 
 In graph-gophers, the schema is the SDL string:
 
@@ -73,14 +73,14 @@ them at startup. Delete the SDL.
 
 ::: warning Builtin directives in SDL
 If your SDL carries **`@deprecated`**, **`@specifiedBy`**, or similar built-in directives, see the
-[Roadmap](/roadmap#built-in-directives) — directive support and
+[Roadmap](/roadmap#built-in-directives)  -  directive support and
 description metadata aren't through the executor yet. You'll lose them
 in the migration today.
 :::
 
-## Step 2 — Object resolver structs collapse into data types
+## Step 2  -  Object resolver structs collapse into data types
 
-**Before** (graph-gophers — note three structs per object):
+**Before** (graph-gophers  -  note three structs per object):
 
 ```go
 type userResolver struct{ u *User }
@@ -99,7 +99,7 @@ func (r *postResolver) Author() *userResolver {
 }
 ```
 
-**After** (grx — the data struct *is* the resolver):
+**After** (grx  -  the data struct *is* the resolver):
 
 ```go
 type User struct {
@@ -120,7 +120,7 @@ What disappears:
 
 - The `userResolver` / `postResolver` wrappers.
 - The `graphql.ID` conversions (just use `string`).
-- The `Author()` method that re-wraps the inner pointer — grx walks
+- The `Author()` method that re-wraps the inner pointer  -  grx walks
   `*Post.Author` directly because it's already a `*User`.
 
 What you keep:
@@ -131,10 +131,10 @@ What you keep:
 
 If a field needs **computed** logic (not just direct field access),
 turn the type into a struct **with methods on the root**, not on the
-data type itself — see the
+data type itself  -  see the
 [Resolvers](/concepts/resolvers) page.
 
-## Step 3 — Root resolver methods stay; argument types get names
+## Step 3  -  Root resolver methods stay; argument types get names
 
 **Before**:
 
@@ -184,12 +184,12 @@ Notable changes:
   model; promote each one to a top-level type.
 - Resolvers return `(value, error)` instead of just a value. Errors
   become entries in `errors[]` with the field path populated.
-- A `context.Context` is supplied as the first parameter (optional —
+- A `context.Context` is supplied as the first parameter (optional  - 
   drop it if the resolver doesn't need it).
 - The wrapper resolver structs (`*userResolver`, `[]*userResolver`)
   are gone; return the data types directly.
 
-## Step 4 — Splitting one root into per-entity structs
+## Step 4  -  Splitting one root into per-entity structs
 
 graph-gophers users typically have one giant `root` struct with every
 resolver method on it. grx supports the same shape, but
@@ -217,7 +217,7 @@ Each entity now lives in one file. See
 [Queries and mutations](/guides/query-mutation-server) for
 the full pattern.
 
-## Step 5 — Replace `graphql.ParseSchema` and `relay.Handler`
+## Step 5  -  Replace `graphql.ParseSchema` and `relay.Handler`
 
 **Before**:
 
@@ -233,8 +233,8 @@ http.ListenAndServe(":4000", nil)
 
 ```go
 import (
-    "github.com/patrickkabwe/grx"
-    "github.com/patrickkabwe/grx/schema"
+    "github.com/grx-gql/grx"
+    "github.com/grx-gql/grx/schema"
 )
 
 srv, err := grx.NewServer(
@@ -256,10 +256,10 @@ Notes:
   benchmarks faster than graph-gophers running with the equivalent
   `MaxParallelism(1)` setting.
 
-## Step 6 — Subscriptions
+## Step 6  -  Subscriptions
 
 graph-gophers supports subscriptions through resolver methods returning
-`<-chan` values. The grx signature is essentially the same — only the
+`<-chan` values. The grx signature is essentially the same  -  only the
 schema/server wiring changes.
 
 **Before** (graph-gophers):
@@ -306,10 +306,10 @@ Then opt into the transports:
 
 ```go
 import (
-    "github.com/patrickkabwe/grx"
-    "github.com/patrickkabwe/grx/pkg/sse"
-    "github.com/patrickkabwe/grx/pkg/websocket"
-    "github.com/patrickkabwe/grx/schema"
+    "github.com/grx-gql/grx"
+    "github.com/grx-gql/grx/sse"
+    "github.com/grx-gql/grx/websocket"
+    "github.com/grx-gql/grx/schema"
 )
 
 grx.NewServer(
@@ -325,9 +325,9 @@ grx.NewServer(
 The wire protocol is `graphql-transport-ws` (the modern protocol used
 by `graphql-ws` v5+ and Apollo Client v3.5+). graph-gophers users on
 the legacy `subscriptions-transport-ws` protocol will need to upgrade
-their clients — see [Subscriptions](/concepts/subscriptions).
+their clients  -  see [Subscriptions](/concepts/subscriptions).
 
-## Step 7 — Auth, tracing, request-id
+## Step 7  -  Auth, tracing, request-id
 
 In graph-gophers you typically wrap `relay.Handler` in HTTP middleware
 to attach values to `r.Context()`. grx prefers
@@ -361,7 +361,7 @@ If your graph-gophers schema uses any of these, check the
 - **Interfaces and unions** including `implements` lists.
 - **Custom scalars** registered via `graphql.ScalarConfig`.
 - **Directives**, including `@deprecated` and `@specifiedBy`.
-- **Field aliases**, **fragments**, **`@skip` / `@include`** — parser
+- **Field aliases**, **fragments**, **`@skip` / `@include`**  -  parser
   and executor gaps.
 - **Default argument values** declared in the SDL.
 
@@ -372,13 +372,13 @@ Before deleting `graph-gophers/graphql-go` from your `go.mod`:
 - [ ] Build the grx schema in a sibling package; keep the old SDL
   around as a reference.
 - [ ] Run a representative query set through both executors and diff
-  the JSON. Pay attention to nullability — graph-gophers tends to
+  the JSON. Pay attention to nullability  -  graph-gophers tends to
   return non-null fields as zero values; grx returns `null` for
   pointer-typed `nil`.
 - [ ] Move HTTP middleware that *only cares about HTTP* (CORS, gzip)
   by wrapping `srv`. Move middleware that touches the GraphQL
   lifecycle into a plugin.
-- [ ] Confirm subscriptions still work end-to-end — clients on the old
+- [ ] Confirm subscriptions still work end-to-end  -  clients on the old
   `subscriptions-transport-ws` protocol must upgrade.
 - [ ] Re-benchmark your real workload. graph-gophers is the closest
   competitor in the [bundled benchmarks](/benchmarks) (~3.7× slower

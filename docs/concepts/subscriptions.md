@@ -24,9 +24,9 @@ mutations.
 
 GraphQL subscriptions distinguish two streams:
 
-- The **source stream** is what your resolver produces — raw values you
+- The **source stream** is what your resolver produces  -  raw values you
   want to emit.
-- The **response stream** is what the client sees — `{ data, errors }`
+- The **response stream** is what the client sees  -  `{ data, errors }`
   payloads after field execution has run on each source value.
 
 In grx the source stream is the channel you return; the response stream
@@ -68,13 +68,13 @@ The transport cancels `ctx` when:
 Either transport carries subscriptions; pick based on what the client can
 speak.
 
-- **WebSocket** (`pkg/websocket`) implements the `graphql-transport-ws`
-  subprotocol — the modern protocol used by the `graphql-ws` library
+- **WebSocket** (`websocket`) implements the `graphql-transport-ws`
+  subprotocol  -  the modern protocol used by the `graphql-ws` library
   (v5+) and Apollo Client (v3.5+). The legacy
   `subscriptions-transport-ws` (Apollo's old `graphql-ws`) protocol is
   intentionally not supported; it was deprecated in 2021 and clients
   that have not migrated should upgrade.
-- **SSE** (`pkg/sse`) is great when you only need server → client and
+- **SSE** (`sse`) is great when you only need server → client and
   want the simplest possible deployment story. There's no upgrade and no
   duplex, just `text/event-stream`.
 
@@ -92,7 +92,7 @@ flush semantics; a stuck client will eventually be killed by the read /
 write deadlines on the underlying `net.Conn`.
 
 If you need finer control (per-subscription buffer sizes, drop-oldest
-policies), do it inside your resolver — keep that policy close to your
+policies), do it inside your resolver  -  keep that policy close to your
 event source rather than baked into the transport.
 
 ## Authentication
@@ -108,7 +108,7 @@ SSE auth uses standard HTTP middleware in front of the server.
 Real subscription resolvers rarely produce values themselves; they fan
 out events that **mutation resolvers** publish elsewhere in the
 process (or in a sibling replica, when running behind a load balancer).
-grx ships [`pkg/pubsub`](/concepts/pubsub) for exactly this:
+grx ships [`memory-pubsub`](/concepts/pubsub) for exactly this:
 
 ```go
 bus := pubsub.NewMemory()                         // in-process default
@@ -117,14 +117,13 @@ events := pubsub.NewTyped[*Message](bus)          // type-safe wrapper
 // inside the mutation resolver
 _ = events.Publish(ctx, "message.posted", msg)
 
-// inside the subscription resolver — predicates run on the publish
+// inside the subscription resolver  -  predicates run on the publish
 // path so uninteresting messages never wake the consumer goroutine.
 return events.Subscribe(ctx, "message.posted", func(m *Message) bool {
     return m.RoomID == args.RoomID
 })
 ```
 
-Swap `pubsub.NewMemory()` for `pkg/pubsub/redis` when you need to
-deliver events across replicas. See [Pub/Sub](/concepts/pubsub) for
-the full surface and [Realtime subscriptions](/guides/subscriptions) for an
-end-to-end chat-room example.
+For **multi-replica** deployments (mutations on one pod, WebSocket clients on another), swap `pubsub.NewMemory()` for [`redis-pubsub`](/reference/redis-pubsub/); semantics and resolver code stay aligned with **[Choosing a backend](/concepts/pubsub#choosing-a-backend)** on the Pub/Sub concept page.
+
+See **[Pub/Sub](/concepts/pubsub)** for the full surface and [Realtime subscriptions](/guides/subscriptions) for an end-to-end chat-room example.

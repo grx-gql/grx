@@ -3,8 +3,8 @@ package schema_test
 import (
 	"testing"
 
-	"github.com/patrickkabwe/grx/exec"
-	"github.com/patrickkabwe/grx/schema"
+	"github.com/grx-gql/grx/exec"
+	"github.com/grx-gql/grx/schema"
 )
 
 func coordSchema(t *testing.T) *schema.Schema {

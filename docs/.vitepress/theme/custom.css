@@ -32,7 +32,7 @@
   color: var(--grx-doc-link-hover-dark, #ffd6a8);
 }
 
-/* Sidebar: active leaf link — warm accent (hono-style active items). */
+/* Sidebar: active leaf link (warm accent, hono-style). */
 #VPSidebarNav .VPSidebarItem.level-1.is-active > .item > .link > .text,
 #VPSidebarNav .VPSidebarItem.level-2.is-active > .item > .link > .text {
   color: var(--grx-nav-active, #c2410c) !important;
@@ -51,4 +51,76 @@
 
 .dark #VPSidebarNav > .group + .group {
   border-top-color: rgba(255, 255, 255, 0.06);
+}
+
+/* Homepage hero: larger illustration (default theme caps image ~320px). */
+.VPHero.has-image .image-container {
+  width: min(356px, 92vw);
+  height: min(356px, 92vw);
+}
+
+.VPHero.has-image .image-bg {
+  width: 228px !important;
+  height: 228px !important;
+}
+
+.VPHero.has-image img.image-src {
+  max-width: 228px !important;
+  max-height: 228px !important;
+}
+
+@media (min-width: 640px) {
+  .VPHero.has-image .image-container {
+    width: min(432px, 88vw);
+    height: min(432px, 88vw);
+  }
+
+  .VPHero.has-image .image-bg {
+    width: 288px !important;
+    height: 288px !important;
+  }
+
+  .VPHero.has-image img.image-src {
+    max-width: 288px !important;
+    max-height: 288px !important;
+  }
+}
+
+@media (min-width: 960px) {
+  /* Give the graphic more parity with headline width */
+  .VPHero.has-image .main {
+    max-width: 520px !important;
+  }
+
+  .VPHero.has-image .image-container {
+    width: min(480px, 42vw);
+    height: min(480px, 42vw);
+  }
+
+  .VPHero.has-image .image-bg {
+    width: 400px !important;
+    height: 400px !important;
+  }
+
+  .VPHero.has-image img.image-src {
+    max-width: min(380px, 38vw) !important;
+    max-height: min(380px, 38vw) !important;
+  }
+}
+
+@media (min-width: 1280px) {
+  .VPHero.has-image .image-container {
+    width: min(520px, 40vw);
+    height: min(520px, 40vw);
+  }
+
+  .VPHero.has-image .image-bg {
+    width: 440px !important;
+    height: 440px !important;
+  }
+
+  .VPHero.has-image img.image-src {
+    max-width: min(420px, 36vw) !important;
+    max-height: min(420px, 36vw) !important;
+  }
 }

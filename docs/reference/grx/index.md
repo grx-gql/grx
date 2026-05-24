@@ -8,7 +8,7 @@ lastUpdated: false
 # Package grx
 
 ```go
-import "github.com/patrickkabwe/grx"
+import "github.com/grx-gql/grx"
 ```
 
 Package grx is the top-level entry point of the grx GraphQL runtime.
@@ -37,7 +37,7 @@ srv, err := grx.NewServer(
 )
 ```
 
-Apply options in any order — only `WithSchema` is required (`grx.ErrMissingSchema` when omitted).
+Apply options in any order  -  only `WithSchema` is required (`grx.ErrMissingSchema` when omitted).
 
 ## Index
 
@@ -151,27 +151,27 @@ func WithFieldAuthorizer(auth FieldAuthorizer) Option
 <a name="Middleware"></a>
 ## type Middleware
 
-Alias of [`server.Middleware`](https://pkg.go.dev/github.com/patrickkabwe/grx/server#Middleware).
+Alias of [`server.Middleware`](https://pkg.go.dev/github.com/grx-gql/grx/server#Middleware).
 
 <a name="FieldAuthorizationContext"></a>
 ## type FieldAuthorizationContext
 
-Alias of [`exec.FieldAuthorizationContext`](https://pkg.go.dev/github.com/patrickkabwe/grx/exec#FieldAuthorizationContext).
+Alias of [`exec.FieldAuthorizationContext`](https://pkg.go.dev/github.com/grx-gql/grx/exec#FieldAuthorizationContext).
 
 <a name="OperationContext"></a>
 ## type OperationContext
 
-Alias of [`exec.OperationContext`](https://pkg.go.dev/github.com/patrickkabwe/grx/exec#OperationContext).
+Alias of [`exec.OperationContext`](https://pkg.go.dev/github.com/grx-gql/grx/exec#OperationContext).
 
 <a name="OperationAuthorizer"></a>
 ## type OperationAuthorizer
 
-Runs during parsed-document validation, before resolving fields. Alias of [`exec.OperationAuthorizer`](https://pkg.go.dev/github.com/patrickkabwe/grx/exec#OperationAuthorizer).
+Runs during parsed-document validation, before resolving fields. Alias of [`exec.OperationAuthorizer`](https://pkg.go.dev/github.com/grx-gql/grx/exec#OperationAuthorizer).
 
 <a name="FieldAuthorizer"></a>
 ## type FieldAuthorizer
 
-Runs immediately before field argument coercion / resolver invocation. Alias of [`exec.FieldAuthorizer`](https://pkg.go.dev/github.com/patrickkabwe/grx/exec#FieldAuthorizer).
+Runs immediately before field argument coercion / resolver invocation. Alias of [`exec.FieldAuthorizer`](https://pkg.go.dev/github.com/grx-gql/grx/exec#FieldAuthorizer).
 
 <a name="Server"></a>
 ## type Server

@@ -1,6 +1,6 @@
 ---
 title: Limits
-description: HTTP payload caps, timeouts, persisted-query modes, executor selection safeguards—contain abusive graphs before resolver work dominates.
+description: HTTP payload caps, timeouts, persisted-query modes, executor selection safeguards - contain abusive graphs before resolver work dominates.
 outline: deep
 ---
 
@@ -15,7 +15,7 @@ Even well‑formed GraphQL documents can overwhelm memory or CPU (**alias bombs*
 | Control | Goal | **`grx` helper** (`grx.NewServer`) | Only **`server.Config`** |
 | --- | --- | --- | --- |
 | HTTP envelope | Oversized **`POST`** JSON bodies | **`WithMaxHTTPRequestBytes(n)`** | **`MaxHTTPRequestBytes`** |
-| Variables JSON | Oversized **`variables`** payloads | — | **`MaxVariableBytes`** |
+| Variables JSON | Oversized **`variables`** payloads |  -  | **`MaxVariableBytes`** |
 | Clock guard | Hanging resolvers | **`WithRequestTimeout(d)`** | **`RequestTimeout`** |
 
 ```go
@@ -27,8 +27,8 @@ import (
 
 	"example.com/hello-grx/graph"
 
-	"github.com/patrickkabwe/grx"
-	"github.com/patrickkabwe/grx/server"
+	"github.com/grx-gql/grx"
+	"github.com/grx-gql/grx/server"
 )
 
 func main() {
@@ -59,7 +59,7 @@ func main() {
 
 ## Persisted & trusted corpus
 
-[**`WithPersistedQueries`**](https://pkg.go.dev/github.com/patrickkabwe/grx#WithPersistedQueries) maps **`sha256` → literal query**. Harden **`server.Config`** with **`RequirePersistedQuery`**, **`StrictPersistedQueries`**, **`TrustedDocuments`**, **`RejectUnknownVariables`** for closed corpora (**`server`** package tests demonstrate behaviour).
+[**`WithPersistedQueries`**](https://pkg.go.dev/github.com/grx-gql/grx#WithPersistedQueries) maps **`sha256` → literal query**. Harden **`server.Config`** with **`RequirePersistedQuery`**, **`StrictPersistedQueries`**, **`TrustedDocuments`**, **`RejectUnknownVariables`** for closed corpora (**`server`** package tests demonstrate behaviour).
 
 Extended procedure: **[Persisted queries (APQ)](/guides/persisted-queries)**.
 
@@ -74,7 +74,7 @@ Executors reject parses that explode combinationally (**[Execution pipeline](/co
 | Total selections | **`server.Config.MaxSelectionCount`** |
 | Aliases | **`MaxAliasCount`** |
 | Parallel root fields | **`MaxRootFieldCount`** |
-| Deepest nesting | [`exec.WithMaxSelectionDepth`](https://pkg.go.dev/github.com/patrickkabwe/grx/exec#WithMaxSelectionDepth) (**custom [`exec.Executor`](https://pkg.go.dev/github.com/patrickkabwe/grx/exec#New)** only—not on **`server.Config` yet**) |
+| Deepest nesting | [`exec.WithMaxSelectionDepth`](https://pkg.go.dev/github.com/grx-gql/grx/exec#WithMaxSelectionDepth) (**custom [`exec.Executor`](https://pkg.go.dev/github.com/grx-gql/grx/exec#New)** only - not on **`server.Config` yet**) |
 
 ```go
 package main
@@ -84,7 +84,7 @@ import (
 
 	"example.com/hello-grx/graph"
 
-	"github.com/patrickkabwe/grx/server"
+	"github.com/grx-gql/grx/server"
 )
 
 func main() {
@@ -105,6 +105,6 @@ Patterns + rationale: **[Query & document limits](/guides/query-limits)**.
 
 ::: warning Limits ≠ deterministic cost modelling  
 
-Counters are guardrails—not Apollo-style deterministic cost engines.
+Counters are guardrails - not Apollo-style deterministic cost engines.
 
 :::

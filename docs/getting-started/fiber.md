@@ -6,7 +6,7 @@ outline: [2, 3]
 
 # Fiber
 
-[**Fiber**](https://gofiber.io/) sits on **`fasthttp`**, so **`net/http`** handlers—including **`grx.Server`**—go through **`github.com/gofiber/fiber/v2/middleware/adaptor`**.
+[**Fiber**](https://gofiber.io/) sits on **`fasthttp`**, so **`net/http`** handlers - including **`grx.Server`** - go through **`github.com/gofiber/fiber/v2/middleware/adaptor`**.
 
 Build **`graph`** from **[Minimal schema](/getting-started/#minimal-schema)** once, then reuse the same **`StripPrefix`** pattern as Gin or Echo:
 
@@ -28,7 +28,7 @@ import (
 	"example.com/hello-grx/graph"
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/adaptor"
-	"github.com/patrickkabwe/grx"
+	"github.com/grx-gql/grx"
 )
 
 func main() {
@@ -57,7 +57,7 @@ func main() {
 
 `adaptor.HTTPHandler` runs the **`http.Handler`** inside Fiber’s lifecycle; **`StripPrefix`** must still peel **`/api`** before GraphQL executes so paths match **`WithPlaygroundPath` / WithGraphQLPath** exactly.
 
-Prefer Fiber v3? Imports move to **`github.com/gofiber/fiber/v3/middleware/adaptor`** with equivalent helpers—see Fiber’s adaptor docs.
+Prefer Fiber v3? Imports move to **`github.com/gofiber/fiber/v3/middleware/adaptor`** with equivalent helpers - see Fiber’s adaptor docs.
 
 ---
 

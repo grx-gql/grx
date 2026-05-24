@@ -5,7 +5,7 @@ outline: [2, 3]
 ---
 
 > This page is mirrored from the **Feature Parity Checklist** in
-> [`ROADMAP.md`](https://github.com/patrickkabwe/grx/blob/main/ROADMAP.md)
+> [`ROADMAP.md`](https://github.com/grx-gql/grx/blob/main/ROADMAP.md)
 > at the repository root. Edit that file, not this one.
 
 ## Overall progress
@@ -335,10 +335,10 @@ sections below.
 - [x] Per-connection context propagation
 - [x] Backpressure handling for slow clients (`Config.WriteTimeout`)
 - [x] Connection authentication hook (`Config.OnConnect`)
-- [x] Pub/Sub primitive for cross-resolver fan-out (`pkg/pubsub.PubSub`)
-- [x] In-process pub/sub backend (`pkg/pubsub.Memory`)
-- [x] Redis pub/sub backend (`pkg/pubsub/redis`, separate Go module)
-- [x] Type-safe generic wrapper with pluggable codec (`pkg/pubsub.Typed`)
+- [x] Pub/Sub primitive for cross-resolver fan-out (`pubsub.PubSub`)
+- [x] In-process pub/sub backend (`pubsub.Memory`)
+- [x] Redis pub/sub backend (`redis-pubsub`, separate Go module)
+- [x] Type-safe generic wrapper with pluggable codec (`pubsub.Typed`)
 - [x] Server-side filters / typed predicates on subscribe
 - [x] Configurable maximum concurrent SSE streams per transport (`sse.Config.MaxActiveSubscriptions`)
 
@@ -425,8 +425,8 @@ sections below.
 ### Federation
 
 Apollo Federation is **not currently supported**. The planned scope is
-*subgraph* support — making a grx service composable behind a federation
-router/gateway — not building a router or schema composition engine. Items
+*subgraph* support  -  making a grx service composable behind a federation
+router/gateway  -  not building a router or schema composition engine. Items
 below track the Federation v2 subgraph specification.
 
 - [ ] `_service { sdl }` field exposing the federation SDL

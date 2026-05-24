@@ -5,7 +5,7 @@ import (
 	"math"
 	"reflect"
 
-	"github.com/patrickkabwe/grx/schema"
+	"github.com/grx-gql/grx/schema"
 )
 
 func coerceArguments(defs []schema.InputValue, values map[string]any) (map[string]any, error) {

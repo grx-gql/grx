@@ -15,9 +15,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/patrickkabwe/grx/core"
-	"github.com/patrickkabwe/grx/plugin"
-	"github.com/patrickkabwe/grx/schema"
+	"github.com/grx-gql/grx/core"
+	"github.com/grx-gql/grx/plugin"
+	"github.com/grx-gql/grx/schema"
 )
 
 type testUser struct {

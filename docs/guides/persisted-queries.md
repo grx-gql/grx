@@ -1,6 +1,6 @@
 ---
 title: Persisted queries (APQ)
-description: Ship SHA-256 registered queries and optional hardened modes—reduce payload variance and tame public POST surfaces.
+description: Ship SHA-256 registered queries and optional hardened modes - reduce payload variance and tame public POST surfaces.
 outline: deep
 ---
 
@@ -18,7 +18,7 @@ import (
 
 	"example.com/hello-grx/graph"
 
-	"github.com/patrickkabwe/grx"
+	"github.com/grx-gql/grx"
 )
 
 func main() {
@@ -40,14 +40,14 @@ func main() {
 
 The default HTTP transport matches known digests (**case-insensitive hex**) and substitutes **`core.Request`** text before **`Execute`** runs.
 
-Stronger closures—**reject anything not APQ‑shaped**, **verify hash matches inlined body**, or **full trusted corpus** mapping—sit on **`[server.Config](https://pkg.go.dev/github.com/patrickkabwe/grx/server#Config)`** (`RequirePersistedQuery`, **`StrictPersistedQueries`**, **`TrustedDocuments`**). Those fields map into the same **`pkg/http`** decoding path—see **[Limits → Persisted & trusted corpus](/guides/request-limits#persisted-trusted-corpus)**.
+Stronger closures - **reject anything not APQ‑shaped**, **verify hash matches inlined body**, or **full trusted corpus** mapping - sit on **`[server.Config](https://pkg.go.dev/github.com/grx-gql/grx/server#Config)`** (`RequirePersistedQuery`, **`StrictPersistedQueries`**, **`TrustedDocuments`**). Those fields map into the same **`http`** decoding path - see **[Limits → Persisted & trusted corpus](/guides/request-limits#persisted-trusted-corpus)**.
 
 ::: tip Companion reading  
-Treat APQ alongside **timeouts**, **`MaxHTTPRequestBytes`**, and **`WithDisableIntrospection`** whenever you tighten a public **`POST`** graph endpoint—pair **[Limits](/guides/request-limits)**, **[Introspection](/guides/introspection)**, and **[Security](/guides/production-security)**.
+Treat APQ alongside **timeouts**, **`MaxHTTPRequestBytes`**, and **`WithDisableIntrospection`** whenever you tighten a public **`POST`** graph endpoint - pair **[Limits](/guides/request-limits)**, **[Introspection](/guides/introspection)**, and **[Security](/guides/production-security)**.
 
 :::
 
 ## See also
 
-- **[Limits — persisted & trusted corpus](/guides/request-limits#persisted-trusted-corpus)**
+- **[Limits  -  persisted & trusted corpus](/guides/request-limits#persisted-trusted-corpus)**
 - Roadmap ✅ automatic persisted queries in **[Roadmap](/roadmap)**

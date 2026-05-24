@@ -3,8 +3,8 @@ package exec
 import (
 	"context"
 
-	"github.com/patrickkabwe/grx/core"
-	"github.com/patrickkabwe/grx/plugin"
+	"github.com/grx-gql/grx/core"
+	"github.com/grx-gql/grx/plugin"
 )
 
 // executeIntrospection resolves an introspection query through the normal

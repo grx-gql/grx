@@ -6,7 +6,7 @@ outline: [2, 3]
 
 # net/http ServeMux
 
-`ServeMux` is enough when GraphQL joins other plain handlers on **one listener**—readiness probes, internal JSON routes, Prometheus scrapes—with zero third-party routers.
+`ServeMux` is enough when GraphQL joins other plain handlers on **one listener** - readiness probes, internal JSON routes, Prometheus scrapes - with zero third-party routers.
 
 Assume you reproduced **[Minimal schema](/getting-started/#minimal-schema)**. The pattern below configures inner routes with **`WithPlaygroundPath("/playground")`** and **`WithGraphQLPath("/query")`**; see the **[full **`main`**](#wire-servemux)** for imports.
 
@@ -20,7 +20,7 @@ import (
 	"net/http"
 
 	"example.com/hello-grx/graph"
-	"github.com/patrickkabwe/grx"
+	"github.com/grx-gql/grx"
 )
 
 func main() {
@@ -47,10 +47,10 @@ func main() {
 }
 ```
 
-`/api/playground` and **`POST /api/query`** are the externally visible URLs—the handler still sees **`/playground`** and **`/query`**.
+`/api/playground` and **`POST /api/query`** are the externally visible URLs - the handler still sees **`/playground`** and **`/query`**.
 
 ::: tip Middleware  
-Wrap **`mux`** (`http.Handler`) with timeouts, JWT verification, telemetry, gzip—GraphQL behaves like any subtree.  
+Wrap **`mux`** (`http.Handler`) with timeouts, JWT verification, telemetry, gzip - GraphQL behaves like any subtree.  
 :::
 
 ---

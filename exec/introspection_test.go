@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/patrickkabwe/grx/core"
-	"github.com/patrickkabwe/grx/schema"
+	"github.com/grx-gql/grx/core"
+	"github.com/grx-gql/grx/schema"
 )
 
 func TestIntrospectionLiteralFormattingBranches(t *testing.T) {

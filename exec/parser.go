@@ -7,7 +7,7 @@ import (
 	"unicode/utf16"
 	"unicode/utf8"
 
-	"github.com/patrickkabwe/grx/core"
+	"github.com/grx-gql/grx/core"
 )
 
 // tokenKind enumerates every lexical category recognised by the GraphQL lexer.

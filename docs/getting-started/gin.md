@@ -6,7 +6,7 @@ outline: [2, 3]
 
 # Gin
 
-[**Gin**](https://gin-gonic.com/) pairs well when your service already declares REST handlers with **`gin.Context`** helpers—you keep JSON validation, JWT middleware, telemetry, and **`http.Handler`** fallbacks aligned in one **`Engine`**.
+[**Gin**](https://gin-gonic.com/) pairs well when your service already declares REST handlers with **`gin.Context`** helpers - you keep JSON validation, JWT middleware, telemetry, and **`http.Handler`** fallbacks aligned in one **`Engine`**.
 
 `grx` stays a plain **`http.Handler`**; **`gin.WrapH`** lets Gin emit the response while **`http.StripPrefix`** keeps `/api`-visible URLs routed to **`/playground`** and **`/query`**.
 
@@ -29,7 +29,7 @@ import (
 
 	"example.com/hello-grx/graph"
 	"github.com/gin-gonic/gin"
-	"github.com/patrickkabwe/grx"
+	"github.com/grx-gql/grx"
 )
 
 func main() {
@@ -56,7 +56,7 @@ func main() {
 }
 ```
 
-Prefer composition over rewriting headers—wrap **`delegated`** (logging, JWT gating, request IDs) instead of patching Gin-specific hooks when possible.
+Prefer composition over rewriting headers - wrap **`delegated`** (logging, JWT gating, request IDs) instead of patching Gin-specific hooks when possible.
 
 ---
 

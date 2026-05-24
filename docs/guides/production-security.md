@@ -1,6 +1,6 @@
 ---
 title: Security
-description: Mask resolver errors, apply authorizers & rate-limit hooks, and keep gateway trust boundaries—beyond introspection knobs.
+description: Mask resolver errors, apply authorizers & rate-limit hooks, and keep gateway trust boundaries - beyond introspection knobs.
 outline: deep
 ---
 
@@ -8,7 +8,7 @@ outline: deep
 
 Public GraphQL sits on **`POST`** (plus optional streams). Prefer **HTTPS**, reverse-proxy **rate limits**, and **`Authorization`/session middleware** terminating **before** GraphQL unmarshals payloads.
 
-Prefer **`grx.NewServer`** **`With*`** helpers; fields only on **`[server.Config](https://pkg.go.dev/github.com/patrickkabwe/grx/server#Config)`** require **`server.New`** (**same **`http.Handler`** ergonomics **`grx.NewServer`** uses internally).
+Prefer **`grx.NewServer`** **`With*`** helpers; fields only on **`[server.Config](https://pkg.go.dev/github.com/grx-gql/grx/server#Config)`** require **`server.New`** (**same **`http.Handler`** ergonomics **`grx.NewServer`** uses internally).
 
 ::: tip Prerequisites  
 
@@ -26,7 +26,7 @@ Companion guides:
 
 ## Mask internal errors
 
-Resolver/driver panics leaking raw strings into **`errors[].message`** is risky. [`MaskInternalErrors`](https://pkg.go.dev/github.com/patrickkabwe/grx/server#Config) on **`server.Config`** collapses internals to **`ClientErrorMessage`** (or the default string) while **`plugin`** hooks still observe the original error.
+Resolver/driver panics leaking raw strings into **`errors[].message`** is risky. [`MaskInternalErrors`](https://pkg.go.dev/github.com/grx-gql/grx/server#Config) on **`server.Config`** collapses internals to **`ClientErrorMessage`** (or the default string) while **`plugin`** hooks still observe the original error.
 
 ```go
 package main
@@ -36,7 +36,7 @@ import (
 
 	"example.com/hello-grx/graph"
 
-	"github.com/patrickkabwe/grx/server"
+	"github.com/grx-gql/grx/server"
 )
 
 func main() {
@@ -58,9 +58,9 @@ Discuss partial success styling in **[Errors & client responses](/guides/errors-
 
 ## Authorization at the GraphQL boundary
 
-Layer **`grx.WithOperationAuthorizer`** (parsed document gate) plus **`WithFieldAuthorizer`** (fine-grained per selection) atop HTTP identity—details + Bearer samples in **[Auth guide](/guides/auth)**.
+Layer **`grx.WithOperationAuthorizer`** (parsed document gate) plus **`WithFieldAuthorizer`** (fine-grained per selection) atop HTTP identity - details + Bearer samples in **[Auth guide](/guides/auth)**.
 
-**[`server.Config.RateLimiter`](https://pkg.go.dev/github.com/patrickkabwe/grx/server#Config)** hooks [**`exec.RateLimiter`](https://pkg.go.dev/github.com/patrickkabwe/grx/exec#RateLimiter)** implementations that reject workloads **before** resolver execution (**still after** lexical parse unless you choke earlier middleware).
+**[`server.Config.RateLimiter`](https://pkg.go.dev/github.com/grx-gql/grx/server#Config)** hooks [**`exec.RateLimiter`](https://pkg.go.dev/github.com/grx-gql/grx/exec#RateLimiter)** implementations that reject workloads **before** resolver execution (**still after** lexical parse unless you choke earlier middleware).
 
 ::: warning Field authorizers ≠ auth spec sugar  
 

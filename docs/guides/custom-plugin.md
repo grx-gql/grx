@@ -27,8 +27,8 @@ import (
     "crypto/rand"
     "encoding/hex"
 
-    "github.com/patrickkabwe/grx/core"
-    "github.com/patrickkabwe/grx/plugin"
+    "github.com/grx-gql/grx/core"
+    "github.com/grx-gql/grx/plugin"
 )
 
 type requestIDKey struct{}
@@ -86,8 +86,8 @@ import (
 
 	"github.com/example/myproject/extensions"
 
-	"github.com/patrickkabwe/grx"
-	"github.com/patrickkabwe/grx/plugin/logger"
+	"github.com/grx-gql/grx"
+	"github.com/grx-gql/grx/plugin/logger"
 
 	"example.com/hello-grx/graph"
 )
@@ -143,7 +143,7 @@ The response will look like:
 
 ## Where to go next
 
-- Hook `FieldResolveStart` to record per-field timing — but keep it cheap
+- Hook `FieldResolveStart` to record per-field timing  -  but keep it cheap
   (it fires on every resolved field).
 - Hook `ParsingStart` and `ValidationStart` to enforce caps on document
   size or depth.

@@ -27,7 +27,7 @@ import (
 
 	"example.com/hello-grx/graph"
 	"github.com/labstack/echo/v4"
-	"github.com/patrickkabwe/grx"
+	"github.com/grx-gql/grx"
 )
 
 func main() {
@@ -54,7 +54,7 @@ func main() {
 }
 ```
 
-Register global middleware (**`e.Use`**) for auth/logging before attaching GraphQL—the wildcard route inherits whatever runs earlier in the Echo chain.
+Register global middleware (**`e.Use`**) for auth/logging before attaching GraphQL - the wildcard route inherits whatever runs earlier in the Echo chain.
 
 ---
 

@@ -1,4 +1,4 @@
-module github.com/patrickkabwe/grx
+module github.com/grx-gql/grx
 
 go 1.25
 

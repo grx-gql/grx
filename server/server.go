@@ -12,13 +12,13 @@ import (
 	"strings"
 	"time"
 
-	"github.com/patrickkabwe/grx/core"
-	"github.com/patrickkabwe/grx/exec"
-	grxhttp "github.com/patrickkabwe/grx/pkg/http"
-	"github.com/patrickkabwe/grx/pkg/sse"
-	"github.com/patrickkabwe/grx/pkg/websocket"
-	"github.com/patrickkabwe/grx/plugin"
-	"github.com/patrickkabwe/grx/schema"
+	"github.com/grx-gql/grx/core"
+	"github.com/grx-gql/grx/exec"
+	grxhttp "github.com/grx-gql/grx/http"
+	"github.com/grx-gql/grx/sse"
+	"github.com/grx-gql/grx/websocket"
+	"github.com/grx-gql/grx/plugin"
+	"github.com/grx-gql/grx/schema"
 )
 
 // Middleware wraps the HTTP handler exposed by Server.
@@ -60,7 +60,8 @@ type Config struct {
 	// the server consults. Each request on the routed path is offered to the
 	// relevant chain in order; the first one whose Match returns true takes
 	// ownership of the response. For GraphQLPath, a default HTTP+JSON
-	// transport ([pkg/http.Transport]) is appended automatically, so plain
+	// transport ([\`http\`.Transport](https://pkg.go.dev/github.com/grx-gql/grx/http#Transport))
+	// is appended automatically, so plain
 	// POST to GraphQLPath always works unless you customise that transport.
 	//
 	// When SubscriptionPath is split from GraphQLPath, bundled *websocket and
@@ -261,14 +262,14 @@ func New(config Config) (*Server, error) {
 	if separate {
 		for _, transport := range config.Transports {
 			switch transport.(type) {
-			case *websocket.Transport, *sse.Transport:
+			case *websocket.WebSocketTransport, *sse.Transport:
 				sub = append(sub, pathRestricted{path: subPath, Transport: transport})
 			default:
 				main = append(main, transport)
 			}
 		}
 		if len(sub) == 0 {
-			return nil, errors.New(`server: SubscriptionPath differs from GraphQLPath but no *websocket.Transport or *sse.Transport was registered`)
+			return nil, errors.New(`server: SubscriptionPath differs from GraphQLPath but no *websocket.WebSocketTransport or *sse.Transport was registered`)
 		}
 	} else {
 		main = append(main, config.Transports...)

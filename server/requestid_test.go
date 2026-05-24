@@ -6,7 +6,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/patrickkabwe/grx/core"
+	"github.com/grx-gql/grx/core"
 )
 
 func TestRandomRequestIDUnknownWhenRandFails(t *testing.T) {

@@ -4,8 +4,8 @@ import (
 	"log"
 	"net/http"
 
-	"github.com/patrickkabwe/grx"
-	"github.com/patrickkabwe/grx/examples/enums/graph"
+	"github.com/grx-gql/grx"
+	"github.com/grx-gql/grx/examples/enums/graph"
 )
 
 func main() {

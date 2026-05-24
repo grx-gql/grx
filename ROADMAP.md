@@ -301,10 +301,10 @@ This file is the source of truth for feature parity tracking and roadmap sync in
 - [x] Per-connection context propagation
 - [x] Backpressure handling for slow clients (`Config.WriteTimeout`)
 - [x] Connection authentication hook (`Config.OnConnect`)
-- [x] Pub/Sub primitive for cross-resolver fan-out (`pkg/pubsub.PubSub`)
-- [x] In-process pub/sub backend (`pkg/pubsub.Memory`)
-- [x] Redis pub/sub backend (`pkg/pubsub/redis`, separate Go module)
-- [x] Type-safe generic wrapper with pluggable codec (`pkg/pubsub.Typed`)
+- [x] Pub/Sub primitive for cross-resolver fan-out (`pubsub.PubSub`)
+- [x] In-process pub/sub backend (`pubsub.Memory`)
+- [x] Redis pub/sub backend (`redis-pubsub`, separate Go module)
+- [x] Type-safe generic wrapper with pluggable codec (`pubsub.Typed`)
 - [x] Server-side filters / typed predicates on subscribe
 - [x] Configurable maximum concurrent SSE streams per transport (`sse.Config.MaxActiveSubscriptions`)
 

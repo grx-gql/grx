@@ -4,8 +4,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/patrickkabwe/grx/core"
-	"github.com/patrickkabwe/grx/plugin"
+	"github.com/grx-gql/grx/core"
+	"github.com/grx-gql/grx/plugin"
 )
 
 // apolloTrace accumulates per-request timing for the Apollo Tracing extension

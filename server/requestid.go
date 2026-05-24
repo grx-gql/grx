@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/patrickkabwe/grx/core"
+	"github.com/grx-gql/grx/core"
 )
 
 // randRead injects entropy for request IDs (overridden in tests).

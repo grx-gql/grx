@@ -1,6 +1,6 @@
 ---
 title: Resolver batching & N+1
-description: Nested field execution and datastore round-trips—mitigations before a built-in loader lands in grx.
+description: Nested field execution and datastore round-trips - mitigations before a built-in loader lands in grx.
 outline: deep
 ---
 
@@ -18,7 +18,7 @@ GraphQL invokes resolvers independently. A query like **`users { posts { title }
 
 ::: tip Separate concern from selection limits  
 
-**Document-shape caps** stop pathological parses but **do not** consolidate SQL—combine with this guide’s data-access strategies.
+**Document-shape caps** stop pathological parses but **do not** consolidate SQL - combine with this guide’s data-access strategies.
 
 :::
 

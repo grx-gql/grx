@@ -8,7 +8,7 @@ lastUpdated: false
 # exec
 
 ```go
-import "github.com/patrickkabwe/grx/exec"
+import "github.com/grx-gql/grx/exec"
 ```
 
 Package exec contains the GraphQL lexer, parser, AST, executor, and introspection fast\-path. It is the hot per\-request execution path and is deliberately transport\-agnostic: callers communicate with the executor through \[core.Request\] and \[core.Response\].

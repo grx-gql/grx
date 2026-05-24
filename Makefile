@@ -26,12 +26,12 @@ build: ## go build all packages.
 .PHONY: test
 test: ## go test all packages (root module + submodules).
 	$(GO) test ./...
-	cd pkg/pubsub/redis && $(GO) test ./...
+	cd redis-pubsub && $(GO) test ./...
 
 .PHONY: test-race
 test-race: ## go test -race all packages (root module + submodules).
 	$(GO) test -race ./...
-	cd pkg/pubsub/redis && $(GO) test -race ./...
+	cd redis-pubsub && $(GO) test -race ./...
 
 .PHONY: test-cover-lib
 test-coverage: ## Library packages only (exclude ./examples/...); enforce COVER_MIN %% stmts coverage each.
@@ -45,6 +45,27 @@ vet: ## go vet all packages.
 fmt: ## gofmt every Go file in place.
 	gofmt -w .
 
+## ---- Go modules -----------------------------------------------------------
+
+.PHONY: mod-tidy
+mod-tidy: ## go mod tidy (root module, benchmark/, redis-pubsub).
+	$(GO) mod tidy
+	cd benchmark && $(GO) mod tidy
+	cd redis-pubsub && $(GO) mod tidy
+
+## ---- Git hooks -----------------------------------------------------------
+
+.PHONY: install-hooks uninstall-hooks dev-setup
+dev-setup: ## go mod tidy everywhere, then git hooks (local bootstrap after clone).
+	@$(MAKE) mod-tidy
+	@$(MAKE) install-hooks
+
+install-hooks: ## Point core.hooksPath at .githooks (commit-msg conventional check).
+	git config core.hooksPath .githooks
+
+uninstall-hooks: ## Undo install-hooks for this repo (removes core.hooksPath).
+	git config --unset-all core.hooksPath || true
+
 ## ---- Docs (VitePress) ----------------------------------------------------
 
 .PHONY: docs-install
@@ -54,6 +75,10 @@ docs-install: ## Install docs site dependencies (uses bun).
 .PHONY: docs-changelog
 docs-changelog: ## Mirror CHANGELOG.md into the docs site.
 	./scripts/sync-changelog.sh
+
+.PHONY: check-docs-changelog
+check-docs-changelog: ## Fail when docs/changelog.md != sync output (run in CI too).
+	./scripts/check-docs-changelog.sh
 
 .PHONY: docs-roadmap
 docs-roadmap: ## Mirror ROADMAP.md into the docs site as a roadmap.

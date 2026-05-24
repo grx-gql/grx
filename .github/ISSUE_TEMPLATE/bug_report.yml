@@ -28,7 +28,7 @@ body:
     id: grx-version
     attributes:
       label: grx version
-      description: Output of `go list -m github.com/patrickkabwe/grx` in your module, or the commit SHA if you're on `main`.
+      description: Output of `go list -m github.com/grx-gql/grx` in your module, or the commit SHA if you're on `main`.
       placeholder: "v0.1.0  /  main @ abc1234"
     validations:
       required: true
@@ -51,10 +51,10 @@ body:
         - "schema (schema.Build / reflection)"
         - "exec (lexer / parser / executor)"
         - "server (HTTP / GraphiQL)"
-        - "transport: WebSocket (pkg/websocket)"
-        - "transport: SSE (pkg/sse)"
-        - "pubsub (pkg/pubsub)"
-        - "pubsub: Redis backend (pkg/pubsub/redis)"
+        - "transport: WebSocket (websocket)"
+        - "transport: SSE (sse)"
+        - "pubsub (memory-pubsub / package pubsub)"
+        - "pubsub: Redis backend (redis-pubsub)"
         - "plugins (plugin.*)"
         - "introspection"
         - "docs / examples"

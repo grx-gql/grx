@@ -1,14 +1,14 @@
 ---
 title: CORS & browsers
-description: Serving GraphQL and GraphiQL from browser origins—grx.Cors plus matching WebSocket origin checks for subscriptions.
+description: Serving GraphQL and GraphiQL from browser origins - grx.Cors plus matching WebSocket origin checks for subscriptions.
 outline: deep
 ---
 
 # CORS & browsers
 
-SPA **GraphQL** traffic combines **`credentials`**, headers like **`Authorization`**, **`OPTIONS` preflight**, and—for subscriptions—WebSocket **`Origin`** checks. That lives in **HTTP middleware** and **`websocket.Transport`**, not resolvers alone.
+SPA **GraphQL** traffic combines **`credentials`**, headers like **`Authorization`**, **`OPTIONS` preflight**, and - for subscriptions - WebSocket **`Origin`** checks. That lives in **HTTP middleware** and **`websocket.WebSocketTransport`**, not resolvers alone.
 
-[`grx.Cors`](https://pkg.go.dev/github.com/patrickkabwe/grx#Cors) attaches standard CORS middleware and can align with websocket origin policies when transports share configs.
+[`grx.Cors`](https://pkg.go.dev/github.com/grx-gql/grx#Cors) attaches standard CORS middleware and can align with websocket origin policies when transports share configs.
 
 Minimal pattern:
 
@@ -21,7 +21,7 @@ import (
 
 	"example.com/hello-grx/graph"
 
-	"github.com/patrickkabwe/grx"
+	"github.com/grx-gql/grx"
 )
 
 func main() {
@@ -51,4 +51,4 @@ Prefer explicit origins over `*` whenever **`AllowCredentials`** is **`true`** (
 
 ## Related
 
-- [**Realtime subscriptions**](/guides/subscriptions) — **`websocket.Config.CheckOrigin`** and idle timeouts alongside CORS tuning.
+- [**Realtime subscriptions**](/guides/subscriptions)  -  **`websocket.Config.CheckOrigin`** and idle timeouts alongside CORS tuning.

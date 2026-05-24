@@ -1,8 +1,8 @@
 blank_issues_enabled: false
 contact_links:
   - name: Question or usage help
-    url: https://github.com/patrickkabwe/grx/discussions
+    url: https://github.com/grx-gql/grx/discussions
     about: Open a Discussion for questions about how to use grx. Use Issues only for reproducible bugs or concrete proposals.
   - name: Feature parity checklist (source of truth)
-    url: https://github.com/patrickkabwe/grx/blob/main/ROADMAP.md
+    url: https://github.com/grx-gql/grx/blob/main/ROADMAP.md
     about: See what is implemented vs planned before filing overlap with existing roadmap work.

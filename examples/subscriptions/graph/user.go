@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"sync/atomic"
 
-	"github.com/patrickkabwe/grx/pkg/pubsub"
+	"github.com/grx-gql/grx/memory-pubsub"
 )
 
 // userCreatedTopic is the bus topic on which User events are published.

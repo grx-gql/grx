@@ -5,78 +5,57 @@ titleTemplate: false
 
 hero:
   name: grx
-  text: GraphQL in Go—plain structs, one module, sharp edges optional.
-  tagline: grx builds your schema from structs, serves queries and mutations over HTTP, subscriptions over WebSocket or SSE—and ships as plain net/http.Handler. Read what it covers before you scaffold.
+  text: "GraphQL in Go: structs are the schema."
+  tagline: Your router, not ours. Add WebSocket/SSE subscriptions and safety toggles when you're ready.
   image:
     src: /hero.svg
-    alt: Stylized graph of nodes and edges suggesting a GraphQL execution tree.
+    alt: Abstract graph illustrating how fields connect in a GraphQL response.
   actions:
     - theme: brand
-      text: What grx is — features
-      link: /concepts/what-is-grx
-    - theme: alt
-      text: Run the tutorial
+      text: Get started
       link: /getting-started/
     - theme: alt
-      text: GitHub
-      link: https://github.com/patrickkabwe/grx
+      text: Github
+      link: https://github.com/grx-gql/grx
 
 features:
   - icon: ✨
-    title: Feature surface & scope
-    details: Tables of bundled capabilities—schemas from structs, HTTP + GraphiQL, plugins, realtime, persisted queries—and who typically adopts grx.
+    title: Shipped capability matrix
+    details: Tables that list executable schema authoring JSON GraphQL transports optional GraphiQL gzip and CORS subscriptions over WebSocket and SSE publishers for mutations field and operation guardrails timeouts and payload caps persisted and trusted queries plugins pub sub backends and benchmarking notes.
     link: /concepts/what-is-grx
-    linkText: What grx is
+    linkText: Open the feature tables
   - icon: 📘
-    title: Schema in Go
-    details: Exported structs plus gql tags—the contract clients see. Read this before branching into advanced patterns.
+    title: Struct-first schema authoring
+    details: gql struct tags declare fields arguments nullability deprecation and descriptions while schema.Config binds Query Mutation and Subscription roots resolver methods stay beside the structs they expose for code review and refactoring.
     link: /concepts/schema-basics
-    linkText: Define your schema
+    linkText: Define types and roots
+  - icon: 📡
+    title: Bundled HTTP surface
+    details: Serve JSON operations over configurable GraphQL paths add the playground path helper when debugging enable gzip middleware for responses and Cors helper for browsers everything composes through net/http so chi Gin Fiber Echo or ServeMux own routing.
+    link: /concepts/transports
+    linkText: Mount transports
   - icon: 🛡
-    title: Production hardening
-    details: Separate guides for masking and authorizers, introspection / GraphiQL knobs, payload caps and persisted-query modes—all linked from one hub page.
+    title: Operational guardrail APIs
+    details: Turn introspection GraphiQL and persisted-query modes per environment mask surfaced errors authorize whole operations or single fields clamp document depth alias counts variable bytes elapsed time and streamed payloads using documented server and executor configuration.
     link: /concepts/graphql-security-production
-    linkText: Open overview
-  - icon: ❓
-    title: GraphQL fundamentals (FAQ)
-    details: REST vs GraphQL, resolvers vs schema, N+1, contextual vocabulary when pairing with teammates.
-    link: /guides/graphql-backend-essentials
-    linkText: Read the FAQ
+    linkText: Review hardening options
   - icon: ⚡
-    title: Realtime when you want it
-    details: Subscriptions over WebSocket or Server-Sent Events, plus optional pub/sub so mutations can fan out events without bolting on another stack.
+    title: Streaming stack in the box
+    details: graphql-transport-ws with idle and origin checks SSE one-way transports optional memory pub-sub plus redis pubsub module for horizontally scaled fleets typed publish subscribe helpers mutations publish subscription resolvers stream Go channels flushed by executor.
     link: /guides/subscriptions
-    linkText: Add subscriptions
+    linkText: Enable WebSocket SSE pub sub
   - icon: 🧭
-    title: Go further when you need to
-    details: Plugins for auth and observability, custom transports, and a clear picture of how requests move through the runtime—only open these when your problem needs them.
-    link: /concepts/architecture
-    linkText: How it fits together
+    title: Lifecycle plugin hooks
+    details: Inspect parse validation subscription setup and resolver phases through the plugin interfaces build logging denial telemetry or cache layers transport extensions reuse the same executor by implementing core.Transport for bespoke gateways.
+    link: /concepts/plugins
+    linkText: See plugins transports
   - icon: 📦
-    title: API you can read
-    details: Same package layout as any Go library. Generated reference mirrors the doc comments in the repo.
+    title: Exported packages and refs
+    details: Dedicated modules for schema exec core server websocket sse http client cors plugin observability memory pubsub redis-pubsub gomarkdoc-derived reference pages duplicate Go doc prose so navigating signatures feels like browsing any idiomatic dependency.
     link: /reference/
-    linkText: Browse packages
+    linkText: Browse package refs
+
+footer:
+  message: Execution targets the GraphQL October 2021 spec.
+  copyright: MIT License · Open source on GitHub
 ---
-
-## What grx is — in one glance
-
-[**grx**](https://pkg.go.dev/github.com/patrickkabwe/grx) is **a GraphQL server and runtime for Go**: struct types and methods compile into executable schema (**code-first**, no obligatory SDL codegen). Queries and mutations ride the **default HTTP** transport you mount as **`http.Handler`**; **`Subscription`** pushes over **WebSocket** or **SSE** when you attach those transports.
-
-**Included surface today:** **`gql` tags** + roots (**`schema.Config`**), bundled **GraphiQL** for dev (**opt-in/off** later), [**plugins**](/concepts/plugins), operation and **field authorizers**, persisted / trusted-query patterns, document shape limits **and timeouts** (**[Production hardening](/concepts/graphql-security-production)** overview), optional gzip and CORS helpers, **pub/sub adapters** (`pkg/pubsub/redis`) for multi-instance fan-out, and benchmarks against other servers.
-
-👉 [**Full breakdown: capability tables and who it suits →**](/concepts/what-is-grx)
-
-## Choose a path
-
-**Mapping GraphQL vocabulary to APIs?** [How GraphQL backends work](/guides/graphql-backend-essentials) answers the usual “why” questions alongside links into grx specifics.
-
-**Modeling shapes?** Always start **[Define your schema](/concepts/schema-basics)** (listed under **Guides** alongside security and mutations).
-
-**Operational safety?** **[Security](/guides/production-security)** (masking, authorizers), **[Introspection](/guides/introspection)** (**`__schema`**, GraphiQL), **[Limits](/guides/request-limits)** (payload caps, timeouts, persisted queries), **[Deployment](/guides/deployment)** (Docker, proxies)—or the **[overview hub](/concepts/graphql-security-production)** for a single bookmark.
-
-**Building a larger API?** [Queries and mutations](/guides/query-mutation-server), [Realtime subscriptions](/guides/subscriptions), and the [Roadmap](/roadmap) for what is supported end-to-end.
-
-## Project status
-
-grx targets the [GraphQL October 2021 spec](https://spec.graphql.org/October2021/) for execution and wire behaviour. Coverage and gaps are tracked on the [Roadmap](/roadmap). Numbers versus other Go servers live on [Benchmarks](/benchmarks).

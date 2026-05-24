@@ -11,7 +11,7 @@ package graph
 import (
 	"context"
 
-	"github.com/patrickkabwe/grx/schema"
+	"github.com/grx-gql/grx/schema"
 )
 
 type Query struct{}

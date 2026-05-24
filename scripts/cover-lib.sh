@@ -25,6 +25,6 @@ while IFS= read -r pkg; do
 		echo "$out"
 		fail=1
 	fi
-done < <(go list ./... | grep -Ev '/examples/' | grep -v '^github\.com/patrickkabwe/grx/plugin$')
+done < <(go list ./... | grep -Ev '/examples/' | grep -v '^github\.com/grx-gql/grx/plugin$')
 
 exit "$fail"

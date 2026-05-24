@@ -42,7 +42,7 @@ example.
 | `graphql.NewObject(...)`                     | A struct type                                 |
 | `graphql.NewInputObject(...)`                | An input struct used as an argument type      |
 
-## Step 1 — Object types become structs
+## Step 1  -  Object types become structs
 
 **Before** (graphql-go):
 
@@ -94,13 +94,13 @@ type Post struct {
 
 Two things to notice:
 
-- The nested `author` field needs no resolver — grx walks the Go struct
+- The nested `author` field needs no resolver  -  grx walks the Go struct
   graph automatically. Source-typecasting like
   `p.Source.(*Post)` is gone.
 - Nullability moves from the type wrapper to either a pointer field
   (`*string`) or the `nonNull` tag.
 
-## Step 2 — Root `Query` becomes a struct with methods
+## Step 2  -  Root `Query` becomes a struct with methods
 
 **Before**:
 
@@ -165,7 +165,7 @@ What changed:
 - Both `ctx` and `args` are optional. Omit either when a resolver
   doesn't need it.
 
-## Step 3 — Input types become argument structs
+## Step 3  -  Input types become argument structs
 
 **Before**:
 
@@ -196,9 +196,9 @@ type CreateUserArgs struct {
 }
 ```
 
-Nested input objects compose just like outputs — keep nesting structs.
+Nested input objects compose just like outputs  -  keep nesting structs.
 
-## Step 4 — Replace `graphql.Do` with the grx HTTP server
+## Step 4  -  Replace `graphql.Do` with the grx HTTP server
 
 **Before**:
 
@@ -225,8 +225,8 @@ http.HandleFunc("/graphql", func(w http.ResponseWriter, r *http.Request) {
 
 ```go
 import (
-    "github.com/patrickkabwe/grx"
-    "github.com/patrickkabwe/grx/schema"
+    "github.com/grx-gql/grx"
+    "github.com/grx-gql/grx/schema"
 )
 
 srv, err := grx.NewServer(
@@ -241,7 +241,7 @@ http.ListenAndServe(":4000", srv)
 This handler also serves the GraphiQL playground at `/` for free; you
 can drop your existing playground wiring.
 
-## Step 5 — Subscriptions (no migration; new capability)
+## Step 5  -  Subscriptions (no migration; new capability)
 
 `graphql-go/graphql` doesn't ship a subscription executor. If you were
 implementing realtime out-of-band (e.g. Redis pub/sub + WebSocket
@@ -262,10 +262,10 @@ func (Subscription) UserCreated(ctx context.Context) (<-chan *User, error) {
 
 Then register the WebSocket and SSE transports via `grx.WithTransports(...)`.
 
-## Step 6 — Plugins replace HTTP middleware
+## Step 6  -  Plugins replace HTTP middleware
 
-Anything you wrapped around `graphql.Do` — request logging, tracing,
-auth — moves to a [Plugin](/concepts/plugins). The grx executor calls
+Anything you wrapped around `graphql.Do`  -  request logging, tracing,
+auth  -  moves to a [Plugin](/concepts/plugins). The grx executor calls
 your plugins at the matching lifecycle hook so you don't need a custom
 HTTP middleware ring anymore.
 
@@ -274,9 +274,9 @@ import (
     "log/slog"
     "os"
 
-    "github.com/patrickkabwe/grx"
-    "github.com/patrickkabwe/grx/plugin/logger"
-    "github.com/patrickkabwe/grx/schema"
+    "github.com/grx-gql/grx"
+    "github.com/grx-gql/grx/plugin/logger"
+    "github.com/grx-gql/grx/schema"
 )
 
 loggerPlugin, _ := logger.New(logger.Config{
@@ -294,12 +294,12 @@ grx.NewServer(
 If your `graphql-go` schema uses any of the following, hold the
 migration until the matching [roadmap](/roadmap) item is checked:
 
-- **Enums.** `graphql.NewEnum(...)` — not yet mapped from Go types.
+- **Enums.** `graphql.NewEnum(...)`  -  not yet mapped from Go types.
 - **Interfaces and unions.** `graphql.NewInterface`, `graphql.NewUnion`.
-- **Custom scalars.** `graphql.NewScalar(...)` — only built-in scalars
+- **Custom scalars.** `graphql.NewScalar(...)`  -  only built-in scalars
   for now.
 - **Directives** including `@deprecated`.
-- **Field aliases**, **fragments**, **`@skip` / `@include`** — these
+- **Field aliases**, **fragments**, **`@skip` / `@include`**  -  these
   are parser/executor gaps.
 - **Default argument values** in the schema definition.
 
@@ -314,7 +314,7 @@ Before deleting `graphql-go/graphql` from your `go.mod`:
   hook fires on every request.
 - [ ] If you have subscriptions, confirm a client can connect, receive
   values, and disconnect cleanly.
-- [ ] Re-benchmark your real workload — `graphql-go`'s ~25× overhead is
+- [ ] Re-benchmark your real workload  -  `graphql-go`'s ~25× overhead is
   most visible on small queries; the relative win shrinks but stays
   positive on large list responses.
 

@@ -1,6 +1,6 @@
 ---
 title: Get started
-description: Minimal GraphQL servers in plain Go—or mounted next to Chi, Gin, Echo, Fiber, and the standard library mux.
+description: Minimal GraphQL servers in plain Go - or mounted next to Chi, Gin, Echo, Fiber, and the standard library mux.
 outline: deep
 ---
 
@@ -10,8 +10,8 @@ outline: deep
 1. New to **grx**? Skim **[What grx is](/concepts/what-is-grx)** once so advertised features (**HTTP**, subscriptions, authorizers…) map cleanly to packages.  
 2. Scan **[Define your schema](/concepts/schema-basics)** so the **`gql` tags** beside each field slot into mental model quickly.  
 3. Copy the snippets under [**Quick start**](#quick-start), then run `go run .`.  
-4. Background reading—[**How GraphQL backends work**](/guides/graphql-backend-essentials).  
-5. Harden and ship—[**Security**](/guides/production-security), [**Introspection**](/guides/introspection), [**Limits**](/guides/request-limits), then **[Deployment](/guides/deployment)** (Docker, reverse proxies, Kubernetes) when you leave localhost.
+4. Background reading - [**How GraphQL backends work**](/guides/graphql-backend-essentials).  
+5. Harden and ship - [**Security**](/guides/production-security), [**Introspection**](/guides/introspection), [**Limits**](/guides/request-limits), then **[Deployment](/guides/deployment)** (Docker, reverse proxies, Kubernetes) when you leave localhost.
 
 :::
 
@@ -28,7 +28,7 @@ Comfortable maintaining Go services? Jump to [**Quick Start**](#quick-start), pa
 ```bash
 mkdir hello-grx && cd hello-grx
 go mod init example.com/hello-grx
-go get github.com/patrickkabwe/grx@latest
+go get github.com/grx-gql/grx@latest
 ```
 
 Next: add **`graph/schema.go`** (below), **`main.go`**, **`go run .`**. Prefer a clone-and-run checklist? **`examples/basic/`** stays the quickest mirror of this lesson.
@@ -54,7 +54,7 @@ package graph
 import (
 	"context"
 
-	"github.com/patrickkabwe/grx/schema"
+	"github.com/grx-gql/grx/schema"
 )
 
 type User struct {
@@ -97,7 +97,7 @@ Many teams ship faster when structs author the canonical contract beside resolve
 | [**Chi**](./chi) | Composable routers, lightweight middleware stacks. |
 | [**Gin**](./gin) | High‑level HTTP API ergonomics (`gin.WrapH`). |
 | [**Echo**](./echo) | Minimal surface area with first-party `WrapHandler` helpers. |
-| [**Fiber**](./fiber) | `fasthttp` stack—bridge through Fibre’s adaptor to reach `ServeHTTP`. |
+| [**Fiber**](./fiber) | `fasthttp` stack - bridge through Fibre’s adaptor to reach `ServeHTTP`. |
 
 Every integration below shares:
 
@@ -108,7 +108,7 @@ Every integration below shares:
 Authenticate, trace, throttle, inject metadata by wrapping **`http.Handler`** middleware around **`delegated`**.
 
 ::: tip Dependencies  
-Install each router beside grx—for example **`go get github.com/go-chi/chi/v5`**, **`github.com/gin-gonic/gin`**, **`github.com/labstack/echo/v4`**, **`github.com/gofiber/fiber/v2`**, **`github.com/gofiber/adaptor/v2`**.  
+Install each router beside grx - for example **`go get github.com/go-chi/chi/v5`**, **`github.com/gin-gonic/gin`**, **`github.com/labstack/echo/v4`**, **`github.com/gofiber/fiber/v2`**, **`github.com/gofiber/adaptor/v2`**.  
 :::
 
 ---
@@ -130,7 +130,7 @@ Run it inside GraphiQL once your chosen guide prints the playground URL.
 
 ## What's next {#whats-next}
 
-- [**Define your schema**](/concepts/schema-basics) — lists, enums, unions, inputs.
-- [**Organize your code**](/concepts/schema-mapping) — multi-file schemas without registrar glue.
+- [**Define your schema**](/concepts/schema-basics)  -  lists, enums, unions, inputs.
+- [**Organize your code**](/concepts/schema-mapping)  -  multi-file schemas without registrar glue.
 - [**Queries & mutations**](/guides/query-mutation-server) · [**Subscriptions**](/guides/subscriptions)
 - [**How it fits together**](/concepts/architecture) · [**Migrate**](/guides/migrate/)

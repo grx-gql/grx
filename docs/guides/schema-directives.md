@@ -6,11 +6,11 @@ outline: deep
 
 # Built-in directives
 
-Introspection’s **`__schema.directives`** list is fixed to **seven** built-ins (**[`exec/introspection.go`](https://github.com/patrickkabwe/grx/blob/main/exec/introspection.go)**). Executable directives are enforced while flattening selections; schema directives surface through reflection, **`schema.ScalarConfig`**, or **`exec.ParseSDL`**.
+Introspection’s **`__schema.directives`** list is fixed to **seven** built-ins (**[`exec/introspection.go`](https://github.com/grx-gql/grx/blob/main/exec/introspection.go)**). Executable directives are enforced while flattening selections; schema directives surface through reflection, **`schema.ScalarConfig`**, or **`exec.ParseSDL`**.
 
 ::: tip Executable directives beyond this list  
 
-Arbitrary **`directive @example on FIELD` declarations** that attach custom semantics (like gqlgen/SDL plugins) are **not** part of **`schema.Build`** ergonomics yet—track broader extensibility on the **[Roadmap](/roadmap)**.
+Arbitrary **`directive @example on FIELD` declarations** that attach custom semantics (like gqlgen/SDL plugins) are **not** part of **`schema.Build`** ergonomics yet - track broader extensibility on the **[Roadmap](/roadmap)**.
 
 :::
 
@@ -34,7 +34,7 @@ Arbitrary **`directive @example on FIELD` declarations** that attach custom sema
 
 ### **`@skip` / `@include`**
 
-Evaluated automatically when **`exec`** merges selection sets (**[`evalSkipInclude`](https://github.com/patrickkabwe/grx/blob/main/exec/directives.go)**). Both require a Boolean **`if`** (literals or **`$variables`**).
+Evaluated automatically when **`exec`** merges selection sets (**[`evalSkipInclude`](https://github.com/grx-gql/grx/blob/main/exec/directives.go)**). Both require a Boolean **`if`** (literals or **`$variables`**).
 
 ```graphql
 {
@@ -48,7 +48,7 @@ Evaluated automatically when **`exec`** merges selection sets (**[`evalSkipInclu
 
 ::: info Client tip  
 
-Treat **`@skip(false)`** / **`@include(true)`** as no-ops; combine both on the same field only when logically consistent—validation rejects impossible directive combinations per **[Validation](/concepts/execution#validation)**.
+Treat **`@skip(false)`** / **`@include(true)`** as no-ops; combine both on the same field only when logically consistent - validation rejects impossible directive combinations per **[Validation](/concepts/execution#validation)**.
 
 :::
 
@@ -56,13 +56,13 @@ Treat **`@skip(false)`** / **`@include(true)`** as no-ops; combine both on the s
 
 **`@defer`** delays fragment or spread selections behind the primary response. **`if: false`** removes the directive (work runs eagerly). **`label`** namespaces incremental patches.
 
-**`@stream`** batches list output: the resolver must return **Go slices or arrays**. **`initialCount`** is how many list elements stay in the **first** **`data`** payload; the remainder ship as **`incremental[]`** parts. **`initialCount: 0`** skips the eager prefix entirely—every element is scheduled as incremental work (see **`[completeListStreamed](https://github.com/patrickkabwe/grx/blob/main/exec/incremental.go)`**).
+**`@stream`** batches list output: the resolver must return **Go slices or arrays**. **`initialCount`** is how many list elements stay in the **first** **`data`** payload; the remainder ship as **`incremental[]`** parts. **`initialCount: 0`** skips the eager prefix entirely - every element is scheduled as incremental work (see **`[completeListStreamed](https://github.com/grx-gql/grx/blob/main/exec/incremental.go)`**).
 
-**Multipart HTTP:** set **`Accept: multipart/mixed`** so **`pkg/http`** calls **[`Executor.ExecuteIncremental`](https://pkg.go.dev/github.com/patrickkabwe/grx/exec#Executor.ExecuteIncremental)**, wires an incremental collector, and emits **`@defer` / `@stream`** payloads over **`multipart/mixed`** (**[`writeIncremental`](https://github.com/patrickkabwe/grx/blob/main/pkg/http/http_transport.go)**).
+**Multipart HTTP:** set **`Accept: multipart/mixed`** so **`http`** calls **[`Executor.ExecuteIncremental`](https://pkg.go.dev/github.com/grx-gql/grx/exec#Executor.ExecuteIncremental)**, wires an incremental collector, and emits **`@defer` / `@stream`** payloads over **`multipart/mixed`** (**[`writeIncremental`](https://github.com/grx-gql/grx/blob/main/http/http_transport.go)**).
 
-**Fallback JSON (`Execute`):** Without that **`Accept`** header—or inside tests invoking **`Execute` directly—the executor **does not** attach an incremental collector. **`@defer` fragments flatten eagerly** (`collectDefers = false`). **`@stream` on lists is ignored**, and the resolver’s slice is serialized in one **`completeValue` / list pass** exactly like ordinary GraphQL responses.
+**Fallback JSON (`Execute`):** Without that **`Accept`** header - or inside tests invoking **`Execute` directly - the executor **does not** attach an incremental collector. **`@defer` fragments flatten eagerly** (`collectDefers = false`). **`@stream` on lists is ignored**, and the resolver’s slice is serialized in one **`completeValue` / list pass** exactly like ordinary GraphQL responses.
 
-Regression-style coverage: **[incremental_delivery_test.go](https://github.com/patrickkabwe/grx/blob/main/incremental_delivery_test.go)** (**multipart round-trips against **`grx.NewServer`**).
+Regression-style coverage: **[incremental_delivery_test.go](https://github.com/grx-gql/grx/blob/main/incremental_delivery_test.go)** (**multipart round-trips against **`grx.NewServer`**).
 
 ---
 
@@ -108,7 +108,7 @@ Combine struct-backed deprecation with client directives:
 
 ## Schema directive **`@specifiedBy`**
 
-Use **[`schema.ScalarConfig.SpecifiedByURL`](https://pkg.go.dev/github.com/patrickkabwe/grx/schema#ScalarConfig)** when registering custom scalars, or SDL:
+Use **[`schema.ScalarConfig.SpecifiedByURL`](https://pkg.go.dev/github.com/grx-gql/grx/schema#ScalarConfig)** when registering custom scalars, or SDL:
 
 ```graphql
 scalar DateTime @specifiedBy(url: "https://example.com/scalars/datetime")
@@ -120,11 +120,11 @@ Introspection exposes **`specifiedByURL`**.
 
 ## Schema directive **`@oneOf`**
 
-Marks **input objects** so exactly **one** field may be supplied. grx honours **`inputType.IsOneOf`** during coercion (**[`input_coercion.go`](https://github.com/patrickkabwe/grx/blob/main/exec/input_coercion.go)**).
+Marks **input objects** so exactly **one** field may be supplied. grx honours **`inputType.IsOneOf`** during coercion (**[`input_coercion.go`](https://github.com/grx-gql/grx/blob/main/exec/input_coercion.go)**).
 
 ::: warning Struct-only authoring gap  
 
-Pure **`schema.Config` + structs** cannot toggle **`IsOneOf`** directly—author SDL (**`input Foo @oneOf { … }`**) via **[`exec.ParseSDL`](https://pkg.go.dev/github.com/patrickkabwe/grx/exec#ParseSDL)** or extend the builder.
+Pure **`schema.Config` + structs** cannot toggle **`IsOneOf`** directly - author SDL (**`input Foo @oneOf { … }`**) via **[`exec.ParseSDL`](https://pkg.go.dev/github.com/grx-gql/grx/exec#ParseSDL)** or extend the builder.
 
 :::
 
@@ -135,13 +135,13 @@ Pure **`schema.Config` + structs** cannot toggle **`IsOneOf`** directly—author
 | Need | Tip |
 | --- | --- |
 | Enumerate builtins | **`{ __schema { directives { name locations args { name } isRepeatable } } }`** |
-| Validation errors | Mention directive locations sibling merge rules—**[Execution → Validation](/concepts/execution#validation)** |
-| Incremental payloads | Inspect **`multipart/mixed`** parts or call **[`Executor.ExecuteIncremental`](https://pkg.go.dev/github.com/patrickkabwe/grx/exec#Executor.ExecuteIncremental)** from tests |
+| Validation errors | Mention directive locations sibling merge rules - **[Execution → Validation](/concepts/execution#validation)** |
+| Incremental payloads | Inspect **`multipart/mixed`** parts or call **[`Executor.ExecuteIncremental`](https://pkg.go.dev/github.com/grx-gql/grx/exec#Executor.ExecuteIncremental)** from tests |
 
 ---
 
 ## Related
 
-- [`examples/directives`](https://github.com/patrickkabwe/grx/tree/main/examples/directives)
+- [`examples/directives`](https://github.com/grx-gql/grx/tree/main/examples/directives)
 - **[Execution pipeline](/concepts/execution)** (validation + incremental notes)
 - **[Define your schema](/concepts/schema-basics)** (**`gql` tag primer**)

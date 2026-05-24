@@ -23,16 +23,16 @@ import (
 	"testing"
 	"time"
 
-	"github.com/patrickkabwe/grx/core"
-	subscriptiongraph "github.com/patrickkabwe/grx/examples/subscriptions/graph"
-	"github.com/patrickkabwe/grx/exec"
-	grxclient "github.com/patrickkabwe/grx/pkg/client"
-	grxhttp "github.com/patrickkabwe/grx/pkg/http"
-	"github.com/patrickkabwe/grx/pkg/pubsub"
-	"github.com/patrickkabwe/grx/pkg/sse"
-	"github.com/patrickkabwe/grx/pkg/websocket"
-	"github.com/patrickkabwe/grx/plugin"
-	"github.com/patrickkabwe/grx/schema"
+	"github.com/grx-gql/grx/core"
+	subscriptiongraph "github.com/grx-gql/grx/examples/subscriptions/graph"
+	"github.com/grx-gql/grx/exec"
+	grxclient "github.com/grx-gql/grx/client"
+	grxhttp "github.com/grx-gql/grx/http"
+	"github.com/grx-gql/grx/memory-pubsub"
+	"github.com/grx-gql/grx/sse"
+	"github.com/grx-gql/grx/websocket"
+	"github.com/grx-gql/grx/plugin"
+	"github.com/grx-gql/grx/schema"
 )
 
 func TestServeHTTPServesPlaygroundAtConfiguredPath(t *testing.T) {
@@ -186,7 +186,7 @@ func newTestServer(t *testing.T) *Server {
 	return server
 }
 
-// testHarness runs GraphQL requests through pkg/client against a real HTTP server.
+// testHarness runs GraphQL requests through the github.com/grx-gql/grx/client package against a real HTTP server.
 // The client is created inside [wrapServerInHarness] via grxclient.New.
 type testHarness struct {
 	*Server
@@ -850,7 +850,7 @@ func (noopTransport) Match(*http.Request) bool { return true }
 
 func (noopTransport) Serve(http.ResponseWriter, *http.Request, core.Executor) {}
 
-// customHTTPTransport is not *websocket.Transport or *sse.Transport.
+// customHTTPTransport is not *websocket.WebSocketTransport or *sse.Transport.
 
 type customHTTPTransport struct{}
 

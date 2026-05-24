@@ -61,7 +61,7 @@ when the consumer is gone before the next tick.
 ```go
 package graph
 
-import "github.com/patrickkabwe/grx/schema"
+import "github.com/grx-gql/grx/schema"
 
 type Subscription struct {
 	UserSubscription
@@ -91,9 +91,9 @@ import (
 
 	"example.com/hello-grx/graph"
 
-	"github.com/patrickkabwe/grx"
-	"github.com/patrickkabwe/grx/pkg/sse"
-	"github.com/patrickkabwe/grx/pkg/websocket"
+	"github.com/grx-gql/grx"
+	"github.com/grx-gql/grx/sse"
+	"github.com/grx-gql/grx/websocket"
 )
 
 func main() {
@@ -125,7 +125,7 @@ func main() {
 To **split** the subscription wire path from `POST /graphql` (for example
 `/graphql` for HTTP and `/graphql/ws` for WebSocket and SSE), add
 `grx.WithSubscriptionPath("/graphql/ws")`. The server automatically moves
-only the bundled `*websocket.Transport` and `*sse.Transport` to that path.
+only the bundled `*websocket.WebSocketTransport` and `*sse.Transport` to that path.
 That is an organizational choice; it is also common to keep a **single**
 URL for both HTTP and `graphql-transport-ws`.
 
@@ -138,9 +138,9 @@ import (
 
 	"example.com/hello-grx/graph"
 
-	"github.com/patrickkabwe/grx"
-	"github.com/patrickkabwe/grx/pkg/sse"
-	"github.com/patrickkabwe/grx/pkg/websocket"
+	"github.com/grx-gql/grx"
+	"github.com/grx-gql/grx/sse"
+	"github.com/grx-gql/grx/websocket"
 )
 
 func main() {
@@ -158,7 +158,7 @@ func main() {
 ```
 
 For browser clients, treat WebSocket as a **long‑lived ingress**: lock down
-TLS, origins, connection auth, and sizing—see **[Securing subscriptions](#securing-subscriptions)**
+TLS, origins, connection auth, and sizing - see **[Securing subscriptions](#securing-subscriptions)**
 after the walkthrough.
 
 ## 4. Try it from the playground
@@ -205,7 +205,7 @@ curl -N -H "Accept: text/event-stream" \
 
 Subscriptions are **another front door** beside `POST /graphql`: clients can
 keep a socket or SSE stream open indefinitely, so apply the same severity you
-would at the HTTP layer—and read **[Security](/guides/production-security)**,
+would at the HTTP layer - and read **[Security](/guides/production-security)**,
 **[Authentication & authorization](/guides/auth)**, **[Limits](/guides/request-limits)**,
 and **[CORS & browsers](/guides/cors-browsers)** for the full picture.
 
@@ -214,7 +214,7 @@ and **[CORS & browsers](/guides/cors-browsers)** for the full picture.
 Use **`wss://`** (TLS) in production. Putting WebSocket and HTTP behind a reverse
 proxy is normal; ensure upgrade headers and idle timeouts are tuned for long
 lived connections (`WithSubscriptionPath` helps isolate subscription traffic for
-routing and WAF rules—see [section 3](#register-subscription-transports)).
+routing and WAF rules - see [section 3](#register-subscription-transports)).
 
 ### Origin policy (`CheckOrigin`)
 
@@ -229,7 +229,7 @@ package main
 import (
 	"net/http"
 
-	"github.com/patrickkabwe/grx/pkg/websocket"
+	"github.com/grx-gql/grx/websocket"
 )
 
 func corsOriginExample() websocket.Config {
@@ -247,7 +247,7 @@ func corsOriginExample() websocket.Config {
 
 For **`graphql-transport-ws`**, the natural place to validate identity is
 **once per connection**, inside `websocket.Config.OnConnect`, using the
-client’s `connection_init` payload—**not** once per subscription message.
+client’s `connection_init` payload - **not** once per subscription message.
 
 ```go
 package main
@@ -255,7 +255,7 @@ package main
 import (
 	"context"
 
-	"github.com/patrickkabwe/grx/pkg/websocket"
+	"github.com/grx-gql/grx/websocket"
 )
 
 type userKey struct{}
@@ -299,13 +299,13 @@ refresh or short-lived streams accordingly.
 
 **Operation** and **field** authorizers wired on the executor still apply to
 subscription selections. A client that passed `OnConnect` must still be
-allowed to subscribe to each field you expose—reuse the same guards you use
+allowed to subscribe to each field you expose - reuse the same guards you use
 for queries. See **[Authentication & authorization](/guides/auth)**.
 
 ### Timeouts and abuse
 
 `websocket.Config` exposes **connection init**, **read/write**, **ping**, and
-**`MaxMessageSize`** limits—set them so a single client cannot hold unbounded
+**`MaxMessageSize`** limits - set them so a single client cannot hold unbounded
 memory or CPU (**[`websocket.Config` sample](#register-subscription-transports)**). At the edge, add
 **rate limits** and **connection quotas** the same way you would for any
 public streaming API; **[Limits](/guides/request-limits)** covers HTTP body
@@ -314,16 +314,16 @@ and executor caps that complement subscription transports.
 ### Fan-out isolation
 
 When using **[pub/sub](/concepts/pubsub)**, keep predicates and topic naming
-structured so tenants cannot subscribe to each other’s events—defense in depth
+structured so tenants cannot subscribe to each other’s events - defense in depth
 beyond transport auth.
 
 ## Cross-resolver fan-out with `pubsub`
 
 The ticker pattern above is fine for demos but not for real workloads.
 Most subscriptions stream events that **mutation resolvers** publish
-elsewhere — e.g. a `messagePosted` subscription that fans out values
+elsewhere  -  e.g. a `messagePosted` subscription that fans out values
 produced by a `postMessage` mutation. grx ships
-[`pkg/pubsub`](/concepts/pubsub) for exactly this.
+[`memory-pubsub`](/concepts/pubsub) (`package pubsub`) for exactly this  -  use **in-memory** for single-process setups and **`redis-pubsub`** once you scale horizontally; **[Choosing a backend](/concepts/pubsub#choosing-a-backend)** explains the trade-offs.
 
 ### Wire a typed bus
 
@@ -337,7 +337,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/patrickkabwe/grx/pkg/pubsub"
+	"github.com/grx-gql/grx/memory-pubsub"
 )
 
 const messagePostedTopic = "message.posted"
@@ -401,8 +401,8 @@ func (s MessageSubscription) MessagePosted(ctx context.Context, args MessagePost
 package graph
 
 import (
-	"github.com/patrickkabwe/grx/pkg/pubsub"
-	"github.com/patrickkabwe/grx/schema"
+	"github.com/grx-gql/grx/memory-pubsub"
+	"github.com/grx-gql/grx/schema"
 )
 
 func NewSchema(bus pubsub.PubSub) schema.Config {
@@ -430,10 +430,10 @@ import (
 
 	"example.com/hello-grx/graph"
 
-	"github.com/patrickkabwe/grx"
-	"github.com/patrickkabwe/grx/pkg/pubsub"
-	"github.com/patrickkabwe/grx/pkg/sse"
-	"github.com/patrickkabwe/grx/pkg/websocket"
+	"github.com/grx-gql/grx"
+	"github.com/grx-gql/grx/memory-pubsub"
+	"github.com/grx-gql/grx/sse"
+	"github.com/grx-gql/grx/websocket"
 )
 
 func allowOrigin(r *http.Request) bool {
@@ -487,7 +487,8 @@ publish path.
 ### Going multi-replica
 
 When you outgrow a single process, swap `pubsub.NewMemory()` for the
-Redis backend — nothing else changes:
+Redis-backed bus  -  resolver code and `Typed[T]` wiring stay the same
+([**memory vs Redis**](/concepts/pubsub#choosing-a-backend)):
 
 ```go
 package main
@@ -495,7 +496,7 @@ package main
 import (
 	"log"
 
-	redisps "github.com/patrickkabwe/grx/pkg/pubsub/redis"
+	redisps "github.com/grx-gql/grx/redis-pubsub"
 
 	rd "github.com/redis/go-redis/v9"
 )
@@ -518,4 +519,4 @@ func redisBusSnippet() {
 ```
 
 
-See [Pub/Sub](/concepts/pubsub) for the full surface.
+See **[Pub/Sub](/concepts/pubsub)** (including [**choosing a backend**](/concepts/pubsub#choosing-a-backend)) for the full surface.

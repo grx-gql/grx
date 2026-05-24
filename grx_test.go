@@ -14,9 +14,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/patrickkabwe/grx/pkg/websocket"
-	"github.com/patrickkabwe/grx/plugin/logger"
-	"github.com/patrickkabwe/grx/schema"
+	"github.com/grx-gql/grx/websocket"
+	"github.com/grx-gql/grx/plugin/logger"
+	"github.com/grx-gql/grx/schema"
 )
 
 type middlewareQuery struct{}

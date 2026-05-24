@@ -3,7 +3,7 @@ package exec
 import (
 	"fmt"
 
-	"github.com/patrickkabwe/grx/core"
+	"github.com/grx-gql/grx/core"
 )
 
 func parseOperationKind(query string, operationName string) (core.OperationKind, error) {
