@@ -313,3 +313,49 @@ func (w *nonFlusherResponseWriter) WriteHeader(status int)      { w.status = sta
 func TestSatisfiesCoreTransport(t *testing.T) {
 	var _ core.Transport = grxsse.New()
 }
+
+func TestServeEnforcesMaxActiveSubscriptions(t *testing.T) {
+	started := make(chan struct{})
+	out := make(chan core.Response)
+	exec := &signalHoldExecutor{out: out, started: started}
+	transport := grxsse.New(grxsse.Config{MaxActiveSubscriptions: 1})
+
+	req1 := sseRequest(http.MethodPost, "/graphql", strings.NewReader(`{"query":"subscription { x }"}`))
+	rec1 := httptest.NewRecorder()
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		transport.Serve(rec1, req1, exec)
+	}()
+
+	<-started
+
+	req2 := sseRequest(http.MethodPost, "/graphql", strings.NewReader(`{"query":"subscription { y }"}`))
+	rec2 := httptest.NewRecorder()
+	transport.Serve(rec2, req2, newStreamingExecutor())
+
+	if rec2.Code != http.StatusTooManyRequests {
+		t.Fatalf("second stream status = %d, want 429", rec2.Code)
+	}
+
+	close(out)
+	<-done
+}
+
+type signalHoldExecutor struct {
+	out     chan core.Response
+	started chan struct{}
+}
+
+func (signalHoldExecutor) Execute(context.Context, core.Request) core.Response {
+	return core.Response{}
+}
+
+func (signalHoldExecutor) OperationKind(core.Request) (core.OperationKind, error) {
+	return core.OperationSubscription, nil
+}
+
+func (e *signalHoldExecutor) Subscribe(context.Context, core.Request) (<-chan core.Response, error) {
+	close(e.started)
+	return e.out, nil
+}

@@ -9,6 +9,9 @@ import (
 	"github.com/patrickkabwe/grx/core"
 )
 
+// randRead injects entropy for request IDs (overridden in tests).
+var randRead = rand.Read
+
 // RequestID returns middleware that ensures each request carries a request ID
 // in context ([core.RequestIDFromContext]) and echoes it on the response.
 // When header is empty, "X-Request-Id" is used. If the incoming request omits
@@ -33,7 +36,7 @@ func RequestID(header string) Middleware {
 
 func randomRequestID() string {
 	var buf [8]byte
-	if _, err := rand.Read(buf[:]); err != nil {
+	if _, err := randRead(buf[:]); err != nil {
 		return "unknown"
 	}
 	return hex.EncodeToString(buf[:])

@@ -83,3 +83,101 @@ func TestNewWritesCredentialHeaders(t *testing.T) {
 		t.Fatalf("unexpected allow credentials header %q", got)
 	}
 }
+
+func TestPassesThroughWhenNoOrigin(t *testing.T) {
+	called := false
+	handler := New(Config{})(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		called = true
+	}))
+	handler.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/", nil))
+	if !called {
+		t.Fatal("expected next without Origin header")
+	}
+}
+
+func TestWildcardOriginWithoutCredentialsUsesStar(t *testing.T) {
+	middleware := New(Config{
+		AllowedOrigins: []string{"*", " ", "extra"},
+		AllowedMethods: []string{http.MethodGet},
+	})
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.Header.Set("Origin", "https://any.where")
+	middleware(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {})).ServeHTTP(rec, req)
+	if got := rec.Header().Get("Access-Control-Allow-Origin"); got != "*" {
+		t.Fatalf("want * Allow-Origin, got %q", got)
+	}
+}
+
+func TestExposedHeadersSet(t *testing.T) {
+	middleware := New(Config{
+		AllowedOrigins: []string{"http://a"},
+		AllowedMethods: []string{http.MethodGet},
+		ExposedHeaders: []string{"X-Custom", "X-Other"},
+	})
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.Header.Set("Origin", "http://a")
+	middleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})).ServeHTTP(rec, req)
+	if got := rec.Header().Get("Access-Control-Expose-Headers"); got != "X-Custom, X-Other" {
+		t.Fatalf("expose headers: got %q", got)
+	}
+}
+
+func TestPreflightRejectsMethod(t *testing.T) {
+	handler := New(Config{
+		AllowedOrigins: []string{"http://a"},
+		AllowedMethods: []string{http.MethodPost},
+		AllowedHeaders: []string{"Content-Type"},
+	})(http.HandlerFunc(func(http.ResponseWriter, *http.Request) { t.Fatal("next") }))
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodOptions, "/", nil)
+	req.Header.Set("Origin", "http://a")
+	req.Header.Set("Access-Control-Request-Method", http.MethodDelete)
+	req.Header.Set("Access-Control-Request-Headers", "Content-Type")
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("status %d", rec.Code)
+	}
+}
+
+func TestPreflightRejectsHeaders(t *testing.T) {
+	handler := New(Config{
+		AllowedOrigins: []string{"http://a"},
+		AllowedMethods: []string{http.MethodPost},
+		AllowedHeaders: []string{"Content-Type"},
+	})(http.HandlerFunc(func(http.ResponseWriter, *http.Request) { t.Fatal("next") }))
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodOptions, "/", nil)
+	req.Header.Set("Origin", "http://a")
+	req.Header.Set("Access-Control-Request-Method", http.MethodPost)
+	req.Header.Set("Access-Control-Request-Headers", "Authorization")
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("status %d", rec.Code)
+	}
+}
+
+func TestPreflightWildcardHeaders(t *testing.T) {
+	middleware := New(Config{
+		AllowedOrigins: []string{"http://a"},
+		AllowedMethods: []string{http.MethodPost},
+		AllowedHeaders: []string{"*"},
+		MaxAge:         2 * time.Second,
+	})
+	handler := middleware(http.HandlerFunc(func(http.ResponseWriter, *http.Request) { t.Fatal("next") }))
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodOptions, "/", nil)
+	req.Header.Set("Origin", "http://a")
+	req.Header.Set("Access-Control-Request-Method", http.MethodPost)
+	req.Header.Set("Access-Control-Request-Headers", "X-Anything, Authorization")
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("status %d", rec.Code)
+	}
+	if rec.Header().Get("Access-Control-Max-Age") != "2" {
+		t.Fatalf("max-age: %s", rec.Header().Get("Access-Control-Max-Age"))
+	}
+}

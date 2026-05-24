@@ -2,6 +2,10 @@ package grx
 
 import (
 	"bytes"
+	"context"
+	"errors"
+	"io"
+	"log/slog"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -11,12 +15,54 @@ import (
 	"time"
 
 	"github.com/patrickkabwe/grx/pkg/websocket"
+	"github.com/patrickkabwe/grx/plugin/logger"
 	"github.com/patrickkabwe/grx/schema"
 )
 
 type middlewareQuery struct{}
 
 func (middlewareQuery) Hello() string { return "hi" }
+
+func TestNewServer_RequiresSchema(t *testing.T) {
+	_, err := NewServer()
+	if !errors.Is(err, ErrMissingSchema) {
+		t.Fatalf("expected ErrMissingSchema, got %v", err)
+	}
+}
+
+func TestAllForwardingOptionsSmoke(t *testing.T) {
+	logPlug, err := logger.New(logger.Config{Logger: slog.New(slog.NewTextHandler(io.Discard, nil))})
+	if err != nil {
+		t.Fatalf("logger plugin: %v", err)
+	}
+	srv, err := NewServer(
+		WithSchema(schema.Config{Query: middlewareQuery{}, Subscription: middlewareSubscription{}}),
+		WithPlugins(logPlug),
+		WithPlaygroundPath(""),
+		WithGraphQLPath("/api/query"),
+		WithSubscriptionPath("/api/sub"),
+		WithTransports(websocket.New()),
+		WithMiddleware(RequestID("X-Request-ID")),
+		WithRequestTimeout(5*time.Minute),
+		WithDisableIntrospection(),
+		WithMaxHTTPRequestBytes(96<<10),
+		WithResponseGzip(),
+		WithPersistedQueries(map[string]string{}),
+		WithOperationAuthorizer(func(ctx context.Context, op OperationContext) error { return nil }),
+		WithFieldAuthorizer(func(ctx context.Context, fc FieldAuthorizationContext) error { return nil }),
+		WithSchemaSDLPath("/schema.graphql"),
+	)
+	if err != nil {
+		t.Fatalf("new server: %v", err)
+	}
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/query", bytes.NewBufferString(`{"query":"{ hello }"}`))
+	req.Header.Set("Content-Type", "application/json")
+	srv.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GraphQL POST: status %d", rec.Code)
+	}
+}
 
 func TestWithMiddlewareWrapsGraphQLRequests(t *testing.T) {
 	srv, err := NewServer(

@@ -7,10 +7,48 @@ import (
 	"log/slog"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/patrickkabwe/grx/core"
 	"github.com/patrickkabwe/grx/plugin"
 )
+
+func TestGraphqlResponseTimeAttrBranches(t *testing.T) {
+	sec := graphqlResponseTimeAttr(2 * time.Second).Value.String()
+	if sec != `2.000s` {
+		t.Fatalf("seconds branch got %q", sec)
+	}
+	ms := graphqlResponseTimeAttr(3 * time.Millisecond).Value.String()
+	if ms != `3.000ms` {
+		t.Fatalf("ms branch got %q", ms)
+	}
+	z := graphqlResponseTimeAttr(0).Value.String()
+	if z != `0ms` {
+		t.Fatalf("zero branch got %q", z)
+	}
+	neg := graphqlResponseTimeAttr(-time.Millisecond).Value.String()
+	if neg != `0ms` {
+		t.Fatalf("negative branch got %q", neg)
+	}
+}
+
+func TestRequestElapsedEdgeCases(t *testing.T) {
+	if _, ok := requestElapsed(context.Background()); ok {
+		t.Fatal("missing start")
+	}
+
+	ctxWrong := context.WithValue(context.Background(), requestStartedAtCtxKey{}, "not-time")
+	if _, ok := requestElapsed(ctxWrong); ok {
+		t.Fatal("wrong Value type must be invisible")
+	}
+
+	startAt := time.Now().Add(-2 * time.Minute)
+	ctxOK := context.WithValue(context.Background(), requestStartedAtCtxKey{}, startAt)
+	d, ok := requestElapsed(ctxOK)
+	if !ok || d <= 0 {
+		t.Fatalf("expected elapsed, got dur=%v ok=%v", d, ok)
+	}
+}
 
 func TestNewRequiresLogger(t *testing.T) {
 	_, err := New(Config{})
