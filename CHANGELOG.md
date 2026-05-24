@@ -8,9 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 Published versions use section titles that match
 [release-please](https://github.com/googleapis/release-please) (emoji-prefixed
 headings such as **`### ✨ Added`**, **`### 🐛 Fixed`**, **`### 📚 Documentation`**, … —
-see **`release-please-config.json`**). The site copy in
-[`docs/changelog.md`](docs/changelog.md) is **generated**
-(`make docs-changelog` — do not edit that file).
+see **`release-please-config.json`**). **`docs/changelog.md`** mirrors this file on the docs site (**`make docs-changelog`**; edit **`CHANGELOG.md`**, not **`docs/changelog.md`** directly).
 
 ## [0.4.0] - unpublished
 
