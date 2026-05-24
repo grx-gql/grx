@@ -182,7 +182,7 @@ func TestExecutorBindsNestedInputObject(t *testing.T) {
 
 	executor := New(schemaValue, nil)
 	response := executor.Execute(context.Background(), core.Request{
-		Query: `mutation CreateUser($input: UserCreateInput!) {
+		Query: `mutation CreateUser($input: testUserCreateInput!) {
 			createUser(input: $input) {
 				user {
 					id

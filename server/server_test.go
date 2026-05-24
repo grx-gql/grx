@@ -584,7 +584,7 @@ func TestSecurityOperationAuthorizerRejectsOperation(t *testing.T) {
 	}
 	h := wrapServerInHarness(t, srv)
 	body := responseToMap(t, execGraphQL(t, h, &grxclient.Request{
-		Query: `mutation CreatePost { createPost(input: {title: "x", body: "y"}) { post { id } } }`,
+		Query: `mutation CreatePost { createPost(input: {title: "x", body: "y", authorId: "user_1"}) { post { id } } }`,
 	}))
 	errors := graphQLErrors(t, body)
 	msg := graphQLError(t, errors, 0)["message"].(string)
