@@ -457,3 +457,264 @@ func TestParseSDLFieldWithDeprecated(t *testing.T) {
 		t.Fatalf("expected deprecation reason, got %v", f.DeprecationReason)
 	}
 }
+
+func TestComplexSDLParsingBranches(t *testing.T) {
+	s, err := ParseSDL(`
+		scalar Date
+		interface Node { id: ID! }
+		type User implements Node { id: ID! name: String age: Int }
+		type Post { id: ID! title: String }
+		union Search = User | Post
+		enum Role { ADMIN USER }
+		input Filter { term: String limit: Int }
+		type Query { search(filter: Filter): [Search] user(id: ID!): User }
+		type Mutation { noop: Boolean }
+		type Subscription { changed: User }
+	`)
+	if err != nil {
+		t.Fatalf("ParseSDL: %v", err)
+	}
+	if s.Query == nil || s.Mutation == nil || s.Subscription == nil {
+		t.Fatalf("missing roots: %#v", s)
+	}
+	if _, ok := s.Types["Search"].(*schema.Union); !ok {
+		t.Fatalf("missing union: %#v", s.Types["Search"])
+	}
+	rich, err := ParseSDL(`
+		scalar Date
+		schema { query: Root mutation: Mut subscription: Sub }
+		interface RichNode { id: ID! }
+		type Root implements RichNode {
+			id: ID!
+			field(arg: String, nums: [Int!]): String
+		}
+		type Mut { noop: Boolean }
+		type Sub { changed: String }
+		enum RichRole { ADMIN @deprecated(reason: "old") USER }
+		input RichInput { term: String nums: [Int!] }
+	`)
+	if err != nil {
+		t.Fatalf("rich SDL: %v", err)
+	}
+	if rich.Query == nil || rich.Mutation == nil || rich.Subscription == nil {
+		t.Fatalf("rich SDL roots missing: %#v", rich)
+	}
+	for _, bad := range []string{
+		`type`,
+		`type Bad { field: Missing }`,
+		`schema { query: Missing }`,
+		`directive @bad(`,
+		`enum Bad {`,
+		`input Bad { field: }`,
+	} {
+		if _, err := ParseSDL(bad); err == nil {
+			t.Fatalf("expected SDL parse error for %q", bad)
+		}
+	}
+}
+
+func TestParseSDLInputDefaultsRoundTripDefaults(t *testing.T) {
+	s, err := ParseSDL(`
+		enum Unit { KG }
+		input Payload {
+		  v: Float = -1.25
+		  tags: [String] = ["a", "b"]
+		  active: Boolean! = false
+		  unit: Unit = KG
+		}
+		type Query {
+			pass(p: Payload = { v: 0, tags: ["x"], active: true, unit: KG }): Boolean!
+		}
+	`)
+	if err != nil {
+		t.Fatalf("ParseSDL: %v", err)
+	}
+	in, ok := s.Types["Payload"].(*schema.InputObject)
+	if !ok {
+		t.Fatalf("expected Payload input object, got %T", s.Types["Payload"])
+	}
+	if len(in.Fields) != 4 {
+		t.Fatalf("field count = %d", len(in.Fields))
+	}
+	if in.Fields["v"].DefaultValue == nil || in.Fields["active"].DefaultValue == nil {
+		t.Fatalf("expected input-field defaults populated, got %+v %+v",
+			in.Fields["v"].DefaultValue, in.Fields["active"].DefaultValue)
+	}
+	q := s.Types["Query"].(*schema.Object)
+	passArg := q.Fields["pass"].Args[0]
+	if passArg.DefaultValue == nil {
+		t.Fatal("expected field argument structured default")
+	}
+}
+
+func TestParseSDLExplicitSchemaRootsAndExtendQuery(t *testing.T) {
+	s, err := ParseSDL(`
+		schema @tag {
+			query: RootQuery
+			mutation: Mut
+			subscription: Sub
+		}
+		directive @tag on SCHEMA
+		type RootQuery { ok: Boolean }
+		type Mut { bump: Boolean }
+		type Sub { tick: Boolean }
+		union SearchUnion = RootQuery | Mut
+		extend type RootQuery {
+			extraFlag: Boolean
+		}
+	`)
+	if err != nil {
+		t.Fatalf("ParseSDL: %v", err)
+	}
+	if s.Query == nil || s.Mutation == nil || s.Subscription == nil {
+		t.Fatalf("explicit roots wired incorrectly: q=%v m=%v s=%v", s.Query != nil, s.Mutation != nil, s.Subscription != nil)
+	}
+	root := s.Types["RootQuery"].(*schema.Object)
+	if _, ok := root.Fields["extraFlag"]; !ok {
+		t.Fatal("expected extend fields merged into RootQuery")
+	}
+	if _, ok := s.Types["SearchUnion"].(*schema.Union); !ok {
+		t.Fatalf("expected union type, got %T", s.Types["SearchUnion"])
+	}
+}
+
+func TestParseSDLDirectiveArgsDescriptionsAndNestedInterfaceImplements(t *testing.T) {
+	sdl := `
+		directive @audit(
+		  "telemetry key"
+		  key: String! = "default"
+		  "retry budget"
+		  retries: Int @deprecated(reason: "use budget")
+		  channel: Boolean = false
+		) repeatable on FIELD_DEFINITION
+
+		interface Identifiable { id: ID! }
+		interface Auditable implements Identifiable {
+		  id: ID!
+		  auditedAt: String
+		}
+		type Account implements Identifiable & Auditable {
+		  id: ID!
+		  auditedAt: String @audit(key: "acct")
+		  label: String
+		}
+
+		enum Stage { ALPHA @deprecated BETA }
+
+		input PatchOps {
+		  legacyRatio: Float @deprecated
+		  note: String! = ""
+		}
+
+		type Query {
+		  account: Account
+		  patch(
+		   "applied changes"
+		   ops: PatchOps = {}
+		  ): Boolean!
+		}
+	`
+	s, err := ParseSDL(sdl)
+	if err != nil {
+		t.Fatalf("ParseSDL: %v", err)
+	}
+	dir, ok := s.DirectiveDefinitions["audit"]
+	if !ok || dir == nil || !dir.IsRepeatable || len(dir.Args) != 3 {
+		t.Fatalf("audit directive malformed: repeatable=%v args=%d", dir != nil && dir.IsRepeatable, len(dir.Args))
+	}
+	foundKeyDesc := false
+	for _, iv := range dir.Args {
+		if iv.Name == "key" && iv.Description == "telemetry key" {
+			foundKeyDesc = true
+		}
+	}
+	if !foundKeyDesc {
+		t.Fatal("expected string descriptions on directive args")
+	}
+
+	audIface := s.Types["Auditable"].(*schema.Interface)
+	if len(audIface.Interfaces) != 1 || audIface.Interfaces[0].Name() != "Identifiable" {
+		t.Fatalf("expected Auditable to implement Identifiable, got %+v", audIface.Interfaces)
+	}
+
+	ev := s.Types["Stage"].(*schema.Enum)
+	evByName := map[string]schema.EnumValue{}
+	for _, v := range ev.Values {
+		evByName[v.Name] = v
+	}
+	a := evByName["ALPHA"]
+	if !a.IsDeprecated || a.DeprecationReason != nil {
+		t.Fatalf("ALPHA deprecation = deprecated=%v reason=%v", a.IsDeprecated, a.DeprecationReason)
+	}
+
+	patch := s.Types["PatchOps"].(*schema.InputObject)
+	lf := patch.Fields["legacyRatio"]
+	if !lf.IsDeprecated || lf.DeprecationReason != nil {
+		t.Fatalf("input field deprecation without reason: %#v %#v", lf.IsDeprecated, lf.DeprecationReason)
+	}
+
+	qField := s.Query.Fields["patch"]
+	if len(qField.Args) != 1 || qField.Args[0].Description != "applied changes" {
+		t.Fatalf("field arg description mismatch: %+v", qField.Args)
+	}
+	if qField.Args[0].DefaultValue == nil {
+		t.Fatal("expected default value for PatchOps argument")
+	}
+}
+
+func TestParseSDLSchemaDirectiveWithoutSelectionsBlock(t *testing.T) {
+	// Covers parseSchemaDef when no { ... } block follows (valid empty schema declaration).
+	s, err := ParseSDL(`
+		directive @marker on SCHEMA
+		schema @marker
+		type Query { ping: Boolean! }
+	`)
+	if err != nil {
+		t.Fatalf("ParseSDL: %v", err)
+	}
+	if s.Query == nil {
+		t.Fatal("expected default Query root from convention")
+	}
+}
+
+func TestParseSDLFailureMatrixBranches(t *testing.T) {
+	// Targets SDL parser/parser-builder error exits (eof, expect mismatches).
+	docs := []string{
+		`junk`,
+		`scalar`,
+		`scalar @`,
+		`type`,
+		`interface`,
+		`union`,
+		`enum`,
+		`enum E { `,
+		`input`,
+		`input I { `,
+		`schema {`,
+		`schema { query: `,
+		`directive @`,
+		`directive @audit repeatable`,
+		`extend type `,
+		`extend input `,
+		`type Query { x: TotallyMissingType }`,
+		"type Q { _: [[ID!",
+		`fragment Illegal on Query { x: ID }`,
+		`type Bad { fld(: Int): Int }`,
+		`union U = | Person`,
+		`directive @dup ( ") on FIELD_DEFINITION`,
+		`enum E { V @ `,
+		`input Bad { foo: = 1 }`,
+		"type Bad2 { _: ]ID }",
+		`type Zap { _: @illegal }`,
+		`enum Color { RED BLUE`,
+		`interface Edge { `,
+	}
+	for _, doc := range docs {
+		if _, err := ParseSDL(doc); err == nil {
+			t.Fatalf("expected error for %#v", doc)
+		}
+	}
+	if _, err := ParseSDL("\"unclosed"); err == nil {
+		t.Fatal("expected lex/parse failure for dangling string literal")
+	}
+}

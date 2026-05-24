@@ -55,7 +55,7 @@ jobs:
       pause_deploy: ${{ env.PAUSE_DOCS_DEPLOY }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           # VitePress `lastUpdated` reads commit history from git.
           fetch-depth: 0
@@ -68,7 +68,7 @@ jobs:
       - name: Set up Bun
         uses: oven-sh/setup-bun@v2
         with:
-          bun-version: 1.3.10
+          bun-version: latest
 
       - name: Install docs dependencies
         working-directory: docs

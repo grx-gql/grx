@@ -53,3 +53,27 @@ func TestNewFieldErrorIncludesClassificationAndLocations(t *testing.T) {
 		t.Fatalf("locations = %#v", err.Locations)
 	}
 }
+
+func TestCoreErrorHelpers(t *testing.T) {
+	res := AttachRequestIDExtension(Response{}, "req_1")
+	if res.Extensions["requestId"] != "req_1" {
+		t.Fatalf("extensions = %#v", res.Extensions)
+	}
+	unchanged := AttachRequestIDExtension(Response{}, "")
+	if unchanged.Extensions != nil {
+		t.Fatalf("unexpected extensions = %#v", unchanged.Extensions)
+	}
+
+	err := NewValidationError(coverageLocationErr{})
+	if len(err.Locations) != 1 || err.Extensions["code"] != ErrorCodeValidationFailed {
+		t.Fatalf("validation error = %#v", err)
+	}
+}
+
+type coverageLocationErr struct{}
+
+func (coverageLocationErr) Error() string { return "bad location" }
+
+func (coverageLocationErr) GraphQLLocations() []Location {
+	return []Location{{Line: 2, Column: 3}}
+}

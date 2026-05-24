@@ -34,29 +34,29 @@ var ErrSubscriptionOperation = errors.New("subscription operations must use the 
 // notifies the registered plugins at each lifecycle phase. It satisfies
 // [core.Executor] and is safe for concurrent use.
 type Executor struct {
-	Schema               *schema.Schema
-	Plugins              []plugin.Plugin
-	disableIntrospection bool
-	maxSelectionDepth    int
-	maxSelectionCount    int
-	maxAliasCount        int
-	maxRootFieldCount    int
-	maskInternalErrors   bool
-	clientErrorMessage   string
-	operationAuthorizer  OperationAuthorizer
-	fieldAuthorizer      FieldAuthorizer
-	rateLimiter          RateLimiter
-	trustedDocuments     map[string]string
-	rejectUnknownVars    bool
+	Schema                  *schema.Schema
+	Plugins                 []plugin.Plugin
+	disableIntrospection    bool
+	maxSelectionDepth       int
+	maxSelectionCount       int
+	maxAliasCount           int
+	maxRootFieldCount       int
+	maskInternalErrors      bool
+	clientErrorMessage      string
+	operationAuthorizer     OperationAuthorizer
+	fieldAuthorizer         FieldAuthorizer
+	rateLimiter             RateLimiter
+	trustedDocuments        map[string]string
+	rejectUnknownVars       bool
 	resolverCacheEnabled    bool
 	abstractTypeResolver    AbstractTypeResolver
 	executableIntrospection bool
 	apolloTracing           bool
 	fieldEnders             []plugin.FieldResolveEnder
-	documentCache        map[string]documentBundle
-	documentCacheOrder   []string
-	documentCacheLimit   int
-	documentCacheMu      sync.RWMutex
+	documentCache           map[string]documentBundle
+	documentCacheOrder      []string
+	documentCacheLimit      int
+	documentCacheMu         sync.RWMutex
 
 	lexTokenCache map[string][]token
 	lexCacheOrder []string
@@ -1038,9 +1038,6 @@ func appendPath(path []any, item any) []any {
 }
 
 func pathStrings(path []any) []string {
-	if len(path) == 0 {
-		return nil
-	}
 	result := make([]string, len(path))
 	for index, item := range path {
 		result[index] = pathSegmentString(item)

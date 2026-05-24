@@ -92,3 +92,34 @@ func TestResolveCoordinateErrors(t *testing.T) {
 		}
 	}
 }
+
+func TestParseCoordinateBranches(t *testing.T) {
+	if _, err := schema.ParseCoordinate(""); err == nil {
+		t.Fatal("empty coordinate should error")
+	}
+	if _, err := schema.ParseCoordinate("Foo.bar(noClose"); err == nil {
+		t.Fatal("missing closing paren should error")
+	}
+	if _, err := schema.ParseCoordinate("Foo.field("); err == nil {
+		t.Fatal("empty argument name inside parens should error")
+	}
+	if _, err := schema.ParseCoordinate("Foo.field ()"); err == nil {
+		t.Fatal("whitespace-only arg should error")
+	}
+	if _, err := schema.ParseCoordinate("@"); err == nil {
+		t.Fatal("empty directive coordinate should error")
+	}
+	if _, err := schema.ParseCoordinate("@dir.name"); err == nil {
+		t.Fatal("dotted directive name should error")
+	}
+	if _, err := schema.ParseCoordinate("Foo(a:)"); err == nil {
+		t.Fatal("arg on bare type coordinate should error")
+	}
+	c, err := schema.ParseCoordinate("Foo.field(arg)")
+	if err != nil || c.ArgName != "arg" || c.MemberName != "field" {
+		t.Fatalf("ParseCoordinate = %#v %v", c, err)
+	}
+	if _, err := schema.ParseCoordinate("Foo.bar.baz"); err == nil {
+		t.Fatal("three-part coordinate should error")
+	}
+}

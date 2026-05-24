@@ -23,9 +23,11 @@ type obsUser struct {
 
 type obsQuery struct{}
 
-func (obsQuery) User(ctx context.Context, args struct {
+type obsArgs struct {
 	ID string `gql:"id,nonNull"`
-}) (*obsUser, error) {
+}
+
+func (obsQuery) User(ctx context.Context, args obsArgs) (*obsUser, error) {
 	return &obsUser{ID: args.ID, Name: "Ada"}, nil
 }
 
@@ -133,5 +135,72 @@ func TestAccessLogPluginEmitsRecord(t *testing.T) {
 	}
 	if entry["operation"] != "Q" {
 		t.Fatalf("operation = %v", entry["operation"])
+	}
+}
+
+func TestObservabilityPluginsHandleMissingState(t *testing.T) {
+	tr := &recordingTracer{}
+	tracing := observability.NewTracingPlugin(tr)
+	field := plugin.FieldContext{Path: []string{"missing"}, FieldName: "missing"}
+	if err := tracing.FieldResolveStart(context.Background(), field); err != nil {
+		t.Fatalf("field start: %v", err)
+	}
+	tracing.FieldResolveEnd(context.Background(), field, nil)
+	tracing.Error(context.Background(), context.Canceled)
+	if err := tracing.ResponseSend(context.Background(), core.Response{}); err != nil {
+		t.Fatalf("tracing response: %v", err)
+	}
+
+	metrics := observability.NewMetricsPlugin(observability.MetricsRecorderFunc(func(context.Context, observability.OperationMetrics) {
+		t.Fatal("recorder should not be called without state")
+	}))
+	if err := metrics.ResponseSend(context.Background(), core.Response{}); err != nil {
+		t.Fatalf("metrics response: %v", err)
+	}
+
+	var buf bytes.Buffer
+	access := observability.NewAccessLogPlugin(slog.New(slog.NewJSONHandler(&buf, nil)))
+	if err := access.ResponseSend(context.Background(), core.Response{}); err != nil {
+		t.Fatalf("access response: %v", err)
+	}
+	if buf.Len() != 0 {
+		t.Fatalf("unexpected log: %s", buf.String())
+	}
+}
+
+func TestObservabilityErrorAndDefaultLoggerBranches(t *testing.T) {
+	tr := &recordingTracer{}
+	tracing := observability.NewTracingPlugin(tr)
+	ctx, err := tracing.RequestStart(context.Background(), core.Request{OperationName: "Q"})
+	if err != nil {
+		t.Fatalf("request start: %v", err)
+	}
+	tracing.Error(ctx, context.DeadlineExceeded)
+	if err := tracing.ResponseSend(ctx, core.Response{}); err != nil {
+		t.Fatalf("response send: %v", err)
+	}
+
+	var got observability.OperationMetrics
+	metrics := observability.NewMetricsPlugin(observability.MetricsRecorderFunc(func(_ context.Context, m observability.OperationMetrics) {
+		got = m
+	}))
+	ctx, err = metrics.RequestStart(context.Background(), core.Request{OperationName: "Bad"})
+	if err != nil {
+		t.Fatalf("metrics start: %v", err)
+	}
+	if err := metrics.ResponseSend(ctx, core.Response{Errors: []core.Error{{Message: "boom"}}}); err != nil {
+		t.Fatalf("metrics response: %v", err)
+	}
+	if !got.HadErrors || got.ErrorCount != 1 {
+		t.Fatalf("metrics = %#v", got)
+	}
+
+	defaultAccess := observability.NewAccessLogPlugin(nil)
+	ctx, err = defaultAccess.RequestStart(context.Background(), core.Request{})
+	if err != nil {
+		t.Fatalf("access start: %v", err)
+	}
+	if err := defaultAccess.ResponseSend(ctx, core.Response{Errors: []core.Error{{Message: "boom"}}}); err != nil {
+		t.Fatalf("access response: %v", err)
 	}
 }

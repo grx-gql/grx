@@ -34,7 +34,7 @@ test-race: ## go test -race all packages (root module + submodules).
 	cd pkg/pubsub/redis && $(GO) test -race ./...
 
 .PHONY: test-cover-lib
-test-cover-lib: ## Library packages only (exclude ./examples/...); enforce COVER_MIN %% stmts coverage each.
+test-coverage: ## Library packages only (exclude ./examples/...); enforce COVER_MIN %% stmts coverage each.
 	env COVER_MIN=$(COVER_MIN) ./scripts/cover-lib.sh
 
 .PHONY: vet
