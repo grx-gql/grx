@@ -4,7 +4,7 @@ description: All notable changes to grx, in reverse chronological order.
 outline: [2, 3]
 ---
 
-> **`docs/changelog.md` is generated**  -  edit only the root **`CHANGELOG.md`**, then run
+> **`docs/changelog.md` is generated** — edit only the root **`CHANGELOG.md`**, then run
 > **`make docs-changelog`** and commit both files together. CI enforces freshness via
 > **`scripts/check-docs-changelog.sh`**.
 
@@ -16,19 +16,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 Published versions use section titles that match
 [release-please](https://github.com/googleapis/release-please) (emoji-prefixed
-headings such as **`### ✨ Added`**, **`### 🐛 Fixed`**, **`### 📚 Documentation`**, …  - 
-see **`release-please-config.json`**). The site copy served here comes from **`docs/changelog.md`**, which is **generated**
-(`make docs-changelog`  -  do not edit that file).
+headings such as **`### ✨ Added`**, **`### 🐛 Fixed`**, **`### 📚 Documentation`**, … —
+see **`release-please-config.json`**). **`docs/changelog.md`** mirrors this file on the docs site (**`make docs-changelog`**; edit **`CHANGELOG.md`**, not **`docs/changelog.md`** directly).
 
 ## [0.4.0] - unpublished
 
 ### 💥 Breaking Changes
 
-- **Import paths**: Transports and helpers previously under **`pkg/`** now resolve at the repository root - for example **`github.com/grx-gql/grx/http`**, **`…/sse`**, **`…/websocket`**, **`…/client`**, **`…/cors`**, **`…/memory-pubsub`** (`package pubsub`), and nested **`github.com/grx-gql/grx/redis-pubsub`**. Releases of the Redis submodule are tagged **`redis-pubsub/v*`** instead of **`pkg/pubsub/redis/v*`**.
+- **Import paths**: Transports and helpers previously under **`pkg/`** now resolve at the repository root—for example **`github.com/grx-gql/grx/http`**, **`…/sse`**, **`…/websocket`**, **`…/client`**, **`…/cors`**, **`…/memory-pubsub`** (`package pubsub`), and nested **`github.com/grx-gql/grx/redis-pubsub`**. Releases of the Redis submodule are tagged **`redis-pubsub/v*`** instead of **`pkg/pubsub/redis/v*`**.
 - `sse.New` now accepts optional configuration: use `sse.New()` for the
   previous zero-value transport, or `sse.New(sse.Config{...})` when limits are
   needed.
-- `grx.NewServer` no longer takes a positional schema argument  -  use
+- `grx.NewServer` no longer takes a positional schema argument — use
   `grx.WithSchema(schema.Config)` in the option list.
 
 ### ✨ Added
