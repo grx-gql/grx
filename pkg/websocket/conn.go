@@ -6,6 +6,8 @@ package websocket
 
 import (
 	"bufio"
+	"bytes"
+	"compress/flate"
 	"crypto/sha1"
 	"encoding/base64"
 	"encoding/binary"
@@ -46,11 +48,13 @@ const (
 	closeUnsupported    uint16 = 1003
 	closeInvalidPayload uint16 = 1007
 	closeMessageTooBig  uint16 = 1009
+	closeTryAgainLater  uint16 = 1013
 )
 
-// Compile-time references prevent the linter from flagging the
-// documentation-only close codes as dead code.
-var _ = closeGoingAway
+// permessageDeflateExtension is the RFC 7692 extension token. The server
+// negotiates it with no-context-takeover in both directions so each message is
+// (de)compressed independently, keeping per-connection state minimal.
+const permessageDeflateExtension = "permessage-deflate"
 
 // IsTimeout reports whether err originated from a deadline exceeded on the
 // underlying connection. The dispatcher uses this to map a missed
@@ -81,6 +85,10 @@ type Conn struct {
 	maxMessageSize int64
 	writeTimeout   time.Duration
 
+	// permessageDeflate is true when the RFC 7692 extension was negotiated
+	// during the handshake; data frames are then compressed per message.
+	permessageDeflate bool
+
 	writeMu  sync.Mutex
 	closedMu sync.Mutex
 	closed   bool
@@ -104,10 +112,11 @@ func IsUpgrade(r *http.Request) bool {
 // upgradeOptions controls handshake-time behaviour and is populated from the
 // parent Transport's Config so callers do not have to thread it manually.
 type upgradeOptions struct {
-	subprotocols   []string
-	checkOrigin    func(r *http.Request) bool
-	maxMessageSize int64
-	writeTimeout   time.Duration
+	subprotocols      []string
+	checkOrigin       func(r *http.Request) bool
+	maxMessageSize    int64
+	writeTimeout      time.Duration
+	permessageDeflate bool
 }
 
 // upgrade performs the RFC 6455 server handshake, hijacks the connection,
@@ -139,6 +148,7 @@ func upgrade(w http.ResponseWriter, r *http.Request, opts upgradeOptions) (*Conn
 	}
 
 	negotiated := negotiateSubprotocol(r.Header.Values("Sec-WebSocket-Protocol"), opts.subprotocols)
+	useDeflate := opts.permessageDeflate && offersPermessageDeflate(r.Header.Values("Sec-WebSocket-Extensions"))
 
 	netConn, buf, err := hijacker.Hijack()
 	if err != nil {
@@ -153,6 +163,9 @@ func upgrade(w http.ResponseWriter, r *http.Request, opts upgradeOptions) (*Conn
 	response.WriteString("Sec-WebSocket-Accept: " + accept + "\r\n")
 	if negotiated != "" {
 		response.WriteString("Sec-WebSocket-Protocol: " + negotiated + "\r\n")
+	}
+	if useDeflate {
+		response.WriteString("Sec-WebSocket-Extensions: permessage-deflate; client_no_context_takeover; server_no_context_takeover\r\n")
 	}
 	response.WriteString("\r\n")
 	if _, err := buf.WriteString(response.String()); err != nil {
@@ -169,12 +182,30 @@ func upgrade(w http.ResponseWriter, r *http.Request, opts upgradeOptions) (*Conn
 		maxMessage = DefaultMaxMessageSize
 	}
 	return &Conn{
-		conn:           netConn,
-		reader:         buf.Reader,
-		subprotocol:    negotiated,
-		maxMessageSize: maxMessage,
-		writeTimeout:   opts.writeTimeout,
+		conn:              netConn,
+		reader:            buf.Reader,
+		subprotocol:       negotiated,
+		maxMessageSize:    maxMessage,
+		writeTimeout:      opts.writeTimeout,
+		permessageDeflate: useDeflate,
 	}, nil
+}
+
+// offersPermessageDeflate reports whether the client advertised the
+// permessage-deflate extension in its Sec-WebSocket-Extensions header.
+func offersPermessageDeflate(values []string) bool {
+	for _, raw := range values {
+		for _, ext := range strings.Split(raw, ",") {
+			name := strings.TrimSpace(ext)
+			if semi := strings.IndexByte(name, ';'); semi >= 0 {
+				name = strings.TrimSpace(name[:semi])
+			}
+			if strings.EqualFold(name, permessageDeflateExtension) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // Subprotocol returns the negotiated WebSocket subprotocol, or the empty
@@ -215,17 +246,26 @@ func (c *Conn) ReadMessage() (opcode byte, payload []byte, err error) {
 	var assembled []byte
 	var totalSize int64
 	dataOpcode := byte(0)
+	messageCompressed := false
 	for {
 		header := make([]byte, 2)
 		if _, err := io.ReadFull(c.reader, header); err != nil {
 			return 0, nil, err
 		}
 		fin := header[0]&0x80 != 0
-		if header[0]&0x70 != 0 {
+		rsv1 := header[0]&0x40 != 0
+		// RSV2 and RSV3 must always be zero; RSV1 is only permitted on the
+		// first frame of a data message when permessage-deflate is negotiated.
+		if header[0]&0x30 != 0 {
 			c.SendClose(closeProtocol, "RSV bits must be zero")
-			return 0, nil, errors.New("websocket frame had non-zero RSV bits")
+			return 0, nil, errors.New("websocket frame had non-zero RSV2/RSV3 bits")
 		}
 		op := header[0] & 0x0F
+		isControlFrame := op&0x8 != 0
+		if rsv1 && (!c.permessageDeflate || isControlFrame || op == OpcodeContinuation) {
+			c.SendClose(closeProtocol, "unexpected RSV1 bit")
+			return 0, nil, errors.New("websocket frame had unexpected RSV1 bit")
+		}
 		masked := header[1]&0x80 != 0
 		if !masked {
 			c.SendClose(closeProtocol, "frames from client must be masked")
@@ -259,6 +299,7 @@ func (c *Conn) ReadMessage() (opcode byte, payload []byte, err error) {
 					return 0, nil, errors.New("interleaved data frame inside fragmented message")
 				}
 				dataOpcode = op
+				messageCompressed = rsv1
 			}
 			if c.maxMessageSize > 0 {
 				totalSize += int64(length)
@@ -303,6 +344,14 @@ func (c *Conn) ReadMessage() (opcode byte, payload []byte, err error) {
 
 		if fin {
 			result := dataOpcode
+			if messageCompressed {
+				inflated, err := inflate(assembled, c.maxMessageSize)
+				if err != nil {
+					c.SendClose(closeInvalidPayload, "invalid compressed payload")
+					return 0, nil, fmt.Errorf("permessage-deflate inflate: %w", err)
+				}
+				assembled = inflated
+			}
 			if result == OpcodeText && !utf8.Valid(assembled) {
 				c.SendClose(closeInvalidPayload, "invalid UTF-8 in text frame")
 				return 0, nil, errors.New("invalid UTF-8 text frame")
@@ -336,10 +385,22 @@ func readPayloadLength(reader *bufio.Reader, indicator byte) (uint64, error) {
 // are serialised through the connection's mutex; the configured write
 // deadline (if any) protects against slow consumers.
 func (c *Conn) WriteText(payload []byte) error {
+	if c.permessageDeflate {
+		if compressed, err := deflate(payload); err == nil {
+			return c.writeFrameOpts(OpcodeText, compressed, true)
+		}
+		// Fall back to an uncompressed frame if compression fails.
+	}
 	return c.writeFrame(OpcodeText, payload)
 }
 
 func (c *Conn) writeFrame(opcode byte, payload []byte) error {
+	return c.writeFrameOpts(opcode, payload, false)
+}
+
+// writeFrameOpts writes a single final frame, optionally setting the RSV1 bit
+// to mark a permessage-deflate compressed payload.
+func (c *Conn) writeFrameOpts(opcode byte, payload []byte, rsv1 bool) error {
 	c.writeMu.Lock()
 	defer c.writeMu.Unlock()
 	if c.isClosed() {
@@ -350,7 +411,11 @@ func (c *Conn) writeFrame(opcode byte, payload []byte) error {
 		defer c.conn.SetWriteDeadline(time.Time{})
 	}
 
-	header := []byte{0x80 | (opcode & 0x0F)}
+	first := byte(0x80 | (opcode & 0x0F))
+	if rsv1 {
+		first |= 0x40
+	}
+	header := []byte{first}
 	length := len(payload)
 	switch {
 	case length < 126:
@@ -403,4 +468,54 @@ func (c *Conn) isClosed() bool {
 func (c *Conn) Close() error {
 	c.markClosed()
 	return c.conn.Close()
+}
+
+// deflate compresses data for a permessage-deflate message using
+// no-context-takeover semantics: a fresh DEFLATE stream is sync-flushed and the
+// trailing empty block (0x00 0x00 0xFF 0xFF) is removed per RFC 7692 §7.2.1.
+func deflate(data []byte) ([]byte, error) {
+	var buf bytes.Buffer
+	fw, err := flate.NewWriter(&buf, flate.DefaultCompression)
+	if err != nil {
+		return nil, err
+	}
+	if _, err := fw.Write(data); err != nil {
+		return nil, err
+	}
+	if err := fw.Flush(); err != nil {
+		return nil, err
+	}
+	out := buf.Bytes()
+	if n := len(out); n >= 4 && out[n-4] == 0x00 && out[n-3] == 0x00 && out[n-2] == 0xff && out[n-1] == 0xff {
+		out = out[:n-4]
+	}
+	return out, nil
+}
+
+// inflate decompresses a permessage-deflate message by appending the trailing
+// empty block removed on the wire and reading the DEFLATE stream, bounded by
+// maxSize (0 = unbounded) to guard against decompression bombs.
+func inflate(data []byte, maxSize int64) ([]byte, error) {
+	// Re-append the sync-flush marker stripped on the wire, plus a final empty
+	// DEFLATE block so the reader terminates with io.EOF instead of
+	// io.ErrUnexpectedEOF (RFC 7692 §7.2.2 / the standard flate tail).
+	full := make([]byte, 0, len(data)+9)
+	full = append(full, data...)
+	full = append(full, 0x00, 0x00, 0xff, 0xff, 0x01, 0x00, 0x00, 0xff, 0xff)
+
+	reader := flate.NewReader(bytes.NewReader(full))
+	defer reader.Close()
+
+	if maxSize > 0 {
+		limited := io.LimitReader(reader, maxSize+1)
+		out, err := io.ReadAll(limited)
+		if err != nil {
+			return nil, err
+		}
+		if int64(len(out)) > maxSize {
+			return nil, errors.New("decompressed message exceeds configured limit")
+		}
+		return out, nil
+	}
+	return io.ReadAll(reader)
 }
