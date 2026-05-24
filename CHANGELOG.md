@@ -10,6 +10,14 @@ Published versions use section titles that match
 headings such as **`### ✨ Added`**, **`### 🐛 Fixed`**, **`### 📚 Documentation`**, … —
 see **`release-please-config.json`**). This file **`CHANGELOG.md`** is the changelog; browse it **[on GitHub](https://github.com/grx-gql/grx/blob/main/CHANGELOG.md)** (the docs site no longer duplicates it).
 
+## [0.4.1](https://github.com/grx-gql/grx/compare/v0.4.0...v0.4.1) (2026-05-24)
+
+
+### 🧹 Chores
+
+* **ci:** drop tag-verify job from Release workflow ([c379db7](https://github.com/grx-gql/grx/commit/c379db78fdb111370d1d7890c6a5d12b97897420))
+* **ci:** drop tag-verify job from Release workflow ([e733c7f](https://github.com/grx-gql/grx/commit/e733c7f62806b92447e239bbad075f032eecf857))
+
 ## [0.4.0](https://github.com/grx-gql/grx/compare/v0.3.0...v0.4.0) (2026-05-24)
 
 
