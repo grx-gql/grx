@@ -10,6 +10,16 @@ Published versions use section titles that match
 headings such as **`### ✨ Added`**, **`### 🐛 Fixed`**, **`### 📚 Documentation`**, … —
 see **`release-please-config.json`**). This file **`CHANGELOG.md`** is the changelog; browse it **[on GitHub](https://github.com/grx-gql/grx/blob/main/CHANGELOG.md)** (the docs site no longer duplicates it).
 
+## [0.4.2](https://github.com/grx-gql/grx/compare/v0.4.1...v0.4.2) (2026-05-24)
+
+
+### 📚 Documentation
+
+* collapse sidebar groups by default ([263b5b3](https://github.com/grx-gql/grx/commit/263b5b3b515030eaabc6e537322127ede2d56471))
+* collapse sidebar groups by default ([812cea4](https://github.com/grx-gql/grx/commit/812cea447cc4b8cd7c53f51e6b17b9bcd60f6c14))
+* remove RELEASING.md ([ceaaaec](https://github.com/grx-gql/grx/commit/ceaaaec34b0d172d4044ef77ef9b709f2211dd56))
+* remove RELEASING.md ([dddf912](https://github.com/grx-gql/grx/commit/dddf912bc91ab106b03f08ee04333b61a7a3c7ac))
+
 ## [0.4.1](https://github.com/grx-gql/grx/compare/v0.4.0...v0.4.1) (2026-05-24)
 
 
