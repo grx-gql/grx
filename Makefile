@@ -1,6 +1,7 @@
 .DEFAULT_GOAL := help
 
 GO            ?= go
+COVER_MIN     ?= 90
 BUN           ?= bun
 DOCS_DIR      ?= docs
 PKGSITE_PKG   := golang.org/x/pkgsite/cmd/pkgsite@latest
@@ -31,6 +32,10 @@ test: ## go test all packages (root module + submodules).
 test-race: ## go test -race all packages (root module + submodules).
 	$(GO) test -race ./...
 	cd pkg/pubsub/redis && $(GO) test -race ./...
+
+.PHONY: test-cover-lib
+test-cover-lib: ## Library packages only (exclude ./examples/...); enforce COVER_MIN %% stmts coverage each.
+	env COVER_MIN=$(COVER_MIN) ./scripts/cover-lib.sh
 
 .PHONY: vet
 vet: ## go vet all packages.
