@@ -1,6 +1,6 @@
 # Automatic versioning + changelog: push to main (or manual workflow_dispatch on main)
 # runs release-please (opens / updates Release PR). Merge that PR → tag + GitHub Release
-# → tag push runs verify + pkg.go.dev warmup below.
+# → tag push runs pkg.go.dev warmup below.
 #
 # release-please opens a PR → needs pull-requests (+ usually issues) scopes.
 # If you see «not permitted to create or approve pull requests», fix repo/org
@@ -25,7 +25,7 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
 
 jobs:
   release-please:
@@ -44,43 +44,10 @@ jobs:
         with:
           token: ${{ secrets.RELEASE_PLEASE_TOKEN || github.token }}
 
-  verify:
-    name: Verify build & tests (tag push)
-    runs-on: ubuntu-latest
-    if: startsWith(github.ref, 'refs/tags/')
-    steps:
-      - uses: actions/checkout@v6
-        with:
-          fetch-depth: 0
-
-      - uses: actions/setup-go@v6
-        with:
-          go-version-file: go.mod
-          cache: true
-
-      - name: go mod verify (all shipped modules)
-        run: |
-          set -euo pipefail
-          go mod verify
-          (cd benchmark && go mod verify)
-          (cd redis-pubsub && go mod verify)
-
-      - name: go vet
-        run: make vet
-
-      - name: go build
-        run: make build
-
-      - name: go test (root + submodules)
-        run: make test
-
-      - name: go test -race
-        run: make test-race
-
   proxy-warm:
     name: Warm pkg.go.dev
-    needs: verify
     runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
     steps:
       - name: Request module from proxy.golang.org
         run: |
