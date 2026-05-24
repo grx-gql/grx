@@ -7,14 +7,14 @@
 **What happens**
 
 1. **release‑please** runs from **`.github/workflows/release.yml`** when **`main`** is updated **or** when you use **Actions → Release → Run workflow** with branch **`main`** (optional **workflow_dispatch** — same job as a push, no extra inputs). It opens or updates **one Release PR**: bumps **`.release-please-manifest.json`**, rolls commits under **`CHANGELOG.md`** headings that match **`release-please-config.json`** (emoji‑prefixed sections such as **`✨ Added`**, **`🐛 Fixed`**, **`💥 Breaking Changes`**, …).
-   - If you tweak the unpublished development heading in **`CHANGELOG.md`** manually (`## [x.y.z] - unpublished`), run **`make docs-changelog`** and commit **`CHANGELOG.md`** **and** **`docs/changelog.md`** together — CI (**`scripts/check-docs-changelog.sh`**) rejects drift.
+   - If you tweak the unpublished heading in **`CHANGELOG.md`** manually, edit that file in the repo only — the **docs site does not mirror** the changelog; readers use **[`CHANGELOG.md` on GitHub](https://github.com/grx-gql/grx/blob/main/CHANGELOG.md)** (and **[Releases](https://github.com/grx-gql/grx/releases)**).
 2. **Merge that Release PR** → release‑please creates the **`vMAJOR.MINOR.PATCH`** tag and **GitHub Release** for the **root** Go module (`github.com/grx-gql/grx`).
 3. **Tag push** runs the same **`Release`** workflow: **`go test`/vet**, **`go mod verify`**, and **`proxy.golang.org`** warmup for whatever tag landed (`v*` root or **`redis-pubsub/v*`** nested).
-4. **Documentation site builds** call **`make docs-content`**, which re-runs **`scripts/sync-changelog.sh`** against the checked-out revision — committed **`docs/changelog.md`** must mirror **`CHANGELOG.md`** at that SHA.
+4. **Documentation site builds** call **`make docs-content`** (mirrors **`ROADMAP.md`** → **`docs/roadmap.md`**) before **`bun run build`**.
 
 Configuration lives in **`release-please-config.json`** and **`.release-please-manifest.json`** (typically bootstrapped from the latest **`v*`** tag).
 
-Versioning and tags for the **root** module come only from **release‑please** (Release PR merge creates **`v*`**); the workflow offers **manual dispatch only to re-run release‑please** on **`main`**, not ad-hoc tagging.
+Versioning and tags for the **root** module come only from **release‑please** (Release PR merge creates **`v*`**); the workflow offers **manual dispatch only to re-run release‑please** on **`main`**, not ad-hoc tagging. The changelog is **[`CHANGELOG.md` on GitHub](https://github.com/grx-gql/grx/blob/main/CHANGELOG.md)** — it is **not** published as a docs site page anymore.
 
 ### Permissions (fix “GitHub Actions is not permitted to create … pull requests”)
 

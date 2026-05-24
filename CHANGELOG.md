@@ -8,7 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 Published versions use section titles that match
 [release-please](https://github.com/googleapis/release-please) (emoji-prefixed
 headings such as **`### ✨ Added`**, **`### 🐛 Fixed`**, **`### 📚 Documentation`**, … —
-see **`release-please-config.json`**). **`docs/changelog.md`** mirrors this file on the docs site (**`make docs-changelog`**; edit **`CHANGELOG.md`**, not **`docs/changelog.md`** directly).
+see **`release-please-config.json`**). This file **`CHANGELOG.md`** is the changelog; browse it **[on GitHub](https://github.com/grx-gql/grx/blob/main/CHANGELOG.md)** (the docs site no longer duplicates it).
 
 ## [0.4.0] - unpublished
 
@@ -84,7 +84,6 @@ see **`release-please-config.json`**). **`docs/changelog.md`** mirrors this file
 ### 🧹 Chores
 
 - Makefile targets covering build/tests/docs ergonomics plus release automation hooks.
-- GitHub Actions `ci` running `go test -race ./...`, coverage thresholds, changelog
-  sync guards, docs builds, Release Please integrations.
+- GitHub Actions **`ci`** (tests/coverage); **`Docs`** builds the VitePress site; **`Release`** runs release‑please and tag workflows.
 
 [0.4.0]: https://github.com/grx-gql/grx/compare/v0.3.0...HEAD

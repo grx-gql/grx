@@ -192,7 +192,10 @@ const docsSidebar: DefaultTheme.SidebarItem[] = [
     items: [
       { text: "Examples", link: "/examples/" },
       { text: "Roadmap", link: "/roadmap" },
-      { text: "Changelog", link: "/changelog" },
+      {
+        text: "Changelog",
+        link: "https://github.com/grx-gql/grx/blob/main/CHANGELOG.md",
+      },
     ],
   },
   {
@@ -285,7 +288,7 @@ export default defineConfig({
           text: "Docs",
           link: "/getting-started/",
           activeMatch:
-            "^/(getting-started|concepts|guides|benchmarks|roadmap|changelog|reference)(/|$)|^/$",
+            "^/(getting-started|concepts|guides|benchmarks|roadmap|reference)(/|$)|^/$",
         },
         { text: "Examples", link: "/examples/", activeMatch: "^/examples" },
         {
