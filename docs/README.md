@@ -27,7 +27,7 @@ bun run preview
 
 ## Layout
 
-The sidebar is grouped for readers: **Learn** (first-time path), **Guides** (task walkthroughs), **Internals** (runtime detail), **Project** (benchmarks, roadmap, changelog), then **API reference** (generated package docs).
+The sidebar is grouped for readers: **Learn** (first-time path), **Guides** (task walkthroughs), **Internals** (runtime detail), **Project** (benchmarks, roadmap, plus an outbound GitHub link for the changelog), then **API reference** (generated package docs).
 
 ```
 docs/
@@ -44,30 +44,22 @@ docs/
 ├── guides/                 # how-to walkthroughs
 ├── reference/              # API reference (hand-maintained + mirrored)
 ├── benchmarks.md
-├── changelog.md            # generated  -  see below
 ├── roadmap.md              # generated  -  see below
 └── README.md               # this file
 ```
 
 ## Auto-generated content
 
-Two pages are mirrored from canonical sources elsewhere in the repo.
-**Do not edit them directly**  -  your edits will be overwritten on the next
-`make docs-content`.
+**`docs/roadmap.md`** is mirrored from repo **`ROADMAP.md`**. **`CHANGELOG.md`** is **not** copied into **`docs/`**; the sidebar links to **[`CHANGELOG.md` on GitHub](https://github.com/grx-gql/grx/blob/main/CHANGELOG.md)**.
 
-| Page             | Generated from        | Script                      |
-| ---------------- | --------------------- | --------------------------- |
-| `changelog.md`   | repo-root `CHANGELOG.md` | `scripts/sync-changelog.sh` |
-| `roadmap.md`     | repo-root `ROADMAP.md`   | `scripts/sync-roadmap.sh`   |
-
-Regenerate both in one shot:
+**Do not edit `roadmap.md` directly** in this tree — it is overwritten whenever you run:
 
 ```bash
 make docs-content
 ```
 
-`docs-dev` and `docs-build` already depend on `docs-content`, so the mirrored
-pages stay fresh when you serve or build the site.
+`docs-dev` and `docs-build` already depend on `docs-content`, so **`docs/roadmap.md`**
+stays fresh when you serve or build the site.
 
 ## Deployment
 
@@ -80,7 +72,7 @@ including) the deploy so broken builds are caught at review time.
 1. Checks out the repo with full history (VitePress `lastUpdated` reads git).
 2. Sets up Node and Bun (pinned in the workflow).
 3. `bun install --frozen-lockfile` in `docs/` (uses `docs/bun.lock`).
-4. `make docs-content` regenerates the changelog and roadmap.
+4. `make docs-content` regenerates **`docs/roadmap.md`** from **`ROADMAP.md`**.
 5. `bun run build` → `docs/.vitepress/dist`.
 6. Verifies `docs/.vitepress/dist/index.html` exists before uploading.
 7. Uploads `docs/.vitepress/dist` as a Pages artifact (skipped on PRs).
@@ -105,13 +97,15 @@ available via **Actions → Docs → Run workflow**.
 The workflow runs when one of these paths changes:
 
 - `docs/**`
-- `scripts/sync-changelog.sh`, `scripts/sync-roadmap.sh`
-- `CHANGELOG.md`, `README.md`, `ROADMAP.md`
+- `scripts/sync-roadmap.sh`
+- `README.md`, `ROADMAP.md`
 - `Makefile`
 - `.github/workflows/docs.yml`
 - `**/*.go` (so doc-comment changes are picked up for future API reference tooling)
 
 Use **Run workflow** for manual deploys outside that filter.
+
+> **Note:** changes to **`CHANGELOG.md`** alone do **not** trigger a docs redeploy anymore; releases are surfaced on **[GitHub Releases](https://github.com/grx-gql/grx/releases)**.
 
 ## Frontmatter cleanup
 

@@ -72,20 +72,12 @@ uninstall-hooks: ## Undo install-hooks for this repo (removes core.hooksPath).
 docs-install: ## Install docs site dependencies (uses bun).
 	cd $(DOCS_DIR) && $(BUN) install
 
-.PHONY: docs-changelog
-docs-changelog: ## Mirror CHANGELOG.md into the docs site.
-	./scripts/sync-changelog.sh
-
-.PHONY: check-docs-changelog
-check-docs-changelog: ## Fail when docs/changelog.md != sync output (run in CI too).
-	./scripts/check-docs-changelog.sh
-
 .PHONY: docs-roadmap
 docs-roadmap: ## Mirror ROADMAP.md into the docs site as a roadmap.
 	./scripts/sync-roadmap.sh
 
 .PHONY: docs-content
-docs-content: docs-changelog docs-roadmap ## Regenerate mirrored docs pages (changelog + roadmap).
+docs-content: docs-roadmap ## Regenerate mirrored docs pages (roadmap only).
 
 .PHONY: docs-dev
 docs-dev: docs-content ## Run the docs dev server with HMR (http://localhost:4321/grx/).

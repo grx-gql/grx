@@ -425,8 +425,8 @@ sections below.
 ### Federation
 
 Apollo Federation is **not currently supported**. The planned scope is
-*subgraph* support  -  making a grx service composable behind a federation
-router/gateway  -  not building a router or schema composition engine. Items
+*subgraph* support — making a grx service composable behind a federation
+router/gateway — not building a router or schema composition engine. Items
 below track the Federation v2 subgraph specification.
 
 - [ ] `_service { sdl }` field exposing the federation SDL
