@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/patrickkabwe/grx/schema"
+	"github.com/grx-gql/grx/schema"
 )
 
 // ParseSDL parses a GraphQL SDL document and returns a Schema containing

@@ -1,6 +1,5 @@
 import type { DefaultTheme } from "vitepress";
 import { defineConfig } from "vitepress";
-import { withMermaid } from "vitepress-plugin-mermaid";
 
 /** Sidebar: Start here → Concepts → Getting Started → Guides (grouped) → reference & project. */
 const docsSidebar: DefaultTheme.SidebarItem[] = [
@@ -86,6 +85,10 @@ const docsSidebar: DefaultTheme.SidebarItem[] = [
             text: "Realtime subscriptions",
             link: "/guides/subscriptions",
           },
+          {
+            text: "Pub/sub backends (memory vs Redis)",
+            link: "/concepts/pubsub#choosing-a-backend",
+          },
         ],
       },
       {
@@ -131,6 +134,7 @@ const docsSidebar: DefaultTheme.SidebarItem[] = [
             text: "Authentication & authorization",
             link: "/guides/auth",
           },
+          { text: "HTTP middleware", link: "/guides/middleware" },
           { text: "File uploads", link: "/guides/file-upload" },
           {
             text: "Persisted queries (APQ)",
@@ -172,13 +176,14 @@ const docsSidebar: DefaultTheme.SidebarItem[] = [
       { text: "schema", link: "/reference/schema/" },
       { text: "exec", link: "/reference/exec/" },
       { text: "server", link: "/reference/server/" },
-      { text: "plugin", link: "/reference/plugin/" },
-      { text: "plugin/logger", link: "/reference/plugin/logger/" },
-      { text: "pkg/http", link: "/reference/pkg/http/" },
-      { text: "pkg/sse", link: "/reference/pkg/sse/" },
-      { text: "pkg/websocket", link: "/reference/pkg/websocket/" },
-      { text: "pkg/pubsub", link: "/reference/pkg/pubsub/" },
-      { text: "pkg/pubsub/redis", link: "/reference/pkg/pubsub/redis/" },
+      { text: "plugins", link: "/reference/plugins/" },
+      { text: "middlewares", link: "/reference/middlewares/" },
+      { text: "plugins/logger", link: "/reference/plugins/logger/" },
+      { text: "http", link: "/reference/http/" },
+      { text: "sse", link: "/reference/sse/" },
+      { text: "websocket", link: "/reference/websocket/" },
+      { text: "memory-pubsub", link: "/reference/memory-pubsub/" },
+      { text: "redis-pubsub", link: "/reference/redis-pubsub/" },
     ],
   },
   {
@@ -238,24 +243,23 @@ const examplesSidebar: DefaultTheme.SidebarItem[] = [
     items: [
       {
         text: "GitHub repository",
-        link: "https://github.com/patrickkabwe/grx",
+        link: "https://github.com/grx-gql/grx",
       },
       {
         text: "Discussions",
-        link: "https://github.com/patrickkabwe/grx/discussions",
+        link: "https://github.com/grx-gql/grx/discussions",
       },
     ],
   },
 ];
 
 // https://vitepress.dev/reference/site-config
-export default withMermaid(
-  defineConfig({
+export default defineConfig({
     title: "grx",
     // Browser tabs: descriptive page titles with a fixed brand suffix (Hono-style separator).
     titleTemplate: ":title · grx",
     description:
-      "GraphQL servers in Go—structs as types, subscriptions built in, zero third-party runtime dependencies.",
+      "GraphQL servers in Go: structs as types, built-in subscriptions, zero third-party runtime dependencies.",
     lang: "en-US",
     base: "/grx/",
     srcDir: ".",
@@ -286,7 +290,7 @@ export default withMermaid(
         { text: "Examples", link: "/examples/", activeMatch: "^/examples" },
         {
           text: "Discussions",
-          link: "https://github.com/patrickkabwe/grx/discussions",
+          link: "https://github.com/grx-gql/grx/discussions",
           target: "_blank",
           rel: "noopener noreferrer",
         },
@@ -298,12 +302,12 @@ export default withMermaid(
       },
 
       socialLinks: [
-        { icon: "github", link: "https://github.com/patrickkabwe/grx" },
+        { icon: "github", link: "https://github.com/grx-gql/grx" },
       ],
 
       editLink: {
         pattern:
-          "https://github.com/patrickkabwe/grx/edit/main/docs/:path",
+          "https://github.com/grx-gql/grx/edit/main/docs/:path",
         text: "Edit this page on GitHub",
       },
 
@@ -311,15 +315,4 @@ export default withMermaid(
         provider: "local",
       },
     },
-
-    mermaid: {
-      theme: "neutral",
-      themeVariables: {
-        primaryColor: "#6366f1",
-      },
-    },
-    mermaidPlugin: {
-      class: "mermaid",
-    },
-  }),
-);
+});

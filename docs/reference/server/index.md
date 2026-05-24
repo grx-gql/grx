@@ -35,7 +35,7 @@ type Config struct {
     // Plugins are invoked at every lifecycle stage of a GraphQL
     // request, in registration order. They may short-circuit a request
     // by returning an error.
-    Plugins []plugin.Plugin
+    Plugins []plugins.Plugin
 
     // PlaygroundPath is the URL path at which the bundled GraphiQL
     // playground is served on GET. The empty string disables the
@@ -44,10 +44,10 @@ type Config struct {
 
     // Transports registers protocol handlers (WebSocket, SSE, ...) that the
     // server consults. Routing depends on GraphQLPath and SubscriptionPath: when
-    // they differ, concrete *websocket.Transport and *sse.Transport values are moved
+    // they differ, concrete *websocket.WebSocketTransport and *sse.Transport values are moved
     // to SubscriptionPath only; other transports remain on GraphQLPath. Each request
     // is offered to the relevant chain in order; the first Match wins. On GraphQLPath
-    // a default HTTP+JSON transport ([pkg/http.Transport]) is appended automatically
+    // a default HTTP+JSON transport ([`http.Transport`](https://pkg.go.dev/github.com/grx-gql/grx/http#Transport)) is appended automatically
     // so POST requests always succeed unless you customise that transport explicitly.
     Transports []core.Transport
 
@@ -55,7 +55,7 @@ type Config struct {
     GraphQLPath string
 
     // SubscriptionPath, when set to a path different from GraphQLPath, routes
-    // concrete *websocket.Transport and *sse.Transport from Transports only to
+    // concrete *websocket.WebSocketTransport and *sse.Transport from Transports only to
     // that path. Empty means subscriptions share GraphQLPath.
     SubscriptionPath string
 }

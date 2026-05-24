@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/patrickkabwe/grx/core"
-	"github.com/patrickkabwe/grx/schema"
+	"github.com/grx-gql/grx/core"
+	"github.com/grx-gql/grx/schema"
 )
 
 // ValidateDocument runs GraphQL validation rules on the selected operation.

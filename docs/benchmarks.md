@@ -6,12 +6,12 @@ outline: [2, 3]
 
 # Benchmarks
 
-The sibling [`benchmark/`](https://github.com/patrickkabwe/grx/tree/main/benchmark)
+The sibling [`benchmark/`](https://github.com/grx-gql/grx/tree/main/benchmark)
 module runs **parse → validate → execute → JSON** for **`grx`**, **`graphql-go/graphql`** (`v0.8.1`),
 and **`graph-gophers/graphql-go`** (`v1.5.0`) on identical operations and resolver data (`replace` points
 `grx` at the workspace root).
 
-**Apps only call [`Executor.Execute`](https://pkg.go.dev/github.com/patrickkabwe/grx/exec#Executor.Execute).**
+**Apps only call [`Executor.Execute`](https://pkg.go.dev/github.com/grx-gql/grx/exec#Executor.Execute).**
 There is no separate prepared/slow execution API.
 
 ## Running
@@ -29,7 +29,7 @@ go test -C benchmark -bench=. -benchmem ./...
 | `BenchmarkParameterizedNested` | Single parameterized root field with nested post → author selection |
 | `BenchmarkFeedTimeline` | List of posts with nested `author` per row |
 
-Full documents and variables: [`benchmark/scenarios.go`](https://github.com/patrickkabwe/grx/tree/main/benchmark/scenarios.go).
+Full documents and variables: [`benchmark/scenarios.go`](https://github.com/grx-gql/grx/tree/main/benchmark/scenarios.go).
 
 Production **grx** executes **sibling selections sequentially** within each selection set (predictable resolver order).
 `graph-gophers` is built with **`MaxParallelism(1)`** in the harness so numbers stay comparable to serial engines.
@@ -82,21 +82,21 @@ _Migrating from older docs:_ scenarios used to be named `BenchmarkSimpleQuery` /
 
 The benchmark loop measures **steady-state executor cost on this machine**:
 
-- **`ns/op`** is how long **one isolated iteration** takes (typically one OS thread spinning the benchmark loop)—**not** the same thing as inverse server QPS once you stack HTTP framing, middleware, pooling, contention, profiling, tracing, TLS, geo latency, databases, caches, saturation, retries, timeouts, serialization at the edges, fleet size and autoscaling, **and concurrent client load**.
-- The harness uses **deterministic in-memory fixtures** (“zero-I/O” resolvers returning shared pointers). In real deployments, **`p99` is usually bounded by backends** (RPC, PostgreSQL, Redis, entitlement checks)—the GraphQL engine is often a **small fraction** of wall time unless you are intentionally CPU-heavy on trivial data.
-- `go test -bench` is a **controlled micro-environment**. Treat results as answering: “for this query shape with **no datastore**, how expensive is parsing + validation + execution + encoding relative to alternatives?”—then **reproduce on your workloads** (`go test`/Netflix/load tests, `-trace`, CPU profiles).
+- **`ns/op`** is how long **one isolated iteration** takes (typically one OS thread spinning the benchmark loop) - **not** the same thing as inverse server QPS once you stack HTTP framing, middleware, pooling, contention, profiling, tracing, TLS, geo latency, databases, caches, saturation, retries, timeouts, serialization at the edges, fleet size and autoscaling, **and concurrent client load**.
+- The harness uses **deterministic in-memory fixtures** (“zero-I/O” resolvers returning shared pointers). In real deployments, **`p99` is usually bounded by backends** (RPC, PostgreSQL, Redis, entitlement checks) - the GraphQL engine is often a **small fraction** of wall time unless you are intentionally CPU-heavy on trivial data.
+- `go test -bench` is a **controlled micro-environment**. Treat results as answering: “for this query shape with **no datastore**, how expensive is parsing + validation + execution + encoding relative to alternatives?” - then **reproduce on your workloads** (`go test`/Netflix/load tests, `-trace`, CPU profiles).
 
-A **rough heuristic** engineers sometimes misuse: if you pretend one core were 100 % saturated doing only GraphQL-shaped work shown here, \(\text{near upper bound ops/s} \approx 10^{9} / (\text{ns/op})\)—that still ignores everything above **and ignores that production uses many cores unevenly**.
+A **rough heuristic** engineers sometimes misuse: if you pretend one core were 100 % saturated doing only GraphQL-shaped work shown here, \(\text{near upper bound ops/s} \approx 10^{9} / (\text{ns/op})\) - that still ignores everything above **and ignores that production uses many cores unevenly**.
 
 **Summary:** benchmarks are comparisons of **relative GraphQL-runtime overhead**, not a promise of headline **production HTTP RPS** or revenue-grade SLO rates.
 
 ## Why grx often measures faster than `graphql-go/graphql` and `graph-gophers/graphql-go`
 
-Libraries differ in runtime shape; “faster microbench” is not universal at every workload. Below is why **these** workloads tend to skew toward grx—they match how the sibling module is deliberately built (`benchmark/` parity schemas, in-memory resolves).
+Libraries differ in runtime shape; “faster microbench” is not universal at every workload. Below is why **these** workloads tend to skew toward grx - they match how the sibling module is deliberately built (`benchmark/` parity schemas, in-memory resolves).
 
 ### 1. **Less material in grx’s hot path**
 
-Root `go.mod` for `patrickkabwe/grx` is **stdlib‑centric on the executor path**: no heavyweight third‑party stacks between lexing → execution → response encoding. Comparable servers often carry richer runtime layers (builders, adaptor trees, concurrency helpers)—which show up more as **instructions + allocations even when correctness is unchanged**.
+Root `go.mod` for `grx-gql/grx` is **stdlib‑centric on the executor path**: no heavyweight third‑party stacks between lexing → execution → response encoding. Comparable servers often carry richer runtime layers (builders, adaptor trees, concurrency helpers) - which show up more as **instructions + allocations even when correctness is unchanged**.
 
 ### 2. **`graphql-go/graphql` allocates and dispatches broadly**
 
@@ -104,7 +104,7 @@ Classic `graphql.NewObject` / `graphql.Field` setups pay for **explicit schema o
 
 ### 3. **`graph-gophers/graphql-go` indirection plus wrapper types**
 
-SDL-first ergonomics commonly mean **thin resolver façade types** translating between GraphQL-facing methods and backing models. Listing resolvers tends to manufacture **arrays of adaptor structs**. The benchmark pins `MaxParallelism(1)` because the upstream package may otherwise launch **per-field concurrency** unrelated to datastore parallelism—skewing totals against single-thread‑style engines.
+SDL-first ergonomics commonly mean **thin resolver façade types** translating between GraphQL-facing methods and backing models. Listing resolvers tends to manufacture **arrays of adaptor structs**. The benchmark pins `MaxParallelism(1)` because the upstream package may otherwise launch **per-field concurrency** unrelated to datastore parallelism - skewing totals against single-thread‑style engines.
 
 ### 4. **grx binds schema from Go structs up front**
 
@@ -116,8 +116,8 @@ Rather than bouncing through generic recursive maps everywhere, responses lean o
 
 ### 6. **Execution-time allocation hygiene**
 
-Mechanisms such as pooled **scratch buffers for transient GraphQL paths** during resolution (paired with deterministic copies where errors persist) shave **tiny slice/header allocations** across deep trees and lists—they matter most exactly when backends are intentionally cheap, as here.
+Mechanisms such as pooled **scratch buffers for transient GraphQL paths** during resolution (paired with deterministic copies where errors persist) shave **tiny slice/header allocations** across deep trees and lists - they matter most exactly when backends are intentionally cheap, as here.
 
 ---
 
-None of these points replace profiling: **`go tool pprof`**, tracer comparison, **`benchstat` across `-count=` runs**, plus **replay of real persisted operations** (`benchmark/scenarios.go` style) alongside real data sources—that is where production-critical rates are defended.
+None of these points replace profiling: **`go tool pprof`**, tracer comparison, **`benchstat` across `-count=` runs**, plus **replay of real persisted operations** (`benchmark/scenarios.go` style) alongside real data sources - that is where production-critical rates are defended.

@@ -4,8 +4,8 @@ import (
 	"context"
 	"errors"
 
-	"github.com/patrickkabwe/grx/examples/auth/session"
-	"github.com/patrickkabwe/grx/schema"
+	"github.com/grx-gql/grx/examples/auth/session"
+	"github.com/grx-gql/grx/schema"
 )
 
 type Query struct{}

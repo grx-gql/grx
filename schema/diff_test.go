@@ -5,8 +5,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/patrickkabwe/grx/exec"
-	"github.com/patrickkabwe/grx/schema"
+	"github.com/grx-gql/grx/exec"
+	"github.com/grx-gql/grx/schema"
 )
 
 func mustParseSDL(t *testing.T, sdl string) *schema.Schema {

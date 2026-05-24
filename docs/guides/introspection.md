@@ -22,7 +22,7 @@ import (
 
 	"example.com/hello-grx/graph"
 
-	"github.com/patrickkabwe/grx"
+	"github.com/grx-gql/grx"
 )
 
 func main() {
@@ -41,7 +41,7 @@ Executors emit GraphQL **`errors`** for introspection-only operations whenever *
 
 ::: info Exposure beyond **`__schema`  
 
-Git/SDL artifacts, codegen dumps, **`WithSchemaSDLPath`**, leaked mobile binaries—coordinate release hygiene independent of **`WithDisableIntrospection`** alone.
+Git/SDL artifacts, codegen dumps, **`WithSchemaSDLPath`**, leaked mobile binaries - coordinate release hygiene independent of **`WithDisableIntrospection`** alone.
 
 :::
 
@@ -55,7 +55,7 @@ import (
 
 	"example.com/hello-grx/graph"
 
-	"github.com/patrickkabwe/grx"
+	"github.com/grx-gql/grx"
 )
 
 func main() {
@@ -72,10 +72,10 @@ func main() {
 
 Assume **`POST /graphql`** is the supported API when production facing; host explorers internally (auth + SSO) whenever teams still crave UI assistance.
 
-Keeping GraphiQL while disabling introspection is rarely productive—explorer panes stall without schema queries.
+Keeping GraphiQL while disabling introspection is rarely productive - explorer panes stall without schema queries.
 
 ---
 
 ## SDL export mirrors
 
-[**`WithSchemaSDLPath`](/reference/grx/)** publishes schema text **`GET`** when configured. Omit it—or wrap with auth/proxy ACLs—as part of tightening schema disclosure.
+[**`WithSchemaSDLPath`](/reference/grx/)** publishes schema text **`GET`** when configured. Omit it - or wrap with auth/proxy ACLs - as part of tightening schema disclosure.

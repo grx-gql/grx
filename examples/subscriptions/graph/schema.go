@@ -1,8 +1,8 @@
 package graph
 
 import (
-	"github.com/patrickkabwe/grx/pkg/pubsub"
-	"github.com/patrickkabwe/grx/schema"
+	"github.com/grx-gql/grx/memory-pubsub"
+	"github.com/grx-gql/grx/schema"
 )
 
 // SchemaOption configures [New].
@@ -14,7 +14,7 @@ type schemaOptions struct {
 
 // WithPubSub wires the typed pub/sub bridge used by mutation and subscription
 // resolvers. Required for this example schema, which publishes across
-// resolvers via [pkg/pubsub].
+// resolvers via [pubsub](https://pkg.go.dev/github.com/grx-gql/grx/memory-pubsub).
 func WithPubSub(bus pubsub.PubSub) SchemaOption {
 	return func(o *schemaOptions) {
 		o.bus = bus

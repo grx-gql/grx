@@ -3,9 +3,9 @@ package benchmark
 import (
 	"context"
 
-	"github.com/patrickkabwe/grx/core"
-	"github.com/patrickkabwe/grx/exec"
-	"github.com/patrickkabwe/grx/schema"
+	"github.com/grx-gql/grx/core"
+	"github.com/grx-gql/grx/exec"
+	"github.com/grx-gql/grx/schema"
 )
 
 type grxIDArgs struct {

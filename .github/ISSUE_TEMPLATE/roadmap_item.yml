@@ -6,7 +6,7 @@ body:
   - type: markdown
     attributes:
       value: |
-        Use this template when filing work that corresponds to the [Feature Parity Checklist](https://github.com/patrickkabwe/grx/blob/main/ROADMAP.md)
+        Use this template when filing work that corresponds to the [Feature Parity Checklist](https://github.com/grx-gql/grx/blob/main/ROADMAP.md)
         in `ROADMAP.md`. For regressions or incorrect behaviour today, prefer **Bug report** instead.
 
   - type: dropdown

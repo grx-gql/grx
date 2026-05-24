@@ -4,8 +4,8 @@ import (
 	"log"
 	"net/http"
 
-	"github.com/patrickkabwe/grx"
-	"github.com/patrickkabwe/grx/examples/basic/graph"
+	"github.com/grx-gql/grx"
+	"github.com/grx-gql/grx/examples/basic/graph"
 )
 
 func main() {

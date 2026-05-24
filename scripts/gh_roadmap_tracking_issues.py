@@ -22,7 +22,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 ROADMAP = ROOT / "ROADMAP.md"
-ROADMAP_URL = "https://github.com/patrickkabwe/grx/blob/main/ROADMAP.md"
+ROADMAP_URL = "https://github.com/grx-gql/grx/blob/main/ROADMAP.md"
 
 
 def parse_sections(path: Path) -> list[tuple[str, list[str]]]:

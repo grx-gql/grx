@@ -15,13 +15,13 @@ grx. Pick the guide that matches the library you're leaving:
 | `github.com/graph-gophers/graphql-go`        | Schema-first SDL string + per-type resolver structs | [From graph-gophers](/guides/migrate/from-graph-gophers)   |
 
 Both guides assume you're already comfortable with the source library
-and skip GraphQL fundamentals. They focus on the *delta* — what
+and skip GraphQL fundamentals. They focus on the *delta*  -  what
 disappears, what shows up new, and how to keep your existing schema
 shape intact while you switch executors.
 
 ## What you gain
 
-- **Performance.** The [`benchmark/`](https://github.com/patrickkabwe/grx/tree/main/benchmark)
+- **Performance.** The [`benchmark/`](https://github.com/grx-gql/grx/tree/main/benchmark)
   module compares **`Executor.Execute`** to `graphql-go` and `graph-gophers` on realistic
   operations; profile **your** workload for decisive numbers.
 - **Zero runtime dependencies.** grx is a single Go module that imports
@@ -42,7 +42,7 @@ your existing schema relies on. The most likely blockers today:
 
 - **Enum, interface, and union types** are not supported yet
   ([Type System](/roadmap#type-system)).
-- **Custom scalars** can't be registered yet — only the built-in
+- **Custom scalars** can't be registered yet  -  only the built-in
   `String`, `Int`, `Float`, `Boolean`, `ID` scalars are available.
 - **Field aliases**, **fragments**, and **`@skip` / `@include`** are not
   yet honoured by the executor ([Execution](/roadmap#execution)).
@@ -50,7 +50,7 @@ your existing schema relies on. The most likely blockers today:
   metadata** aren't carried through.
 
 If your schema uses any of those, file an issue so the priority is
-visible — or stay on your current library until the relevant checklist
+visible  -  or stay on your current library until the relevant checklist
 items are complete.
 
 ## Recommended order
@@ -65,7 +65,7 @@ For both source libraries, the lowest-risk migration order is:
    delete anything yet.
 3. **Run both executors against the same fixture** to confirm responses
    match field-for-field. Steal `TestImplementationsAgree` from
-   [`benchmark/bench_test.go`](https://github.com/patrickkabwe/grx/blob/main/benchmark/bench_test.go)
+   [`benchmark/bench_test.go`](https://github.com/grx-gql/grx/blob/main/benchmark/bench_test.go)
    as a template.
 4. **Switch your HTTP handler** to `grx.NewServer` and remove the old
    library from your `go.mod`.

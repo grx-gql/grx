@@ -1,3 +1,8 @@
+# Root module automated releases run via release-please (conventional commits). This workflow:
+# • On workflow_dispatch — manual tag create + GitHub Release (e.g. nested redis-pubsub).
+# • On tag push — verify + proxy warm (covers tags created by Release Please merges).
+#
+# Nested redis module is not wired into release-please yet; publish it manually here.
 name: Release
 
 on:
@@ -5,8 +10,8 @@ on:
     tags:
       - "v[0-9]+.[0-9]+.[0-9]+"
       - "v[0-9]+.[0-9]+.[0-9]+-*"
-      - "pkg/pubsub/redis/v[0-9]+.[0-9]+.[0-9]+"
-      - "pkg/pubsub/redis/v[0-9]+.[0-9]+.[0-9]+-*"
+      - "redis-pubsub/v[0-9]+.[0-9]+.[0-9]+"
+      - "redis-pubsub/v[0-9]+.[0-9]+.[0-9]+-*"
   workflow_dispatch:
     inputs:
       tag:
@@ -33,6 +38,16 @@ jobs:
     outputs:
       target_sha: ${{ steps.resolve.outputs.sha }}
     steps:
+      - name: Validate manual tag
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          set -euo pipefail
+          TAG="${{ inputs.tag }}"
+          if [[ "${TAG}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.+-]+)?$ ]]; then exit 0; fi
+          if [[ "${TAG}" =~ ^redis-pubsub/v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.+-]+)?$ ]]; then exit 0; fi
+          echo "::error::Tag must be vX.Y.Z or redis-pubsub/vX.Y.Z (optional SemVer prerelease suffix)"
+          exit 1
+
       - name: Checkout
         uses: actions/checkout@v6
         with:
@@ -47,7 +62,14 @@ jobs:
         uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
-          cache: false
+          cache: true
+
+      - name: go mod verify (all shipped modules)
+        run: |
+          set -euo pipefail
+          go mod verify
+          (cd benchmark && go mod verify)
+          (cd redis-pubsub && go mod verify)
 
       - name: go vet
         run: make vet
@@ -61,31 +83,28 @@ jobs:
       - name: go test -race
         run: make test-race
 
-  release:
-    name: Create GitHub Release
+  manual-github-release:
+    name: Manual tag + GitHub Release
     needs: verify
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v6
         with:
-          ref: ${{ github.event_name == 'workflow_dispatch' && needs.verify.outputs.target_sha || github.ref }}
+          ref: ${{ needs.verify.outputs.target_sha }}
           fetch-depth: 0
 
       - name: Resolve tag metadata
         id: meta
         run: |
           set -euo pipefail
-          if [[ -n "${{ inputs.tag }}" ]]; then
-            TAG="${{ inputs.tag }}"
-          else
-            TAG="${GITHUB_REF#refs/tags/}"
-          fi
+          TAG="${{ inputs.tag }}"
           echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
 
-          if [[ "${TAG}" == pkg/pubsub/redis/* ]]; then
-            VERSION="${TAG#pkg/pubsub/redis/}"
-            echo "module=pkg/pubsub/redis" >> "$GITHUB_OUTPUT"
+          if [[ "${TAG}" == redis-pubsub/* ]]; then
+            VERSION="${TAG#redis-pubsub/}"
+            echo "module=redis-pubsub" >> "$GITHUB_OUTPUT"
           else
             VERSION="${TAG}"
             echo "module=root" >> "$GITHUB_OUTPUT"
@@ -99,11 +118,13 @@ jobs:
           fi
 
       - name: Create tag for manual release
-        if: github.event_name == 'workflow_dispatch'
         run: |
           set -euo pipefail
           TAG="${{ steps.meta.outputs.tag }}"
           TARGET_SHA="${{ needs.verify.outputs.target_sha }}"
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
           if git rev-parse -q --verify "refs/tags/${TAG}" >/dev/null; then
             EXISTING_SHA="$(git rev-list -n 1 "${TAG}")"
@@ -123,7 +144,6 @@ jobs:
         run: |
           set -euo pipefail
           VERSION="${{ steps.meta.outputs.version }}"
-          # Strip the leading `v` so we match `## [0.1.0]` style headers.
           STRIPPED="${VERSION#v}"
 
           NOTES_FILE="$(mktemp)"
@@ -131,7 +151,6 @@ jobs:
             BEGIN { found=0 }
             /^## / {
               if (found) exit
-              # Match `## [0.1.0]`, `## [0.1.0] - 2026-05-01`, `## v0.1.0`, `## 0.1.0`
               if ($0 ~ "(\\[" v "\\]|[ \\[]v?" v "([ \\]]|$))") { found=1; next }
             }
             found { print }
@@ -148,7 +167,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.meta.outputs.tag }}
-          name: ${{ steps.meta.outputs.module == 'root' && steps.meta.outputs.version || format('pkg/pubsub/redis {0}', steps.meta.outputs.version) }}
+          name: ${{ steps.meta.outputs.module == 'root' && steps.meta.outputs.version || format('redis-pubsub {0}', steps.meta.outputs.version) }}
           body_path: ${{ steps.changelog.outputs.found == 'true' && steps.changelog.outputs.path || '' }}
           generate_release_notes: ${{ steps.changelog.outputs.found != 'true' }}
           prerelease: ${{ steps.meta.outputs.prerelease == 'true' }}
@@ -156,7 +175,11 @@ jobs:
 
   proxy-warm:
     name: Warm pkg.go.dev
-    needs: release
+    needs:
+      - verify
+      - manual-github-release
+    # Tag pushes skip manual-github-release; dispatch runs both. Waiting on the skipped job is OK.
+    if: always() && needs.verify.result == 'success' && (needs.manual-github-release.result == 'success' || needs.manual-github-release.result == 'skipped')
     runs-on: ubuntu-latest
     steps:
       - name: Request module from proxy.golang.org
@@ -168,11 +191,11 @@ jobs:
             TAG="${GITHUB_REF#refs/tags/}"
           fi
 
-          if [[ "${TAG}" == pkg/pubsub/redis/* ]]; then
-            MODULE="github.com/patrickkabwe/grx/pkg/pubsub/redis"
-            VERSION="${TAG#pkg/pubsub/redis/}"
+          if [[ "${TAG}" == redis-pubsub/* ]]; then
+            MODULE="github.com/grx-gql/grx/redis-pubsub"
+            VERSION="${TAG#redis-pubsub/}"
           else
-            MODULE="github.com/patrickkabwe/grx"
+            MODULE="github.com/grx-gql/grx"
             VERSION="${TAG}"
           fi
 

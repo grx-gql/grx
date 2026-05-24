@@ -1,6 +1,6 @@
 package exec
 
-import "github.com/patrickkabwe/grx/core"
+import "github.com/grx-gql/grx/core"
 
 type operationKind string
 

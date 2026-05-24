@@ -7,7 +7,7 @@ import (
 
 	gqlgo "github.com/graphql-go/graphql"
 
-	"github.com/patrickkabwe/grx/core"
+	"github.com/grx-gql/grx/core"
 )
 
 // Each benchmark runs the same operation through grx, graphql-go, and

@@ -25,19 +25,20 @@
 //	    ),
 //	)
 //
-// For GraphQL-over-HTTP requests from Go code, use package pkg/client.
+// For GraphQL-over-HTTP requests from Go code, use package github.com/grx-gql/grx/client.
 package grx
 
 import (
 	"errors"
 	"time"
 
-	"github.com/patrickkabwe/grx/core"
-	"github.com/patrickkabwe/grx/exec"
-	"github.com/patrickkabwe/grx/pkg/cors"
-	"github.com/patrickkabwe/grx/plugin"
-	"github.com/patrickkabwe/grx/schema"
-	"github.com/patrickkabwe/grx/server"
+	"github.com/grx-gql/grx/core"
+	"github.com/grx-gql/grx/cors"
+	"github.com/grx-gql/grx/exec"
+	"github.com/grx-gql/grx/middlewares"
+	"github.com/grx-gql/grx/plugins"
+	"github.com/grx-gql/grx/schema"
+	"github.com/grx-gql/grx/server"
 )
 
 // ErrMissingSchema is returned by [NewServer] when [WithSchema] was not used.
@@ -90,9 +91,9 @@ func WithSchema(schemaConfig schema.Config) Option {
 // WithPlugins registers lifecycle plugins that observe or short-circuit
 // every GraphQL request. Plugins are invoked in registration order.
 // Calling WithPlugins multiple times appends to the existing chain.
-func WithPlugins(plugins ...plugin.Plugin) Option {
+func WithPlugins(pluginList ...plugins.Plugin) Option {
 	return func(c *server.Config) {
-		c.Plugins = append(c.Plugins, plugins...)
+		c.Plugins = append(c.Plugins, pluginList...)
 	}
 }
 
@@ -167,6 +168,13 @@ func WithMaxHTTPRequestBytes(n int64) Option {
 	}
 }
 
+// WithMaxSelectionDepth sets a parse-time limit on nested selection sets.
+func WithMaxSelectionDepth(depth int) Option {
+	return func(c *server.Config) {
+		c.MaxSelectionDepth = depth
+	}
+}
+
 // WithResponseGzip enables gzip compression for JSON GraphQL responses when
 // the client sends Accept-Encoding: gzip.
 func WithResponseGzip() Option {
@@ -215,7 +223,7 @@ func Cors(config CorsConfig) Middleware {
 }
 
 // RequestID returns middleware that propagates a request ID through
-// [core.RequestIDFromContext]. See [server.RequestID].
+// [core.RequestIDFromContext]. See [middlewares.RequestID].
 func RequestID(header string) Middleware {
-	return server.RequestID(header)
+	return Middleware(middlewares.RequestID(header))
 }

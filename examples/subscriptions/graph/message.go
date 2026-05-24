@@ -7,7 +7,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/patrickkabwe/grx/pkg/pubsub"
+	"github.com/grx-gql/grx/memory-pubsub"
 )
 
 // messagePostedTopic is the bus topic for chat message events. A single

@@ -70,7 +70,7 @@ func WithLexerCache(limit int) ExecutorOption {
 }
 
 // WithClientErrorMasking replaces internal execution errors with message in
-// client-facing responses while preserving raw errors through plugin.Error.
+// client-facing responses while preserving raw errors through plugins.Error.
 func WithClientErrorMasking(message string) ExecutorOption {
 	return func(e *Executor) {
 		e.maskInternalErrors = true

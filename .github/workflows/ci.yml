@@ -17,3 +17,5 @@ jobs:
         run: go test -race ./...
       - name: Coverage
         run: env COVER_MIN=90 ./scripts/cover-lib.sh
+      - name: Changelog synced to docs site
+        run: ./scripts/check-docs-changelog.sh

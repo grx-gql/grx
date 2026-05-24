@@ -5,8 +5,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/patrickkabwe/grx/core"
-	"github.com/patrickkabwe/grx/schema"
+	"github.com/grx-gql/grx/core"
+	"github.com/grx-gql/grx/schema"
 )
 
 func testSchemaForValidation(t *testing.T) *schema.Schema {
@@ -722,5 +722,14 @@ func TestValidateSkipIncludeAllowsVariableLiteralsBoundOrRejectsUnset(t *testing
 	}
 	if !found {
 		t.Fatalf("expected skip directive unset variable error among %#v", errs)
+	}
+}
+
+func TestTypeStringNil(t *testing.T) {
+	if got := typeString(nil); got != "" {
+		t.Fatalf("typeString(nil) = %q, want empty", got)
+	}
+	if got := typeString(&schema.Scalar{TypeName: "Int"}); got != "Int" {
+		t.Fatalf("typeString(Int) = %q", got)
 	}
 }

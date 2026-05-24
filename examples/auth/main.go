@@ -7,9 +7,9 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/patrickkabwe/grx"
-	"github.com/patrickkabwe/grx/examples/auth/graph"
-	"github.com/patrickkabwe/grx/examples/auth/session"
+	"github.com/grx-gql/grx"
+	"github.com/grx-gql/grx/examples/auth/graph"
+	"github.com/grx-gql/grx/examples/auth/session"
 )
 
 // demoBearerToken is deliberately static so you can paste it into GraphiQL's

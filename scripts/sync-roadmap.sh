@@ -81,7 +81,7 @@ outline: [2, 3]
 ---
 
 > This page is mirrored from the **Feature Parity Checklist** in
-> [\`ROADMAP.md\`](https://github.com/patrickkabwe/grx/blob/main/ROADMAP.md)
+> [\`ROADMAP.md\`](https://github.com/grx-gql/grx/blob/main/ROADMAP.md)
 > at the repository root. Edit that file, not this one.
 
 ## Overall progress

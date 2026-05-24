@@ -1,15 +1,15 @@
 ---
 title: Examples
-description: Copy-paste starters, subscription wiring, router mounts—with the full Go source on the page.
+description: Copy-paste starters, subscription wiring, router mounts - with the full Go source on the page.
 outline: deep
 ---
 
 # Examples
 
-In this section you’ll find **the same Go that ships in `examples/`**—ready to skim, paste, or tweak—plus **tiny router mounts** for production-style URLs.
+In this section you’ll find **the same Go that ships in `examples/`** - ready to skim, paste, or tweak - plus **tiny router mounts** for production-style URLs.
 
 ::: tip Runs from repo root  
-The commands assume your working directory is a clone of **`github.com/patrickkabwe/grx`**. Prefer your own module path when you copy snippets into another module (everything under **`examples/*/`** is importable paths from this repo).  
+The commands assume your working directory is a clone of **`github.com/grx-gql/grx`**. Prefer your own module path when you copy snippets into another module (everything under **`examples/*/`** is importable paths from this repo).  
 :::
 
 ---
@@ -18,14 +18,14 @@ The commands assume your working directory is a clone of **`github.com/patrickka
 
 ### Basic GraphQL HTTP server {#examples-basic-http}
 
-GraphiQL at **`GET /`**, **`POST /graphql`** for queries and mutations—the smallest complete loop.
+GraphiQL at **`GET /`**, **`POST /graphql`** for queries and mutations - the smallest complete loop.
 
 #### `examples/basic/graph/schema.go`
 
 ```go
 package graph
 
-import "github.com/patrickkabwe/grx/schema"
+import "github.com/grx-gql/grx/schema"
 
 type Query struct{}
 
@@ -70,8 +70,8 @@ import (
 	"log"
 	"net/http"
 
-	"github.com/patrickkabwe/grx"
-	"github.com/patrickkabwe/grx/examples/basic/graph"
+	"github.com/grx-gql/grx"
+	"github.com/grx-gql/grx/examples/basic/graph"
 )
 
 func main() {
@@ -111,7 +111,7 @@ Try inside GraphiQL:
 
 ### Bearer token + field authorizer {#examples-auth}
 
-Shows how **`WithMiddleware`** turns `Authorization: Bearer …` into a request-scoped **subject**, and how **`WithFieldAuthorizer`** blocks `viewer` until that subject exists—the same narrative as [**Authentication & authorization**](/guides/auth). Runs on **`http://localhost:4010/`** with playground at **`/`**.
+Shows how **`WithMiddleware`** turns `Authorization: Bearer …` into a request-scoped **subject**, and how **`WithFieldAuthorizer`** blocks `viewer` until that subject exists - the same narrative as [**Authentication & authorization**](/guides/auth). Runs on **`http://localhost:4010/`** with playground at **`/`**.
 
 #### `examples/auth/session/context.go`
 
@@ -146,8 +146,8 @@ import (
 	"context"
 	"errors"
 
-	"github.com/patrickkabwe/grx/examples/auth/session"
-	"github.com/patrickkabwe/grx/schema"
+	"github.com/grx-gql/grx/examples/auth/session"
+	"github.com/grx-gql/grx/schema"
 )
 
 type Query struct{}
@@ -188,9 +188,9 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/patrickkabwe/grx"
-	"github.com/patrickkabwe/grx/examples/auth/graph"
-	"github.com/patrickkabwe/grx/examples/auth/session"
+	"github.com/grx-gql/grx"
+	"github.com/grx-gql/grx/examples/auth/graph"
+	"github.com/grx-gql/grx/examples/auth/session"
 )
 
 const demoBearerToken = "demo-alice-token"
@@ -281,7 +281,7 @@ Then query:
 
 ### Subscriptions (WebSocket + SSE) {#examples-subscriptions}
 
-Memory pub/sub feeds [**`graphql-transport-ws`**](https://github.com/graphql/graphql-ws)—plus bundled SSE—with CORS guarded for **`localhost`** below.
+Memory pub/sub feeds [**`graphql-transport-ws`**](https://github.com/graphql/graphql-ws) - plus bundled SSE - with CORS guarded for **`localhost`** below.
 
 #### `examples/subscriptions/main.go`
 
@@ -295,13 +295,13 @@ import (
 	"os"
 	"time"
 
-	"github.com/patrickkabwe/grx"
-	"github.com/patrickkabwe/grx/examples/subscriptions/graph"
-	"github.com/patrickkabwe/grx/pkg/cors"
-	"github.com/patrickkabwe/grx/pkg/pubsub"
-	"github.com/patrickkabwe/grx/pkg/sse"
-	"github.com/patrickkabwe/grx/pkg/websocket"
-	"github.com/patrickkabwe/grx/plugin/logger"
+	"github.com/grx-gql/grx"
+	"github.com/grx-gql/grx/examples/subscriptions/graph"
+	"github.com/grx-gql/grx/cors"
+	"github.com/grx-gql/grx/memory-pubsub"
+	"github.com/grx-gql/grx/sse"
+	"github.com/grx-gql/grx/websocket"
+	"github.com/grx-gql/grx/plugins/logger"
 )
 
 const (
@@ -356,8 +356,8 @@ func main() {
 package graph
 
 import (
-	"github.com/patrickkabwe/grx/pkg/pubsub"
-	"github.com/patrickkabwe/grx/schema"
+	"github.com/grx-gql/grx/memory-pubsub"
+	"github.com/grx-gql/grx/schema"
 )
 
 // SchemaOption configures [New].
@@ -369,7 +369,7 @@ type schemaOptions struct {
 
 // WithPubSub wires the typed pub/sub bridge used by mutation and subscription
 // resolvers. Required for this example schema, which publishes across
-// resolvers via [pkg/pubsub].
+// resolvers via [memory-pubsub](/concepts/pubsub).
 func WithPubSub(bus pubsub.PubSub) SchemaOption {
 	return func(o *schemaOptions) {
 		o.bus = bus
@@ -451,7 +451,7 @@ import (
 	"fmt"
 	"sync/atomic"
 
-	"github.com/patrickkabwe/grx/pkg/pubsub"
+	"github.com/grx-gql/grx/memory-pubsub"
 )
 
 // userCreatedTopic is the bus topic on which User events are published.
@@ -528,7 +528,7 @@ func (s UserSubscription) UserCreated(ctx context.Context) (<-chan *User, error)
 }
 ```
 
-Post feeds the root **`Query`**, while **`message.go`** publishes room-scoped payloads with a **`Subscribe`** predicate—both match the **`user.go`** pattern (`embed` structs on each root).
+Post feeds the root **`Query`**, while **`message.go`** publishes room-scoped payloads with a **`Subscribe`** predicate - both match the **`user.go`** pattern (`embed` structs on each root).
 
 #### `examples/subscriptions/graph/post.go`
 
@@ -599,7 +599,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/patrickkabwe/grx/pkg/pubsub"
+	"github.com/grx-gql/grx/memory-pubsub"
 )
 
 const messagePostedTopic = "message.posted"
@@ -683,7 +683,7 @@ go run ./examples/subscriptions
 
 ## Router integrations {#examples-router-integrations}
 
-`grx` answers **`ServeHTTP`** with exact path matches—you usually pair **`http.StripPrefix("/api", gql)`** with **`WithPlaygroundPath("/playground")`** and **`WithGraphQLPath("/query")`** so callers see **`/api/playground`** and **`POST /api/query`**.
+`grx` answers **`ServeHTTP`** with exact path matches - you usually pair **`http.StripPrefix("/api", gql)`** with **`WithPlaygroundPath("/playground")`** and **`WithGraphQLPath("/query")`** so callers see **`/api/playground`** and **`POST /api/query`**.
 
 Build **`graph`** any way you like (see **[Get started**](/getting-started/) or **Basic HTTP** above), then reuse this fragment before each snippet:
 
@@ -732,7 +732,7 @@ import (
 
 	"example.com/hello-grx/graph"
 	"github.com/go-chi/chi/v5"
-	"github.com/patrickkabwe/grx"
+	"github.com/grx-gql/grx"
 )
 
 func main() {
@@ -804,7 +804,7 @@ go get github.com/gofiber/fiber/v2
 
 ## Measuring throughput {#examples-benchmarks}
 
-Micro-benchmarks help compare resolver hot paths—they are **not** a substitute for profiling your full HTTP/RPS workload.
+Micro-benchmarks help compare resolver hot paths - they are **not** a substitute for profiling your full HTTP/RPS workload.
 
 See **[Benchmarks](/benchmarks)** for scenarios, methodology, and latest tables.
 
@@ -812,8 +812,8 @@ See **[Benchmarks](/benchmarks)** for scenarios, methodology, and latest tables.
 
 ## Source {#examples-source}
 
-- [**GitHub repository**](https://github.com/patrickkabwe/grx) — history, CI, **`examples/`** tree mirroring these snippets.
-- [**Discussions**](https://github.com/patrickkabwe/grx/discussions) — integrations, roadmap questions.
+- [**GitHub repository**](https://github.com/grx-gql/grx)  -  history, CI, **`examples/`** tree mirroring these snippets.
+- [**Discussions**](https://github.com/grx-gql/grx/discussions)  -  integrations, roadmap questions.
 
 ---
 

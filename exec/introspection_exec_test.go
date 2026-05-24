@@ -6,9 +6,9 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/patrickkabwe/grx/core"
-	"github.com/patrickkabwe/grx/plugin"
-	"github.com/patrickkabwe/grx/schema"
+	"github.com/grx-gql/grx/core"
+	"github.com/grx-gql/grx/plugins"
+	"github.com/grx-gql/grx/schema"
 )
 
 func TestExecutableIntrospectionMatchesFastPath(t *testing.T) {
@@ -158,7 +158,7 @@ func TestExecutableIntrospectionBranches(t *testing.T) {
 	if err != nil {
 		t.Fatalf("build: %v", err)
 	}
-	e := New(s, []plugin.Plugin{fieldHookPlugin{}}, WithExecutableIntrospection())
+	e := New(s, []plugins.Plugin{fieldHookPlugin{}}, WithExecutableIntrospection())
 	resp := e.Execute(context.Background(), core.Request{Query: `{ __schema { queryType { name } types { name kind } } }`})
 	if len(resp.Errors) != 0 {
 		t.Fatalf("introspection errors: %#v", resp.Errors)
@@ -172,7 +172,7 @@ func TestExecutableIntrospectionBranches(t *testing.T) {
 		t.Fatalf("type introspection errors: %#v", typeResp.Errors)
 	}
 
-	blocked := New(s, []plugin.Plugin{fieldHookPlugin{errField: "name"}}, WithExecutableIntrospection())
+	blocked := New(s, []plugins.Plugin{fieldHookPlugin{errField: "name"}}, WithExecutableIntrospection())
 	errResp := blocked.Execute(context.Background(), core.Request{Query: `{ __schema { queryType { name } } }`})
 	if len(errResp.Errors) == 0 {
 		t.Fatal("expected introspection field hook error")

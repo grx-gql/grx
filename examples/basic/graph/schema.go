@@ -1,6 +1,6 @@
 package graph
 
-import "github.com/patrickkabwe/grx/schema"
+import "github.com/grx-gql/grx/schema"
 
 type Query struct{}
 

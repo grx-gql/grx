@@ -27,8 +27,8 @@ import (
     "crypto/rand"
     "encoding/hex"
 
-    "github.com/patrickkabwe/grx/core"
-    "github.com/patrickkabwe/grx/plugin"
+    "github.com/grx-gql/grx/core"
+    "github.com/grx-gql/grx/plugins"
 )
 
 type requestIDKey struct{}
@@ -40,7 +40,7 @@ func RequestIDFrom(ctx context.Context) string {
     return ""
 }
 
-type RequestID struct{ plugin.Base }
+type RequestID struct{ plugins.Base }
 
 func (RequestID) RequestStart(ctx context.Context, _ core.Request) (context.Context, error) {
     var b [16]byte
@@ -68,7 +68,7 @@ func (RequestID) Error(ctx context.Context, err error) {
 
 A few things worth calling out:
 
-- The plugin embeds `plugin.Base`, so future lifecycle hooks added to the
+- The plugin embeds `plugins.Base`, so future lifecycle hooks added to the
   interface won't break the build.
 - `RequestStart` is the **only** hook that may return a derived context.
   Add request-scoped values here, never on the plugin struct.
@@ -86,8 +86,8 @@ import (
 
 	"github.com/example/myproject/extensions"
 
-	"github.com/patrickkabwe/grx"
-	"github.com/patrickkabwe/grx/plugin/logger"
+	"github.com/grx-gql/grx"
+	"github.com/grx-gql/grx/plugins/logger"
 
 	"example.com/hello-grx/graph"
 )
@@ -143,7 +143,7 @@ The response will look like:
 
 ## Where to go next
 
-- Hook `FieldResolveStart` to record per-field timing — but keep it cheap
+- Hook `FieldResolveStart` to record per-field timing  -  but keep it cheap
   (it fires on every resolved field).
 - Hook `ParsingStart` and `ValidationStart` to enforce caps on document
   size or depth.

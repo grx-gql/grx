@@ -1,6 +1,6 @@
 # grx documentation site
 
-This directory is the source for the [grx documentation site](https://patrickkabwe.github.io/grx/).
+This directory is the source for the [grx documentation site](https://grx-gql.github.io/grx/).
 It is built with [VitePress](https://vitepress.dev/).
 
 ## Local development
@@ -44,15 +44,15 @@ docs/
 ├── guides/                 # how-to walkthroughs
 ├── reference/              # API reference (hand-maintained + mirrored)
 ├── benchmarks.md
-├── changelog.md            # generated — see below
-├── roadmap.md              # generated — see below
+├── changelog.md            # generated  -  see below
+├── roadmap.md              # generated  -  see below
 └── README.md               # this file
 ```
 
 ## Auto-generated content
 
 Two pages are mirrored from canonical sources elsewhere in the repo.
-**Do not edit them directly** — your edits will be overwritten on the next
+**Do not edit them directly**  -  your edits will be overwritten on the next
 `make docs-content`.
 
 | Page             | Generated from        | Script                      |
@@ -92,12 +92,12 @@ including) the deploy so broken builds are caught at review time.
 The workflow cannot enable Pages on its own. Do this once in the repository
 settings:
 
-1. Open **Settings → Pages** for `patrickkabwe/grx`.
+1. Open **Settings → Pages** for `grx-gql/grx`.
 2. Under **Build and deployment**, set **Source** to **GitHub Actions**.
 3. (Optional) Add a custom domain via **Pages** settings and DNS.
 
 Once Pages is enabled, every push to `main` that touches a doc-relevant path
-will publish to **https://patrickkabwe.github.io/grx/**. Manual runs are also
+will publish to **https://grx-gql.github.io/grx/**. Manual runs are also
 available via **Actions → Docs → Run workflow**.
 
 ### Path filter
@@ -105,7 +105,7 @@ available via **Actions → Docs → Run workflow**.
 The workflow runs when one of these paths changes:
 
 - `docs/**`
-- `scripts/sync-changelog.sh`, `scripts/sync-roadmap.sh`, `scripts/gen-api-docs.sh`
+- `scripts/sync-changelog.sh`, `scripts/sync-roadmap.sh`
 - `CHANGELOG.md`, `README.md`, `ROADMAP.md`
 - `Makefile`
 - `.github/workflows/docs.yml`

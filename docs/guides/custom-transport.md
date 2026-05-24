@@ -18,7 +18,7 @@ to show the shape.
 import (
 	"net/http"
 
-	"github.com/patrickkabwe/grx/core"
+	"github.com/grx-gql/grx/core"
 )
 
 // Mirrors [core.Transport].
@@ -40,7 +40,7 @@ import (
     "encoding/json"
     "net/http"
 
-    "github.com/patrickkabwe/grx/core"
+    "github.com/grx-gql/grx/core"
 )
 
 type Transport struct{}
@@ -100,7 +100,7 @@ import (
 
 	"github.com/example/myproject/httpget"
 
-	"github.com/patrickkabwe/grx"
+	"github.com/grx-gql/grx"
 
 	"example.com/hello-grx/graph"
 )
@@ -117,14 +117,14 @@ func main() {
 }
 ```
 
-`grx.NewServer` always appends the built-in `pkg/http` transport at the
+`grx.NewServer` always appends the built-in `http` transport at the
 end of the chain, so the canonical `POST /graphql` JSON request keeps
 working without any explicit registration. To override that default
-behaviour, register a `pkg/http`-style POST-matching transport ahead of
+behaviour, register a `http`-style POST-matching transport ahead of
 the others.
 
 If you also want WebSocket and SSE, list them in the order you want them
-considered — the first `Match` wins:
+considered  -  the first `Match` wins:
 
 ```go
 package main
@@ -134,9 +134,9 @@ import (
 
 	"github.com/example/myproject/httpget"
 
-	"github.com/patrickkabwe/grx"
-	"github.com/patrickkabwe/grx/pkg/sse"
-	"github.com/patrickkabwe/grx/pkg/websocket"
+	"github.com/grx-gql/grx"
+	"github.com/grx-gql/grx/sse"
+	"github.com/grx-gql/grx/websocket"
 
 	"example.com/hello-grx/graph"
 )
@@ -162,7 +162,7 @@ func main() {
 - **One transport, one wire format.** If you find yourself branching on
   request shape inside `Serve`, you probably want a second transport.
 - **Don't reach into `schema` or `exec`.** Transports talk to the
-  `core.Executor` only — that's what keeps the layering honest.
+  `core.Executor` only  -  that's what keeps the layering honest.
 - **Surface request-level errors with `core.WriteJSON`** before any
   streaming has started. Once you've started writing a stream, you owe
   the protocol-specific termination message.

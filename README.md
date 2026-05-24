@@ -32,6 +32,9 @@ go run ./examples/auth
 Useful local commands:
 
 ```bash
+make dev-setup      # go mod tidy + install-hooks (good right after clone)
+# or
+make mod-tidy && make install-hooks
 make build
 make test
 make vet
@@ -42,7 +45,7 @@ make fmt
 
 Full documentation is available at:
 
-- https://patrickkabwe.github.io/grx/
+- https://grx-gql.github.io/grx/
 
 ### AI-assisted development
 
@@ -50,11 +53,13 @@ Full documentation is available at:
 - **`AGENTS.md`** is a stub for tools that look for **`AGENTS.md`**; it points **`AGENT.md`** vs **`.cursor/skills/graphql-grx/`** for **app developers** importing **`grx`**.
 - **`/.cursor/skills/graphql-grx/SKILL.md`** is a reusable **Cursor skill** describing public API patterns (`schema.Config`, **`grx.NewServer`**, transports, subscriptions, hardening)—copy it to **`~/.cursor/skills/graphql-grx`** in your Go project.
 
-See **[AI assistants](https://patrickkabwe.github.io/grx/guides/ai-assistants)** on the docs site for setup steps.
+See **[AI assistants](https://grx-gql.github.io/grx/guides/ai-assistants)** on the docs site for setup steps.
 
 ## Contributing
 
 Contributions should stay small, focused, and directly related to the problem being solved.
+
+**Releases**: use **[Conventional Commits](https://www.conventionalcommits.org/)** in the squash-merge subject (`feat:`, `fix:`, `chore:`, `docs:`, …) so **release-please** can propose the next semver and changelog. See **`RELEASING.md`**. After cloning, **`make dev-setup`** runs **`go mod tidy`** in each module and then enables hooks; use **`make install-hooks`** alone if you only need the Conventional Commit check.
 
 Contribution rules for this repository:
 
@@ -64,6 +69,10 @@ Contribution rules for this repository:
 - Use strict typing and simple single-purpose functions.
 - Do not revert unrelated changes.
 - Run relevant validation before opening a change, at minimum `make test` when code changes affect runtime behavior.
+
+## Releases
+
+Tagged **[Go module](https://go.dev/doc/modules/publishing)** releases (no binaries). Maintainer steps and tag conventions: **[`RELEASING.md`](./RELEASING.md)**.
 
 ## License
 
@@ -83,4 +92,4 @@ Current status:
 For detailed status and planned work, see:
 
 - [ROADMAP.md](./ROADMAP.md)
-- https://patrickkabwe.github.io/grx/roadmap/
+- https://grx-gql.github.io/grx/roadmap/

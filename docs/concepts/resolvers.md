@@ -1,12 +1,12 @@
 ---
 title: Resolver methods
-description: How grx turns a GraphQL field into a Go method—arguments, return values, context, errors, and subscriptions.
+description: How grx turns a GraphQL field into a Go method - arguments, return values, context, errors, and subscriptions.
 outline: [2, 3]
 ---
 
 # Resolver methods
 
-In GraphQL terms, a **resolver** is the function that runs when a client asks for a field. In grx, that function is almost always a **Go method**: either a method on your `Query` / `Mutation` / `Subscription` struct (top-level fields), or—under the hood—property reads on structs you return (nested object fields are read from the struct, not separate methods you write).
+In GraphQL terms, a **resolver** is the function that runs when a client asks for a field. In grx, that function is almost always a **Go method**: either a method on your `Query` / `Mutation` / `Subscription` struct (top-level fields), or - under the hood - property reads on structs you return (nested object fields are read from the struct, not separate methods you write).
 
 This page covers **methods you write yourself**: legal signatures, `context`, errors, and subscription channels.
 
@@ -61,7 +61,7 @@ func (Query) User(args UserArgs) (*User, error)
   dispatches each value to subscribers.
 
 `nil` and the zero value are distinguished only when the field is nullable
-(typically `*T` returns) — for `*T` results, returning `nil, nil` produces
+(typically `*T` returns)  -  for `*T` results, returning `nil, nil` produces
 a `null` field; for required (`T`) results, the zero value is sent as-is.
 
 ## Context
@@ -126,7 +126,7 @@ the client:
 ```go
 package graph
 
-import "github.com/patrickkabwe/grx/core"
+import "github.com/grx-gql/grx/core"
 
 func findUser() (*User, error) {
 	return nil, &core.Error{
@@ -149,6 +149,6 @@ the upcoming first-class error masking story; baseline hygiene applies now.
   requests. Per-request state belongs in `ctx`, never on the resolver
   struct.
 - Per-entity resolver structs may hold long-lived dependencies (a database
-  pool, an RPC client) — treat those as immutable after construction.
+  pool, an RPC client)  -  treat those as immutable after construction.
 - Subscriptions own their goroutine: spawn workers from the resolver, but
   always honour `ctx.Done()` to release them.

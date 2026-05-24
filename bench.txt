@@ -1,6 +1,6 @@
 goos: darwin
 goarch: arm64
-pkg: github.com/patrickkabwe/grx/benchmark
+pkg: github.com/grx-gql/grx/benchmark
 cpu: Apple M1 Pro
 BenchmarkSimpleQuery/grx-8         	  630792	      5596 ns/op	    6486 B/op	      65 allocs/op
 BenchmarkSimpleQuery/grx-8         	  629764	      5622 ns/op	    6486 B/op	      65 allocs/op
@@ -48,4 +48,4 @@ BenchmarkListQuery/graph-gophers-8           	   27150	    128684 ns/op	   79562
 BenchmarkListQuery/graph-gophers-8           	   27561	    130064 ns/op	   79566 B/op	    2026 allocs/op
 BenchmarkListQuery/graph-gophers-8           	   26659	    130538 ns/op	   79557 B/op	    2026 allocs/op
 PASS
-ok  	github.com/patrickkabwe/grx/benchmark	198.295s
+ok  	github.com/grx-gql/grx/benchmark	198.295s

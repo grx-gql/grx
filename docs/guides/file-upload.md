@@ -1,6 +1,6 @@
 ---
 title: File uploads
-description: multipart/form-data uploads per the GraphQL multipart request spec — Upload scalar, map field, curl testing.
+description: multipart/form-data uploads per the GraphQL multipart request spec  -  Upload scalar, map field, curl testing.
 outline: deep
 ---
 
@@ -10,7 +10,7 @@ grx accepts file uploads via the [**GraphQL multipart request specification**](h
 
 - **`Content-Type: multipart/form-data`** on `POST`.
 - Form fields **`operations`** (JSON: query + variables with null placeholders where files attach) and **`map`** (JSON: path → multipart part keys).
-- One file field per **`map`** entry; the **`pkg/http`** transport injects **`[core.Upload](https://pkg.go.dev/github.com/patrickkabwe/grx/core#Upload)`** into **`variables`** before execution.
+- One file field per **`map`** entry; the **`http`** transport injects **`[core.Upload](https://pkg.go.dev/github.com/grx-gql/grx/core#Upload)`** into **`variables`** before execution.
 
 Scalars are explicit: declare an **`Upload`** scalar on **`schema.Config.Scalars`** (see runnable **`examples/file-upload/`**).
 
@@ -22,11 +22,11 @@ package graph
 import (
 	"fmt"
 
-	"github.com/patrickkabwe/grx/core"
-	"github.com/patrickkabwe/grx/schema"
+	"github.com/grx-gql/grx/core"
+	"github.com/grx-gql/grx/schema"
 )
 
-// Omit Query/Mutation declarations here — declare them beside your resolver structs.
+// Omit Query/Mutation declarations here  -  declare them beside your resolver structs.
 //
 //	appgraph.Config{
 //
@@ -63,7 +63,7 @@ package graph
 import (
 	"context"
 
-	"github.com/patrickkabwe/grx/core"
+	"github.com/grx-gql/grx/core"
 )
 
 type UploadArgs struct {
@@ -76,7 +76,7 @@ func (Mutation) UploadFile(ctx context.Context, args UploadArgs) (*Payload, erro
 		return nil, err
 	}
 	defer f.Close()
-	// stream or copy — args.File holds Filename, MIME, etc.
+	// stream or copy  -  args.File holds Filename, MIME, etc.
 
 	return nil, nil // return your payload
 }
@@ -97,7 +97,7 @@ Lists of uploads use **`[Upload!]`** and matching **`variables`** placeholders w
 
 ## Operational notes
 
-- Size limits belong at **reverse proxy**, **`MaxHTTPRequestBytes`**, **or middleware** scanning **`Content-Length`** before parsing—multipart bodies can dominate memory if unbounded (**[Limits](/guides/request-limits)**).
+- Size limits belong at **reverse proxy**, **`MaxHTTPRequestBytes`**, **or middleware** scanning **`Content-Length`** before parsing - multipart bodies can dominate memory if unbounded (**[Limits](/guides/request-limits)**).
 - Do **stream** **`Upload.Open()`** outputs to storage rather than blindly **`ReadAll`** for large uploads.
 
 ---
@@ -105,4 +105,4 @@ Lists of uploads use **`[Upload!]`** and matching **`variables`** placeholders w
 ## See also
 
 - **`examples/file-upload/`** (`go run ./examples/file-upload`)
-- **`[core.Upload]`** (`core/upload.go`) and **`decode.go`** multipart wiring in **`pkg/http`**
+- **`[core.Upload]`** (`core/upload.go`) and **`decode.go`** multipart wiring in **`http`**

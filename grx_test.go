@@ -14,9 +14,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/patrickkabwe/grx/pkg/websocket"
-	"github.com/patrickkabwe/grx/plugin/logger"
-	"github.com/patrickkabwe/grx/schema"
+	"github.com/grx-gql/grx/plugins/logger"
+	"github.com/grx-gql/grx/schema"
+	"github.com/grx-gql/grx/websocket"
 )
 
 type middlewareQuery struct{}
@@ -46,6 +46,7 @@ func TestAllForwardingOptionsSmoke(t *testing.T) {
 		WithRequestTimeout(5*time.Minute),
 		WithDisableIntrospection(),
 		WithMaxHTTPRequestBytes(96<<10),
+		WithMaxSelectionDepth(8),
 		WithResponseGzip(),
 		WithPersistedQueries(map[string]string{}),
 		WithOperationAuthorizer(func(ctx context.Context, op OperationContext) error { return nil }),

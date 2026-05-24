@@ -4,8 +4,8 @@ import (
 	"context"
 	"reflect"
 
-	"github.com/patrickkabwe/grx/core"
-	"github.com/patrickkabwe/grx/schema"
+	"github.com/grx-gql/grx/core"
+	"github.com/grx-gql/grx/schema"
 )
 
 // HasIncrementalDirectives reports whether the named operation in req uses

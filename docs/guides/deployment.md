@@ -1,6 +1,6 @@
 ---
 title: Deployment
-description: Ship a grx GraphQL server in containers, behind reverse proxies, on Kubernetes, or managed platforms—plus graceful shutdown and health checks.
+description: Ship a grx GraphQL server in containers, behind reverse proxies, on Kubernetes, or managed platforms - plus graceful shutdown and health checks.
 outline: deep
 ---
 
@@ -30,7 +30,7 @@ import (
 
 	"example.com/hello-grx/graph"
 
-	"github.com/patrickkabwe/grx"
+	"github.com/grx-gql/grx"
 )
 
 func listeningAddr(defaultAddr string) string {
@@ -73,7 +73,7 @@ import (
 
 	"example.com/hello-grx/graph"
 
-	"github.com/patrickkabwe/grx"
+	"github.com/grx-gql/grx"
 )
 
 func main() {
@@ -131,7 +131,7 @@ import (
 
 	"example.com/hello-grx/graph"
 
-	"github.com/patrickkabwe/grx"
+	"github.com/grx-gql/grx"
 )
 
 func main() {
@@ -151,7 +151,7 @@ func main() {
 }
 ```
 
-For **readiness** that depends on PostgreSQL/Redis, return **`503`** until dependencies respond—load balancers and orchestrators use that signal.
+For **readiness** that depends on PostgreSQL/Redis, return **`503`** until dependencies respond - load balancers and orchestrators use that signal.
 
 ---
 
@@ -198,7 +198,7 @@ Omit `**/*_test.go` if you run `go test` inside the Docker build stage; otherwis
 
 ### Compose (API + Redis for pub/sub)
 
-If you use **[`pkg/pubsub/redis`](/reference/pkg/pubsub/redis/)** for multi-replica subscriptions, wire the same network and env vars your Go code expects:
+If you use **[`redis-pubsub`](/reference/redis-pubsub/)** for multi-replica subscriptions, wire the same network and env vars your Go code expects:
 
 ```yaml
 services:
@@ -266,7 +266,7 @@ Enable WebSocket proxying (Caddy v2 passes upgrades by default for `reverse_prox
 
 ## Kubernetes
 
-Sketch only—adapt namespaces, probes, and resources to your org:
+Sketch only - adapt namespaces, probes, and resources to your org:
 
 ```yaml
 apiVersion: apps/v1
@@ -306,7 +306,7 @@ spec:
       targetPort: 4000
 ```
 
-Use an **Ingress** controller that supports WebSocket pass-through (most do when annotations match your cloud). For **sticky sessions**, only some subscription topologies need it—**Redis pub/sub** often removes the requirement at the app layer.
+Use an **Ingress** controller that supports WebSocket pass-through (most do when annotations match your cloud). For **sticky sessions**, only some subscription topologies need it - **Redis pub/sub** often removes the requirement at the app layer.
 
 ---
 
@@ -316,8 +316,8 @@ Use an **Ingress** controller that supports WebSocket pass-through (most do when
 | --- | --- |
 | **VM / systemd** | Run the binary behind **`ExecStart=`**; put **Caddy**/NGINX on the same host or in front for TLS. |
 | **Fly.io, Railway, Render** | Set **`HTTP_ADDR`**, public port mapping, and scale horizontally; enable WebSocket support in the product settings if subscriptions are used. |
-| **AWS ECS / Fargate, GCP Cloud Run (containers)** | Cloud Run enforces **request timeouts**—long **GraphQL subscriptions** or **SSE** may need **GKE/Compute** or **ECS** instead; verify limits before shipping streams. |
-| **AWS Lambda + API Gateway** | HTTP **queries/mutations** can work with a Go Lambda adapter; **WebSocket subscriptions** are a different API Gateway/WebSocket API design—do not assume `grx.WithTransports` maps 1:1 without extra bridge code. |
+| **AWS ECS / Fargate, GCP Cloud Run (containers)** | Cloud Run enforces **request timeouts** - long **GraphQL subscriptions** or **SSE** may need **GKE/Compute** or **ECS** instead; verify limits before shipping streams. |
+| **AWS Lambda + API Gateway** | HTTP **queries/mutations** can work with a Go Lambda adapter; **WebSocket subscriptions** are a different API Gateway/WebSocket API design - do not assume `grx.WithTransports` maps 1:1 without extra bridge code. |
 
 When in doubt, choose a **container** or **VM** profile if **WebSocket** or **hour-long SSE** clients are first-class.
 
@@ -325,6 +325,6 @@ When in doubt, choose a **container** or **VM** profile if **WebSocket** or **ho
 
 ## See also
 
-- **[Transports](/concepts/transports)** — how HTTP, WebSocket, and SSE mount on **`http.Handler`**
-- **[Subscriptions](/guides/subscriptions)** — paths, `CheckOrigin`, **`OnConnect`**
-- **[Production hardening hub](/concepts/graphql-security-production)** — links to security, introspection, limits
+- **[Transports](/concepts/transports)**  -  how HTTP, WebSocket, and SSE mount on **`http.Handler`**
+- **[Subscriptions](/guides/subscriptions)**  -  paths, `CheckOrigin`, **`OnConnect`**
+- **[Production hardening hub](/concepts/graphql-security-production)**  -  links to security, introspection, limits

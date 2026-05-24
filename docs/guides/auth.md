@@ -6,20 +6,20 @@ outline: deep
 
 # Authentication & authorization
 
-Pair this guide with **[Security](/guides/production-security)** (errors, hooks), **[Introspection](/guides/introspection)** (**`__schema`** / GraphiQL), and **[Limits](/guides/request-limits)** (**`MaxHTTPRequestBytes`**, timeouts) when tightening production surfaces—or use the **[overview hub](/concepts/graphql-security-production)**.
+Pair this guide with **[Security](/guides/production-security)** (errors, hooks), **[Introspection](/guides/introspection)** (**`__schema`** / GraphiQL), and **[Limits](/guides/request-limits)** (**`MaxHTTPRequestBytes`**, timeouts) when tightening production surfaces - or use the **[overview hub](/concepts/graphql-security-production)**.
 
 GraphQL transports call `executor.Execute` with the Go `context.Context`
-from HTTP—**not** the raw [`net/http.Request`](https://pkg.go.dev/net/http#Request). That is a deliberate split:
-[`core.Request`](https://pkg.go.dev/github.com/patrickkabwe/grx/core#Request)
+from HTTP - **not** the raw [`net/http.Request`](https://pkg.go.dev/net/http#Request). That is a deliberate split:
+[`core.Request`](https://pkg.go.dev/github.com/grx-gql/grx/core#Request)
 only carries GraphQL payloads (document, operation name, variables).
 
 To authenticate users:
 
-1. **HTTP layer** — read `Authorization` (or cookies) inside
-   [`grx.WithMiddleware`](/reference/grx/) middleware (or Chi/Gin adapters that wrap the [`grx.Server`](https://pkg.go.dev/github.com/patrickkabwe/grx#Server) handler).
-2. **Attach identity** — put a verified subject/session on the context (`context.WithValue`).
-3. **Authorize** — use [`WithFieldAuthorizer`](#field-level-guards),
-   [`WithOperationAuthorizer`](#operation-level-rules), resolver checks—or a [`plugin.Plugin`](/reference/plugin/)
+1. **HTTP layer**  -  read `Authorization` (or cookies) inside
+   [`grx.WithMiddleware`](/reference/grx/) middleware (or Chi/Gin adapters that wrap the [`grx.Server`](https://pkg.go.dev/github.com/grx-gql/grx#Server) handler).
+2. **Attach identity**  -  put a verified subject/session on the context (`context.WithValue`).
+3. **Authorize**  -  use [`WithFieldAuthorizer`](#field-level-guards),
+   [`WithOperationAuthorizer`](#operation-level-rules), resolver checks - or a [`plugins.Plugin`](/reference/plugins/)
    hook when you want a single cross-cutting policy point.
 
 The runnable **`examples/auth/`** folder follows that trio end to end (`go run ./examples/auth`).
@@ -38,7 +38,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/patrickkabwe/grx/examples/auth/session"
+	"github.com/grx-gql/grx/examples/auth/session"
 )
 
 // demoBearerToken is static so callers can paste it into GraphiQL headers.
@@ -76,7 +76,7 @@ func bearerAuth(next http.Handler) http.Handler {
 ```
 
 The meaningful line is **`next.ServeHTTP(w, r.WithContext(ctx))`**. The bundled
-GraphQL-over-HTTP transport in [`pkg/http`](https://pkg.go.dev/github.com/patrickkabwe/grx/pkg/http)
+GraphQL-over-HTTP transport in [`http`](https://pkg.go.dev/github.com/grx-gql/grx/http)
 executes each operation with `Request.Context()`, so downstream resolvers and authorizers reuse the enriched context unchanged.
 
 ::: tip Browsers must be allowed to send `Authorization`
@@ -87,7 +87,7 @@ Remember to open `Authorization` in CORS config (same pattern as the [subscripti
 
 ### Resolver-side identity
 
-Prefer unexported context keys typed to your app—the `examples/auth/session` package wraps `context.WithValue` so resolver code stays short:
+Prefer unexported context keys typed to your app - the `examples/auth/session` package wraps `context.WithValue` so resolver code stays short:
 
 ```go
 package graph
@@ -96,7 +96,7 @@ import (
 	"context"
 	"errors"
 
-	"github.com/patrickkabwe/grx/examples/auth/session"
+	"github.com/grx-gql/grx/examples/auth/session"
 )
 
 // User is declared alongside [Query] in examples/auth/graph.
@@ -111,7 +111,7 @@ func (Query) Viewer(ctx context.Context) (*User, error) {
 
 ## Field-level guards
 
-[`WithFieldAuthorizer`](https://pkg.go.dev/github.com/patrickkabwe/grx#WithFieldAuthorizer)
+[`WithFieldAuthorizer`](https://pkg.go.dev/github.com/grx-gql/grx#WithFieldAuthorizer)
 runs immediately before coercion + resolver invocation. Returning `fmt.Errorf(...)`
 (or any non-nil error) surfaces as the GraphQL error for `viewer` specifically:
 
@@ -122,9 +122,9 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/patrickkabwe/grx"
-	"github.com/patrickkabwe/grx/examples/auth/graph"
-	"github.com/patrickkabwe/grx/examples/auth/session"
+	"github.com/grx-gql/grx"
+	"github.com/grx-gql/grx/examples/auth/graph"
+	"github.com/grx-gql/grx/examples/auth/session"
 )
 
 const demoBearerToken = "demo-alice-token"
@@ -155,17 +155,17 @@ func wireServerWithFieldAuth() error {
 }
 ```
 
-**`bearerAuth`** is the middleware from the first snippet (**`session`** attaches the subject in both). Full wiring lives in [`examples/auth/main.go`](https://github.com/patrickkabwe/grx/blob/main/examples/auth/main.go).
+**`bearerAuth`** is the middleware from the first snippet (**`session`** attaches the subject in both). Full wiring lives in [`examples/auth/main.go`](https://github.com/grx-gql/grx/blob/main/examples/auth/main.go).
 
 Pairing declarative guards (authorizers/plugins) with HTTP middleware avoids duplicating
 header parsing logic across every resolver.
 
 ## Operation-level rules
 
-[`WithOperationAuthorizer`](https://pkg.go.dev/github.com/patrickkabwe/grx#WithOperationAuthorizer)
-runs while the executor validates the parsed document — **before** any field resolves.
-Inspect [`OperationContext`](https://pkg.go.dev/github.com/patrickkabwe/grx/exec#OperationContext)
-for operation kind/name and reuse the incoming [`core.Request`](https://pkg.go.dev/github.com/patrickkabwe/grx/core#Request):
+[`WithOperationAuthorizer`](https://pkg.go.dev/github.com/grx-gql/grx#WithOperationAuthorizer)
+runs while the executor validates the parsed document  -  **before** any field resolves.
+Inspect [`OperationContext`](https://pkg.go.dev/github.com/grx-gql/grx/exec#OperationContext)
+for operation kind/name and reuse the incoming [`core.Request`](https://pkg.go.dev/github.com/grx-gql/grx/core#Request):
 
 ```go
 package main
@@ -174,12 +174,12 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/patrickkabwe/grx"
-	"github.com/patrickkabwe/grx/core"
+	"github.com/grx-gql/grx"
+	"github.com/grx-gql/grx/core"
 )
 
 func hasElevatedClaim(ctx context.Context) bool {
-	// Your policy — JWT scope, RBAC lookup, ...
+	// Your policy  -  JWT scope, RBAC lookup, ...
 	return false
 }
 
@@ -200,8 +200,8 @@ Reach for operations when policies are coarse (“block every mutation”), and 
 go run ./examples/auth
 ```
 
-1. **`http://localhost:4010/`** — GraphiQL.
-2. Run `{ ping }` without headers—it stays public on purpose.
+1. **`http://localhost:4010/`**  -  GraphiQL.
+2. Run `{ ping }` without headers - it stays public on purpose.
 3. Run `{ viewer { id displayName } }`; expect a GraphQL error describing the Bearer requirement until you add GraphiQL headers:
 
 ```json
@@ -213,4 +213,4 @@ go run ./examples/auth
 **Further reading**
 
 - Lifecycle context: [Hooks and plugins](/concepts/plugins).
-- Source tree: [`examples/auth`](https://github.com/patrickkabwe/grx/tree/main/examples/auth).
+- Source tree: [`examples/auth`](https://github.com/grx-gql/grx/tree/main/examples/auth).

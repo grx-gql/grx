@@ -6,8 +6,8 @@ import (
 	"math"
 	"testing"
 
-	"github.com/patrickkabwe/grx/core"
-	"github.com/patrickkabwe/grx/schema"
+	"github.com/grx-gql/grx/core"
+	"github.com/grx-gql/grx/schema"
 )
 
 type listCoercionQuery struct{}
@@ -449,5 +449,48 @@ func TestCoercionAndDirectiveHelpers(t *testing.T) {
 	}
 	if !fragmentTypeMatches(obj, "Iface") {
 		t.Fatal("object should match interface possible type")
+	}
+}
+
+func TestCoerceScalarInputBranches(t *testing.T) {
+	cases := []struct {
+		typeName string
+		raw      any
+		wantErr  bool
+	}{
+		{"Int", 5, false},
+		{"Int", "x", true},
+		{"Float", 1.5, false},
+		{"Float", math.Inf(1), true},
+		{"Float", 3, false},
+		{"Boolean", true, false},
+		{"Boolean", "x", true},
+		{"String", "ok", false},
+		{"String", 1, true},
+		{"ID", "1", false},
+		{"ID", 7, false},
+		{"Custom", "passthrough", false},
+		{"Int", nil, false},
+	}
+	for _, tc := range cases {
+		_, err := coerceScalarInput(tc.typeName, tc.raw)
+		if (err != nil) != tc.wantErr {
+			t.Fatalf("coerceScalarInput(%q, %v) err=%v wantErr=%v", tc.typeName, tc.raw, err, tc.wantErr)
+		}
+	}
+}
+
+func TestCoerceFloatInputBranches(t *testing.T) {
+	good := []any{float32(1.5), float64(2.5), int(3), int64(4)}
+	for _, g := range good {
+		if _, err := coerceFloatInput(g); err != nil {
+			t.Fatalf("coerceFloatInput(%v): %v", g, err)
+		}
+	}
+	if _, err := coerceFloatInput(math.NaN()); err == nil {
+		t.Fatal("expected error for NaN")
+	}
+	if _, err := coerceFloatInput("x"); err == nil {
+		t.Fatal("expected error for non-numeric")
 	}
 }

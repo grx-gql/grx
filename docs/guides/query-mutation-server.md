@@ -1,6 +1,6 @@
 ---
 title: Queries and mutations
-description: Build a small GraphQL API with multiple entities—queries, mutations, and clean file layout.
+description: Build a small GraphQL API with multiple entities - queries, mutations, and clean file layout.
 outline: [2, 3]
 ---
 
@@ -138,7 +138,7 @@ func (PostMutation) CreatePost(ctx context.Context, args PostCreateArgs) (*PostC
 // graph/schema.go
 package graph
 
-import "github.com/patrickkabwe/grx/schema"
+import "github.com/grx-gql/grx/schema"
 
 type Query struct {
     UserQuery
@@ -169,7 +169,7 @@ import (
     "net/http"
 
     "example.com/hello-grx/graph"
-    "github.com/patrickkabwe/grx"
+    "github.com/grx-gql/grx"
 )
 
 func main() {
@@ -215,5 +215,5 @@ query {
 
 ## See also
 
-- **[Testing with the HTTP client](/guides/testing)** — **`httptest.Server`** plus **`pkg/client`** for integration tests against your handler.
+- **[Testing with the HTTP client](/guides/testing)**  -  **`httptest.Server`** plus **`client`** for integration tests against your handler.
 

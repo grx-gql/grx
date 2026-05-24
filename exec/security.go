@@ -3,7 +3,7 @@ package exec
 import (
 	"context"
 
-	"github.com/patrickkabwe/grx/core"
+	"github.com/grx-gql/grx/core"
 )
 
 // OperationContext describes the selected operation for security hooks.

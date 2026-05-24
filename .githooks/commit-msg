@@ -1,0 +1,57 @@
+#!/usr/bin/env bash
+# Validates the commit subject against Conventional Commits (single-line summary).
+# Install once: make install-hooks    (sets core.hooksPath=.githooks)
+set -euo pipefail
+
+msg_file=${1:?}
+
+subject=$(
+  awk '
+    /^[[:space:]]*#/ { next }
+    /^[[:space:]]*$/ { next }
+    { print; exit }
+  ' "${msg_file}"
+)
+
+if [[ -z "${subject}" ]]; then
+  echo "commit-msg hook: refusing empty commit message" >&2
+  exit 1
+fi
+
+# Allow Git / GitHub autoflows (no Conventional Subject required).
+if [[ "${subject}" =~ ^Merge[[:space:]] ]]; then
+  exit 0
+fi
+if [[ "${subject}" =~ ^Revert[[:space:]] ]]; then
+  exit 0
+fi
+case "${subject}" in
+  "Initial commit" | "initial commit") exit 0 ;;
+esac
+
+# Dependabot legacy single-line summaries.
+if [[ "${subject}" =~ ^[Bb]ump[[:space:]] ]]; then
+  exit 0
+fi
+
+# Keep in sync with release-please / CONTRIBUTING wording.
+readonly cc_regex='^(feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert|deps)(\([[:alnum:]._/-]+\))?(!)?: +.+'
+
+if [[ "${subject}" =~ $cc_regex ]]; then
+  exit 0
+fi
+
+cat >&2 <<'EOF'
+Commit message rejected: subject line must follow Conventional Commits, e.g.:
+
+  feat: add SSE idle timeout for subscriptions
+  fix(exec): handle null enum coercion
+  chore(deps): bump encoding/json usage
+  feat(api)!: remove deprecated MutationRoot field
+
+<type> is usually: feat fix docs style refactor perf test build ci chore revert deps
+Optional Breaking: suffix ! before the colon, or BREAKING CHANGE in the body.
+
+Refs: README (Contributing) and https://www.conventionalcommits.org/
+EOF
+exit 1

@@ -1,24 +1,19 @@
 ---
 title: Execution pipeline
-description: Parse, validate, execute, and respond—where plugin hooks fire and what the executor owns.
+description: Parse, validate, execute, and respond - where plugin hooks fire and what the executor owns.
 outline: [2, 3]
 ---
 
 # Execution pipeline
 
 The `exec` package owns the GraphQL hot path: lex, parse, validate,
-execute. It is intentionally transport-agnostic — it sees a `core.Request`
+execute. It is intentionally transport-agnostic  -  it sees a `core.Request`
 in, returns a `core.Response` (or a stream of them, for subscriptions) out.
 
 ## Pipeline
 
-```mermaid
-flowchart LR
-    R[core.Request] --> L[Lex]
-    L --> P[Parse]
-    P --> V[Validate]
-    V --> E[Execute]
-    E --> Resp[core.Response]
+```text
+  core.Request → Lex → Parse → Validate → Execute → core.Response
 ```
 
 Each stage emits a plugin hook (`ParsingStart`, `ValidationStart`,
@@ -76,9 +71,9 @@ transport.
 Beyond parse-time selection depth (`exec.WithMaxSelectionDepth` / server wiring),
 the executor can reject oversized operations before running resolvers:
 
-- **Total selections** — `exec.WithMaxSelectionCount` / `server.Config.MaxSelectionCount`
-- **Aliased fields** — `exec.WithMaxAliasCount` / `server.Config.MaxAliasCount`
-- **Top-level fields** — `exec.WithMaxRootFieldCount` / `server.Config.MaxRootFieldCount`
+- **Total selections**  -  `exec.WithMaxSelectionCount` / `server.Config.MaxSelectionCount`
+- **Aliased fields**  -  `exec.WithMaxAliasCount` / `server.Config.MaxAliasCount`
+- **Top-level fields**  -  `exec.WithMaxRootFieldCount` / `server.Config.MaxRootFieldCount`
 
 Zero disables each limit. These are coarse guards against denial-of-service
 shapes; they are not a full GraphQL "cost" or complexity analysis.

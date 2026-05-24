@@ -8,7 +8,7 @@ lastUpdated: false
 # exec
 
 ```go
-import "github.com/patrickkabwe/grx/exec"
+import "github.com/grx-gql/grx/exec"
 ```
 
 Package exec contains the GraphQL lexer, parser, AST, executor, and introspection fast\-path. It is the hot per\-request execution path and is deliberately transport\-agnostic: callers communicate with the executor through \[core.Request\] and \[core.Response\].
@@ -17,7 +17,7 @@ Package exec contains the GraphQL lexer, parser, AST, executor, and introspectio
 
 - [Variables](<#variables>)
 - [type Executor](<#Executor>)
-  - [func New\(schemaValue \*schema.Schema, plugins \[\]plugin.Plugin\) \*Executor](<#New>)
+  - [func New\(schemaValue \*schema.Schema, pluginList \[\]plugins.Plugin\) \*Executor](<#New>)
   - [func \(e \*Executor\) Execute\(ctx context.Context, req core.Request\) core.Response](<#Executor.Execute>)
   - [func \(e \*Executor\) OperationKind\(req core.Request\) \(core.OperationKind, error\)](<#Executor.OperationKind>)
   - [func \(e \*Executor\) Subscribe\(ctx context.Context, req core.Request\) \(\<\-chan core.Response, error\)](<#Executor.Subscribe>)
@@ -39,7 +39,7 @@ Executor runs GraphQL operations against a built \[schema.Schema\] and notifies 
 ```go
 type Executor struct {
     Schema  *schema.Schema
-    Plugins []plugin.Plugin
+    Plugins []plugins.Plugin
 }
 ```
 
@@ -47,10 +47,10 @@ type Executor struct {
 ### func New
 
 ```go
-func New(schemaValue *schema.Schema, plugins []plugin.Plugin) *Executor
+func New(schemaValue *schema.Schema, pluginList []plugins.Plugin) *Executor
 ```
 
-New returns an [Executor](<#Executor>) bound to schemaValue and plugins. plugins may be nil; an Executor with no plugins simply skips the lifecycle notifications.
+New returns an [Executor](<#Executor>) bound to schemaValue and pluginList. pluginList may be nil; an Executor with no plugins simply skips the lifecycle notifications.
 
 <a name="Executor.Execute"></a>
 ### func \(\*Executor\) Execute

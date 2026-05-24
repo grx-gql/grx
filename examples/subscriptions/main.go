@@ -7,13 +7,13 @@ import (
 	"os"
 	"time"
 
-	"github.com/patrickkabwe/grx"
-	"github.com/patrickkabwe/grx/examples/subscriptions/graph"
-	"github.com/patrickkabwe/grx/pkg/cors"
-	"github.com/patrickkabwe/grx/pkg/pubsub"
-	"github.com/patrickkabwe/grx/pkg/sse"
-	"github.com/patrickkabwe/grx/pkg/websocket"
-	"github.com/patrickkabwe/grx/plugin/logger"
+	"github.com/grx-gql/grx"
+	"github.com/grx-gql/grx/cors"
+	"github.com/grx-gql/grx/examples/subscriptions/graph"
+	"github.com/grx-gql/grx/memory-pubsub"
+	"github.com/grx-gql/grx/plugins/logger"
+	"github.com/grx-gql/grx/sse"
+	"github.com/grx-gql/grx/websocket"
 )
 
 const (

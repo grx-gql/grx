@@ -6,7 +6,7 @@ outline: [2, 3]
 
 # Chi
 
-[**Chi**](https://github.com/go-chi/chi) keeps routing orthogonal to middleware—handy when REST and GraphQL share auth, traces, quotas, etc. **`r.Mount("/api", http.StripPrefix("/api", gql))`** trims the public prefix before **`grx.Server`** evaluates **`WithPlaygroundPath("/playground")`** and **`WithGraphQLPath("/query")`**, identical to **[ServeMux](./servemux)** but with Chi ergonomics.
+[**Chi**](https://github.com/go-chi/chi) keeps routing orthogonal to middleware - handy when REST and GraphQL share auth, traces, quotas, etc. **`r.Mount("/api", http.StripPrefix("/api", gql))`** trims the public prefix before **`grx.Server`** evaluates **`WithPlaygroundPath("/playground")`** and **`WithGraphQLPath("/query")`**, identical to **[ServeMux](./servemux)** but with Chi ergonomics.
 
 Build **`graph`** from **[Minimal schema](/getting-started/#minimal-schema)** once.
 
@@ -27,7 +27,7 @@ import (
 
 	"example.com/hello-grx/graph"
 	"github.com/go-chi/chi/v5"
-	"github.com/patrickkabwe/grx"
+	"github.com/grx-gql/grx"
 )
 
 func main() {

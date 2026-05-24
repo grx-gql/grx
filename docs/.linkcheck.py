@@ -32,7 +32,7 @@ for p in page_files:
             continue
         if raw.startswith(("http://", "https://")):
             u = urlparse(raw)
-            if "github.com" in u.netloc and "patrickkabwe/grx" in u.path:
+            if "github.com" in u.netloc and "grx-gql/grx" in u.path:
                 key = ("EXT", raw)
                 if key in seen: continue
                 seen.add(key)

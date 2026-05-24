@@ -3,7 +3,7 @@ package exec
 import (
 	"fmt"
 
-	"github.com/patrickkabwe/grx/core"
+	"github.com/grx-gql/grx/core"
 )
 
 // validationError is a graphql-js-style validation failure with source location.

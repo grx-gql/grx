@@ -3,8 +3,8 @@ package exec
 import (
 	"context"
 
-	"github.com/patrickkabwe/grx/core"
-	"github.com/patrickkabwe/grx/plugin"
+	"github.com/grx-gql/grx/core"
+	"github.com/grx-gql/grx/plugins"
 )
 
 // executeIntrospection resolves an introspection query through the normal
@@ -78,7 +78,7 @@ func (e *Executor) projectIntrospection(ctx context.Context, value any, selectio
 	}
 }
 
-// introspectionFieldHooks runs the field authorizer and plugin FieldResolveStart
+// introspectionFieldHooks runs the field authorizer and plugins FieldResolveStart
 // hooks for a projected introspection field. A non-nil return is a field error
 // that should replace the field.
 func (e *Executor) introspectionFieldHooks(ctx context.Context, parentType, fieldName string, path []any) *core.Error {
@@ -98,7 +98,7 @@ func (e *Executor) introspectionFieldHooks(ctx context.Context, parentType, fiel
 		}
 	}
 	for _, hook := range e.Plugins {
-		if err := hook.FieldResolveStart(ctx, plugin.FieldContext{Path: pathParts, FieldName: fieldName}); err != nil {
+		if err := hook.FieldResolveStart(ctx, plugins.FieldContext{Path: pathParts, FieldName: fieldName}); err != nil {
 			e.notifyError(ctx, err)
 			fe := newFieldError(e.maskError(err, false).Error(), path, core.Location{})
 			return &fe

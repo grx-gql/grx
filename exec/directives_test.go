@@ -5,8 +5,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/patrickkabwe/grx/core"
-	"github.com/patrickkabwe/grx/schema"
+	"github.com/grx-gql/grx/core"
+	"github.com/grx-gql/grx/schema"
 )
 
 func TestFlattenSelectionsDeferAndFragments(t *testing.T) {
@@ -233,5 +233,26 @@ func TestIntrospectionShowsDeprecatedFieldInfo(t *testing.T) {
 	})
 	if len(resp.Errors) != 0 {
 		t.Fatalf("unexpected errors: %v", resp.Errors)
+	}
+}
+
+func TestBoolArgBranches(t *testing.T) {
+	if _, err := boolArg(nil, "if"); err == nil {
+		t.Fatal("expected error for nil args")
+	}
+	if _, err := boolArg(map[string]any{}, "if"); err == nil {
+		t.Fatal("expected error for missing key")
+	}
+	if v, err := boolArg(map[string]any{"if": true}, "if"); err != nil || !v {
+		t.Fatalf("bool arg: v=%v err=%v", v, err)
+	}
+	if _, err := boolArg(map[string]any{"if": "nope"}, "if"); err == nil {
+		t.Fatal("expected error for non-bool")
+	}
+	if _, err := boolArg(map[string]any{"if": variableRef{Name: "x", HasValue: false}}, "if"); err == nil {
+		t.Fatal("expected error for missing variable value")
+	}
+	if v, err := boolArg(map[string]any{"if": variableRef{Name: "x", HasValue: true, Value: true}}, "if"); err != nil || !v {
+		t.Fatalf("variable bool arg: v=%v err=%v", v, err)
 	}
 }

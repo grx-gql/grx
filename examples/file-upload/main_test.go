@@ -9,8 +9,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/patrickkabwe/grx"
-	"github.com/patrickkabwe/grx/examples/file-upload/graph"
+	"github.com/grx-gql/grx"
+	"github.com/grx-gql/grx/examples/file-upload/graph"
 )
 
 func newUploadServer(t *testing.T) http.Handler {
