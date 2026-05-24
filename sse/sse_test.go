@@ -478,3 +478,75 @@ func TestWriteEventEmptyEventName(t *testing.T) {
 		t.Fatalf("expected ping/pong payload\n%s", raw)
 	}
 }
+
+func TestApplyServerLimitsBranches(t *testing.T) {
+	var nilTransport *Transport
+	nilTransport.ApplyServerLimits(1, 1) // nil receiver must be a no-op
+
+	tr := &Transport{}
+	tr.ApplyServerLimits(100, 200)
+	if tr.config.MaxRequestBytes != 100 || tr.config.MaxVariableBytes != 200 {
+		t.Fatalf("limits not applied: %+v", tr.config)
+	}
+	// Already-set limits must not be overwritten.
+	tr.ApplyServerLimits(999, 999)
+	if tr.config.MaxRequestBytes != 100 || tr.config.MaxVariableBytes != 200 {
+		t.Fatalf("limits overwritten: %+v", tr.config)
+	}
+}
+
+func TestLimitRequestSizeBranches(t *testing.T) {
+	rec := httptest.NewRecorder()
+
+	if err := limitRequestSize(rec, httptest.NewRequest(http.MethodGet, "/?query=x", nil), 0); err != nil {
+		t.Fatalf("disabled: %v", err)
+	}
+
+	big := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(strings.Repeat("x", 50)))
+	if err := limitRequestSize(rec, big, 10); err == nil {
+		t.Fatal("expected POST over-limit error")
+	}
+	small := httptest.NewRequest(http.MethodPost, "/", strings.NewReader("hi"))
+	if err := limitRequestSize(rec, small, 1024); err != nil {
+		t.Fatalf("POST under limit: %v", err)
+	}
+
+	getBig := httptest.NewRequest(http.MethodGet, "/?query="+strings.Repeat("q", 50), nil)
+	if err := limitRequestSize(rec, getBig, 10); err == nil {
+		t.Fatal("expected GET over-limit error")
+	}
+	getSmall := httptest.NewRequest(http.MethodGet, "/?query=x", nil)
+	if err := limitRequestSize(rec, getSmall, 1024); err != nil {
+		t.Fatalf("GET under limit: %v", err)
+	}
+}
+
+func TestValidateVariableBytesBranches(t *testing.T) {
+	if err := validateVariableBytes(nil, 0); err != nil {
+		t.Fatalf("disabled: %v", err)
+	}
+	if err := validateVariableBytes(map[string]any{"a": 1}, 1024); err != nil {
+		t.Fatalf("under limit: %v", err)
+	}
+	if err := validateVariableBytes(map[string]any{"a": "looooooong"}, 4); err == nil {
+		t.Fatal("expected over-limit error")
+	}
+	if err := validateVariableBytes(map[string]any{"bad": make(chan int)}, 1024); err == nil {
+		t.Fatal("expected marshal error for unmarshalable variable")
+	}
+}
+
+func TestRequestBodyTooLarge(t *testing.T) {
+	if requestBodyTooLarge(nil) {
+		t.Fatal("nil must be false")
+	}
+	if !requestBodyTooLarge(errors.New("http: request body too large")) {
+		t.Fatal("expected true for body-too-large")
+	}
+	if !requestBodyTooLarge(errors.New("request exceeds 10 byte limit")) {
+		t.Fatal("expected true for byte-limit message")
+	}
+	if requestBodyTooLarge(errors.New("some other error")) {
+		t.Fatal("unrelated error must be false")
+	}
+}

@@ -724,3 +724,12 @@ func TestValidateSkipIncludeAllowsVariableLiteralsBoundOrRejectsUnset(t *testing
 		t.Fatalf("expected skip directive unset variable error among %#v", errs)
 	}
 }
+
+func TestTypeStringNil(t *testing.T) {
+	if got := typeString(nil); got != "" {
+		t.Fatalf("typeString(nil) = %q, want empty", got)
+	}
+	if got := typeString(&schema.Scalar{TypeName: "Int"}); got != "Int" {
+		t.Fatalf("typeString(Int) = %q", got)
+	}
+}

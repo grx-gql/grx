@@ -2043,3 +2043,48 @@ func TestExecutorSubscribeSecurityAndRootErrors(t *testing.T) {
 		t.Fatal("expected missing subscription root error")
 	}
 }
+
+func TestRootObjectBranches(t *testing.T) {
+	s, err := schema.Build(schema.Config{Query: thunkQuery{}})
+	if err != nil {
+		t.Fatalf("build: %v", err)
+	}
+	e := New(s, nil)
+
+	if _, err := e.rootObject(operationQuery); err != nil {
+		t.Fatalf("query root: %v", err)
+	}
+	if _, err := e.rootObject(operationMutation); err == nil {
+		t.Fatal("expected error for missing mutation root")
+	}
+	if _, err := e.rootObject(operationSubscription); err == nil {
+		t.Fatal("expected error for missing subscription root")
+	}
+	if _, err := e.rootObject(operationKind("bogus")); err == nil {
+		t.Fatal("expected error for unknown operation kind")
+	}
+}
+
+func TestResolverCacheKeyNonCacheableSource(t *testing.T) {
+	field := &schema.Field{Name: "f"}
+	if _, ok := resolverCacheKey(field, struct{ A int }{A: 1}, nil); ok {
+		t.Fatal("struct source should be uncacheable")
+	}
+	if _, ok := resolverCacheKey(field, nil, nil); !ok {
+		t.Fatal("nil source should be cacheable")
+	}
+	if _, ok := resolverCacheKey(field, "abc", nil); !ok {
+		t.Fatal("string source should be cacheable")
+	}
+}
+
+func TestResolveThunkPassthrough(t *testing.T) {
+	v, err := resolveThunk("plain")
+	if err != nil || v != "plain" {
+		t.Fatalf("passthrough: v=%v err=%v", v, err)
+	}
+	v, err = resolveThunk(schema.Thunk(func() (any, error) { return 42, nil }))
+	if err != nil || v != 42 {
+		t.Fatalf("thunk: v=%v err=%v", v, err)
+	}
+}

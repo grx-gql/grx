@@ -134,6 +134,7 @@ const docsSidebar: DefaultTheme.SidebarItem[] = [
             text: "Authentication & authorization",
             link: "/guides/auth",
           },
+          { text: "HTTP middleware", link: "/guides/middleware" },
           { text: "File uploads", link: "/guides/file-upload" },
           {
             text: "Persisted queries (APQ)",
