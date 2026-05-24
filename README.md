@@ -59,7 +59,7 @@ See **[AI assistants](https://grx-gql.github.io/grx/guides/ai-assistants)** on t
 
 Contributions should stay small, focused, and directly related to the problem being solved.
 
-**Releases**: use **[Conventional Commits](https://www.conventionalcommits.org/)** in the squash-merge subject (`feat:`, `fix:`, `chore:`, `docs:`, …) so **release-please** can propose the next semver and changelog. See **`RELEASING.md`**. After cloning, **`make dev-setup`** runs **`go mod tidy`** in each module and then enables hooks; use **`make install-hooks`** alone if you only need the Conventional Commit check.
+**Releases**: use **[Conventional Commits](https://www.conventionalcommits.org/)** in the squash-merge subject (`feat:`, `fix:`, `chore:`, `docs:`, …); **[release-please](https://github.com/googleapis/release-please)** on **`main`** (see **[`.github/workflows/release.yml`](.github/workflows/release.yml)**) opens a Release PR that updates **[CHANGELOG.md](./CHANGELOG.md)** and semver; merge it to publish **`v*`** tags. After cloning, **`make dev-setup`** runs **`go mod tidy`** in each module and then enables hooks; use **`make install-hooks`** alone if you only need the Conventional Commit check.
 
 Contribution rules for this repository:
 
@@ -72,7 +72,7 @@ Contribution rules for this repository:
 
 ## Releases
 
-Tagged **[Go module](https://go.dev/doc/modules/publishing)** releases (no binaries). Maintainer steps and tag conventions: **[`RELEASING.md`](./RELEASING.md)**.
+Tagged **[Go module](https://go.dev/doc/modules/publishing)** releases (no binaries). The nested **`redis-pubsub`** module is **not** in release-please — tag **`redis-pubsub/v*`** yourself (the same workflow warms **`proxy.golang.org`** for those tags).
 
 ## License
 

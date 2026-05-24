@@ -3,8 +3,9 @@
 # → tag push runs pkg.go.dev warmup below.
 #
 # release-please opens a PR → needs pull-requests (+ usually issues) scopes.
-# If you see «not permitted to create or approve pull requests», fix repo/org
-# Settings (see RELEASING.md § Permissions) or set RELEASE_PLEASE_TOKEN PAT.
+# If you see «not permitted to create or approve pull requests», set the repo to
+# Settings → Actions → General → Workflow permissions: Read and write, and
+# allow Actions to create pull requests — or set RELEASE_PLEASE_TOKEN PAT.
 name: Release
 
 on:
