@@ -9,7 +9,7 @@
 1. **release‑please** runs from **`.github/workflows/release.yml`** when **`main`** is updated **or** when you use **Actions → Release → Run workflow** with branch **`main`** (optional **workflow_dispatch** — same job as a push, no extra inputs). It opens or updates **one Release PR**: bumps **`.release-please-manifest.json`**, rolls commits under **`CHANGELOG.md`** headings that match **`release-please-config.json`** (emoji‑prefixed sections such as **`✨ Added`**, **`🐛 Fixed`**, **`💥 Breaking Changes`**, …).
    - If you tweak the unpublished heading in **`CHANGELOG.md`** manually, edit that file in the repo only — the **docs site does not mirror** the changelog; readers use **[`CHANGELOG.md` on GitHub](https://github.com/grx-gql/grx/blob/main/CHANGELOG.md)** (and **[Releases](https://github.com/grx-gql/grx/releases)**).
 2. **Merge that Release PR** → release‑please creates the **`vMAJOR.MINOR.PATCH`** tag and **GitHub Release** for the **root** Go module (`github.com/grx-gql/grx`).
-3. **Tag push** runs the same **`Release`** workflow: **`go test`/vet**, **`go mod verify`**, and **`proxy.golang.org`** warmup for whatever tag landed (`v*` root or **`redis-pubsub/v*`** nested).
+3. **Tag push** runs the same **`Release`** workflow: **`proxy.golang.org`** warmup for whatever tag landed (`v*` root or **`redis-pubsub/v*`** nested). Tests remain on **`main`** Pull Requests via **`.github/workflows/ci.yml`**.
 4. **Documentation site builds** call **`make docs-content`** (mirrors **`ROADMAP.md`** → **`docs/roadmap.md`**) before **`bun run build`**.
 
 Configuration lives in **`release-please-config.json`** and **`.release-please-manifest.json`** (typically bootstrapped from the latest **`v*`** tag).
@@ -48,7 +48,7 @@ Existing prose above the newest dated **`## [v]`** heading is **not** parsed by 
 
 ## Nested `redis-pubsub` module (`redis-pubsub/v*` tags)
 
-The **`redis-pubsub`** module is **not** wired into release-please ([nested modules](https://go.dev/wiki/Modules#publishing-multiple-modules-in-a-repository)). Publish it locally (Git tag **`redis-pubsub/v*`** pointing at **`main`** or another commit); **`.github/workflows/release.yml`** listens for matching tag **pushes** and runs **`verify`** + **`proxy-warm`** for that submodule.
+The **`redis-pubsub`** module is **not** wired into release-please ([nested modules](https://go.dev/wiki/Modules#publishing-multiple-modules-in-a-repository)). Publish it locally (Git tag **`redis-pubsub/v*`** pointing at **`main`** or another commit); **`.github/workflows/release.yml`** listens for matching tag **pushes** and runs **`proxy-warm`** for that submodule.
 
 ```bash
 # Example — after committing on main you want tagged:
