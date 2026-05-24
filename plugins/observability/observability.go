@@ -13,7 +13,7 @@ import (
 	"time"
 
 	"github.com/grx-gql/grx/core"
-	"github.com/grx-gql/grx/plugin"
+	"github.com/grx-gql/grx/plugins"
 )
 
 // ---------------------------------------------------------------------------
@@ -30,7 +30,7 @@ type Span interface {
 // implements this interface by wrapping a trace.Tracer.
 type Tracer interface {
 	StartOperation(ctx context.Context, operationName string) (context.Context, Span)
-	StartField(ctx context.Context, field plugin.FieldContext) Span
+	StartField(ctx context.Context, field plugins.FieldContext) Span
 }
 
 type tracingState struct {
@@ -43,14 +43,14 @@ type tracingState struct {
 type tracingKey struct{}
 
 // TracingPlugin emits one span per operation and one span per resolved field
-// using the supplied Tracer. It satisfies both plugin.Plugin and
-// plugin.FieldResolveEnder.
+// using the supplied Tracer. It satisfies both plugins.Plugin and
+// plugins.FieldResolveEnder.
 type TracingPlugin struct {
-	plugin.Base
+	plugins.Base
 	tracer Tracer
 }
 
-// NewTracingPlugin returns a plugin that drives tracer for operation and field
+// NewTracingPlugin returns a plugins that drives tracer for operation and field
 // spans.
 func NewTracingPlugin(tracer Tracer) *TracingPlugin {
 	return &TracingPlugin{tracer: tracer}
@@ -64,7 +64,7 @@ func (p *TracingPlugin) RequestStart(ctx context.Context, req core.Request) (con
 }
 
 // FieldResolveStart opens a field span keyed by response path.
-func (p *TracingPlugin) FieldResolveStart(ctx context.Context, field plugin.FieldContext) error {
+func (p *TracingPlugin) FieldResolveStart(ctx context.Context, field plugins.FieldContext) error {
 	state, _ := ctx.Value(tracingKey{}).(*tracingState)
 	if state == nil {
 		return nil
@@ -77,7 +77,7 @@ func (p *TracingPlugin) FieldResolveStart(ctx context.Context, field plugin.Fiel
 }
 
 // FieldResolveEnd closes the matching field span.
-func (p *TracingPlugin) FieldResolveEnd(ctx context.Context, field plugin.FieldContext, err error) {
+func (p *TracingPlugin) FieldResolveEnd(ctx context.Context, field plugins.FieldContext, err error) {
 	state, _ := ctx.Value(tracingKey{}).(*tracingState)
 	if state == nil {
 		return
@@ -143,11 +143,11 @@ type metricsKey struct{}
 // MetricsPlugin records per-operation latency and error counts via a
 // MetricsRecorder.
 type MetricsPlugin struct {
-	plugin.Base
+	plugins.Base
 	recorder MetricsRecorder
 }
 
-// NewMetricsPlugin returns a plugin that reports operation metrics to recorder.
+// NewMetricsPlugin returns a plugins that reports operation metrics to recorder.
 func NewMetricsPlugin(recorder MetricsRecorder) *MetricsPlugin {
 	return &MetricsPlugin{recorder: recorder}
 }
@@ -185,11 +185,11 @@ type accessLogKey struct{}
 
 // AccessLogPlugin emits a structured slog record per completed operation.
 type AccessLogPlugin struct {
-	plugin.Base
+	plugins.Base
 	logger *slog.Logger
 }
 
-// NewAccessLogPlugin returns a plugin that logs operation access records to
+// NewAccessLogPlugin returns a plugins that logs operation access records to
 // logger (defaulting to slog.Default when nil).
 func NewAccessLogPlugin(logger *slog.Logger) *AccessLogPlugin {
 	if logger == nil {

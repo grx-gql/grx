@@ -19,7 +19,7 @@ Runtime dependencies are deliberately small (see **`go.mod` in the repo**). You 
 
 - Teams shipping **production GraphQL backends in Go** who want **reflection-driven schema authoring** instead of parallel SDL/codegen upkeep.
 - Services that sometimes need **realtime pushes** (**WebSocket**, **SSE**, optional **pub/sub**) without swapping frameworks.
-- Engineers who prefer **readable extension points**: [**plugins**](/reference/plugin/), authorizers, and custom [**transports**](/concepts/transports) - not a sprawling plugin ecosystem.
+- Engineers who prefer **readable extension points**: [**plugins**](/reference/plugins/), authorizers, and custom [**transports**](/concepts/transports) - not a sprawling plugin ecosystem.
 
 ---
 
@@ -66,7 +66,7 @@ These are concrete capabilities surfaced by the codebase and documented here - n
 
 | Capability | Meaning |
 | --- | --- |
-| **Lifecycle plugins** | Parse / validation / resolve hooks (**[plugin package](/reference/plugin/)**, [**concepts**](/concepts/plugins)). |
+| **Lifecycle plugins** | Parse / validation / resolve hooks (**[plugins package](/reference/plugins/)**, [**concepts**](/concepts/plugins)). |
 | **Custom transports** | Add protocols beside the default HTTP pipeline - [**guide**](/guides/custom-transport). |
 
 ---

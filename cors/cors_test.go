@@ -109,6 +109,25 @@ func TestWildcardOriginWithoutCredentialsUsesStar(t *testing.T) {
 	}
 }
 
+func TestWildcardOriginWithCredentialsFailsClosed(t *testing.T) {
+	handler := New(Config{
+		AllowedOrigins:   []string{"*"},
+		AllowedMethods:   []string{http.MethodGet},
+		AllowCredentials: true,
+	})(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+		t.Fatal("wildcard credentials should not call next handler")
+	}))
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.Header.Set("Origin", "https://any.where")
+
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusForbidden)
+	}
+}
+
 func TestExposedHeadersSet(t *testing.T) {
 	middleware := New(Config{
 		AllowedOrigins: []string{"http://a"},

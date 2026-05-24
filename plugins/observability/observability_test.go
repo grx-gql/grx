@@ -11,8 +11,8 @@ import (
 
 	"github.com/grx-gql/grx/core"
 	"github.com/grx-gql/grx/exec"
-	"github.com/grx-gql/grx/plugin"
-	"github.com/grx-gql/grx/plugin/observability"
+	"github.com/grx-gql/grx/plugins"
+	"github.com/grx-gql/grx/plugins/observability"
 	"github.com/grx-gql/grx/schema"
 )
 
@@ -31,7 +31,7 @@ func (obsQuery) User(ctx context.Context, args obsArgs) (*obsUser, error) {
 	return &obsUser{ID: args.ID, Name: "Ada"}, nil
 }
 
-func obsExecutor(t *testing.T, plugins []plugin.Plugin) *exec.Executor {
+func obsExecutor(t *testing.T, plugins []plugins.Plugin) *exec.Executor {
 	t.Helper()
 	s, err := schema.Build(schema.Config{Query: obsQuery{}})
 	if err != nil {
@@ -65,7 +65,7 @@ func (tr *recordingTracer) StartOperation(ctx context.Context, name string) (con
 	return ctx, &recordingSpan{tracer: tr}
 }
 
-func (tr *recordingTracer) StartField(ctx context.Context, f plugin.FieldContext) observability.Span {
+func (tr *recordingTracer) StartField(ctx context.Context, f plugins.FieldContext) observability.Span {
 	tr.mu.Lock()
 	tr.fields = append(tr.fields, f.ParentType+"."+f.FieldName)
 	tr.mu.Unlock()
@@ -74,7 +74,7 @@ func (tr *recordingTracer) StartField(ctx context.Context, f plugin.FieldContext
 
 func TestTracingPluginEmitsOperationAndFieldSpans(t *testing.T) {
 	tr := &recordingTracer{}
-	e := obsExecutor(t, []plugin.Plugin{observability.NewTracingPlugin(tr)})
+	e := obsExecutor(t, []plugins.Plugin{observability.NewTracingPlugin(tr)})
 
 	resp := e.Execute(context.Background(), core.Request{Query: `query Q { user(id: "1") { id name } }`, OperationName: "Q"})
 	if len(resp.Errors) != 0 {
@@ -98,7 +98,7 @@ func TestTracingPluginEmitsOperationAndFieldSpans(t *testing.T) {
 func TestMetricsPluginObservesOperation(t *testing.T) {
 	var got observability.OperationMetrics
 	rec := observability.MetricsRecorderFunc(func(_ context.Context, m observability.OperationMetrics) { got = m })
-	e := obsExecutor(t, []plugin.Plugin{observability.NewMetricsPlugin(rec)})
+	e := obsExecutor(t, []plugins.Plugin{observability.NewMetricsPlugin(rec)})
 
 	resp := e.Execute(context.Background(), core.Request{Query: `query Q { user(id: "1") { id } }`, OperationName: "Q"})
 	if len(resp.Errors) != 0 {
@@ -118,7 +118,7 @@ func TestMetricsPluginObservesOperation(t *testing.T) {
 func TestAccessLogPluginEmitsRecord(t *testing.T) {
 	var buf bytes.Buffer
 	logger := slog.New(slog.NewJSONHandler(&buf, nil))
-	e := obsExecutor(t, []plugin.Plugin{observability.NewAccessLogPlugin(logger)})
+	e := obsExecutor(t, []plugins.Plugin{observability.NewAccessLogPlugin(logger)})
 
 	resp := e.Execute(context.Background(), core.Request{Query: `query Q { user(id: "1") { id } }`, OperationName: "Q"})
 	if len(resp.Errors) != 0 {
@@ -141,7 +141,7 @@ func TestAccessLogPluginEmitsRecord(t *testing.T) {
 func TestObservabilityPluginsHandleMissingState(t *testing.T) {
 	tr := &recordingTracer{}
 	tracing := observability.NewTracingPlugin(tr)
-	field := plugin.FieldContext{Path: []string{"missing"}, FieldName: "missing"}
+	field := plugins.FieldContext{Path: []string{"missing"}, FieldName: "missing"}
 	if err := tracing.FieldResolveStart(context.Background(), field); err != nil {
 		t.Fatalf("field start: %v", err)
 	}

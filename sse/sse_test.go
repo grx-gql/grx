@@ -260,6 +260,45 @@ func TestServeReturns400ForMissingQueryOnGet(t *testing.T) {
 	}
 }
 
+func TestServeEnforcesMaxRequestBytesOnPost(t *testing.T) {
+	transport := New(Config{MaxRequestBytes: 12})
+	req := sseRequest(http.MethodPost, "/graphql", strings.NewReader(`{"query":"subscription { x }"}`))
+	rec := httptest.NewRecorder()
+
+	transport.Serve(rec, req, &streamingExecutor{})
+
+	if rec.Code != http.StatusRequestEntityTooLarge {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusRequestEntityTooLarge)
+	}
+}
+
+func TestServeEnforcesMaxRequestBytesOnGet(t *testing.T) {
+	transport := New(Config{MaxRequestBytes: 12})
+	req := sseRequest(http.MethodGet, "/graphql?query=subscription%20%7Bx%7D", nil)
+	rec := httptest.NewRecorder()
+
+	transport.Serve(rec, req, &streamingExecutor{})
+
+	if rec.Code != http.StatusRequestEntityTooLarge {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusRequestEntityTooLarge)
+	}
+}
+
+func TestServeEnforcesMaxVariableBytes(t *testing.T) {
+	transport := New(Config{MaxVariableBytes: 4})
+	req := sseRequest(http.MethodPost, "/graphql", strings.NewReader(`{"query":"subscription { x }","variables":{"name":"too-long"}}`))
+	rec := httptest.NewRecorder()
+
+	transport.Serve(rec, req, &streamingExecutor{})
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusBadRequest)
+	}
+	if !strings.Contains(rec.Body.String(), "variables exceed") {
+		t.Fatalf("body = %q", rec.Body.String())
+	}
+}
+
 func TestServeEmitsErrorAndCompleteOnSubscribeFailure(t *testing.T) {
 	executor := &streamingExecutor{subErr: errors.New("subscribe failed")}
 	transport := New()
@@ -361,9 +400,60 @@ func (e *signalHoldExecutor) Subscribe(context.Context, core.Request) (<-chan co
 
 func TestReadRequestRejectsUnsupportedMethod(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPut, "/", nil)
-	_, err := readRequest(req)
+	_, err := readRequest(req, Config{})
 	if err == nil || !strings.Contains(err.Error(), "not allowed") {
 		t.Fatalf("expected method error, got %v", err)
+	}
+}
+
+func TestApplyServerLimitsCopiesUnsetValues(t *testing.T) {
+	var nilTransport *Transport
+	nilTransport.ApplyServerLimits(10, 20)
+
+	transport := New(Config{MaxRequestBytes: 4})
+	transport.ApplyServerLimits(10, 20)
+	if transport.config.MaxRequestBytes != 4 {
+		t.Fatalf("max request bytes = %d", transport.config.MaxRequestBytes)
+	}
+	if transport.config.MaxVariableBytes != 20 {
+		t.Fatalf("max variable bytes = %d", transport.config.MaxVariableBytes)
+	}
+}
+
+func TestLimitHelpersAndVariableBytesBranches(t *testing.T) {
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/graphql", strings.NewReader("123456"))
+	req.ContentLength = 6
+	if err := limitRequestSize(rec, req, 4); err == nil {
+		t.Fatal("expected content length limit error")
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/graphql?query=12345", nil)
+	if err := limitRequestSize(rec, req, 4); err == nil {
+		t.Fatal("expected GET query size error")
+	}
+
+	if !requestBodyTooLarge(errors.New("request body too large")) {
+		t.Fatal("expected max bytes reader error classification")
+	}
+	if !requestBodyTooLarge(errors.New("request exceeds 4 byte limit")) {
+		t.Fatal("expected explicit byte limit classification")
+	}
+	if requestBodyTooLarge(errors.New("other")) {
+		t.Fatal("unexpected body-too-large classification")
+	}
+	if requestBodyTooLarge(nil) {
+		t.Fatal("nil error should not be too large")
+	}
+
+	if err := validateVariableBytes(map[string]any{"x": make(chan int)}, 10); err == nil {
+		t.Fatal("expected variable marshal error")
+	}
+	if err := validateVariableBytes(map[string]any{"x": strings.Repeat("a", 20)}, 8); err == nil {
+		t.Fatal("expected variable byte limit error")
+	}
+	if err := validateVariableBytes(map[string]any{"x": "ok"}, 0); err != nil {
+		t.Fatalf("disabled variable byte limit: %v", err)
 	}
 }
 

@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/grx-gql/grx/core"
-	"github.com/grx-gql/grx/plugin"
+	"github.com/grx-gql/grx/plugins"
 )
 
 func TestGraphqlResponseTimeAttrBranches(t *testing.T) {
@@ -85,7 +85,7 @@ func TestLoggerWritesLifecycleEvents(t *testing.T) {
 	if err := loggerPlugin.ExecutionStart(ctx, req); err != nil {
 		t.Fatalf("execution start: %v", err)
 	}
-	if err := loggerPlugin.FieldResolveStart(ctx, plugin.FieldContext{FieldName: "user", Path: []string{"user"}}); err != nil {
+	if err := loggerPlugin.FieldResolveStart(ctx, plugins.FieldContext{FieldName: "user", Path: []string{"user"}}); err != nil {
 		t.Fatalf("field resolve start: %v", err)
 	}
 	if err := loggerPlugin.ResponseSend(ctx, core.Response{Data: map[string]any{"user": "1"}}); err != nil {

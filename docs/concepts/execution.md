@@ -12,13 +12,8 @@ in, returns a `core.Response` (or a stream of them, for subscriptions) out.
 
 ## Pipeline
 
-```mermaid
-flowchart LR
-    R[core.Request] --> L[Lex]
-    L --> P[Parse]
-    P --> V[Validate]
-    V --> E[Execute]
-    E --> Resp[core.Response]
+```text
+  core.Request → Lex → Parse → Validate → Execute → core.Response
 ```
 
 Each stage emits a plugin hook (`ParsingStart`, `ValidationStart`,

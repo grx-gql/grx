@@ -45,7 +45,7 @@ Apply options in any order  -  only `WithSchema` is required (`grx.ErrMissingSch
 - [type Option](<#Option>)
   - [func WithGraphQLPath\(path string\) Option](<#WithGraphQLPath>)
   - [func WithMiddleware\(middleware ...Middleware\) Option](<#WithMiddleware>)
-  - [func WithPlugins\(plugins ...plugin.Plugin\) Option](<#WithPlugins>)
+  - [func WithPlugins\(pluginList ...plugins.Plugin\) Option](<#WithPlugins>)
   - [func WithPlaygroundPath\(path string\) Option](<#WithPlaygroundPath>)
   - [func WithSchema\(schemaConfig schema.Config\) Option](<#WithSchema>)
   - [func WithSubscriptionPath\(path string\) Option](<#WithSubscriptionPath>)
@@ -110,7 +110,7 @@ func WithSubscriptionPath(path string) Option
 ### func WithPlugins
 
 ```go
-func WithPlugins(plugins ...plugin.Plugin) Option
+func WithPlugins(pluginList ...plugins.Plugin) Option
 ```
 
 <a name="WithPlaygroundPath"></a>

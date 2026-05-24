@@ -5,7 +5,7 @@ import (
 	"time"
 
 	"github.com/grx-gql/grx/core"
-	"github.com/grx-gql/grx/plugin"
+	"github.com/grx-gql/grx/plugins"
 )
 
 // apolloTrace accumulates per-request timing for the Apollo Tracing extension
@@ -33,7 +33,7 @@ func newApolloTrace() *apolloTrace {
 
 // recordApolloFieldTrace appends one resolver timing entry. It is a no-op when
 // tracing is not enabled for the request.
-func recordApolloFieldTrace(arena *pathArena, field plugin.FieldContext, start, end time.Time) {
+func recordApolloFieldTrace(arena *pathArena, field plugins.FieldContext, start, end time.Time) {
 	if arena == nil || arena.apollo == nil {
 		return
 	}

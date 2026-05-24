@@ -23,16 +23,17 @@ import (
 	"testing"
 	"time"
 
+	grxclient "github.com/grx-gql/grx/client"
 	"github.com/grx-gql/grx/core"
 	subscriptiongraph "github.com/grx-gql/grx/examples/subscriptions/graph"
 	"github.com/grx-gql/grx/exec"
-	grxclient "github.com/grx-gql/grx/client"
 	grxhttp "github.com/grx-gql/grx/http"
 	"github.com/grx-gql/grx/memory-pubsub"
+	"github.com/grx-gql/grx/middlewares"
+	"github.com/grx-gql/grx/plugins"
+	"github.com/grx-gql/grx/schema"
 	"github.com/grx-gql/grx/sse"
 	"github.com/grx-gql/grx/websocket"
-	"github.com/grx-gql/grx/plugin"
-	"github.com/grx-gql/grx/schema"
 )
 
 func TestServeHTTPServesPlaygroundAtConfiguredPath(t *testing.T) {
@@ -473,7 +474,7 @@ func TestDisableIntrospectionRejectsSchemaQuery(t *testing.T) {
 }
 
 type blockPlugin struct {
-	plugin.Base
+	plugins.Base
 }
 
 func (blockPlugin) ValidationStart(ctx context.Context, req core.Request) error {
@@ -486,7 +487,7 @@ func TestRequestTimeoutStopsSlowValidation(t *testing.T) {
 	t.Cleanup(func() { _ = bus.Close() })
 	srv, err := New(Config{
 		Schema:         subscriptiongraph.New(subscriptiongraph.WithPubSub(bus)),
-		Plugins:        []plugin.Plugin{blockPlugin{}},
+		Plugins:        []plugins.Plugin{blockPlugin{}},
 		RequestTimeout: 50 * time.Millisecond,
 	})
 	if err != nil {
@@ -505,7 +506,7 @@ func TestRequestTimeoutStopsSlowValidation(t *testing.T) {
 }
 
 type ridPlugin struct {
-	plugin.Base
+	plugins.Base
 	t *testing.T
 }
 
@@ -522,8 +523,8 @@ func TestRequestIDMiddlewarePropagatesContext(t *testing.T) {
 	p := &ridPlugin{t: t}
 	srv, err := New(Config{
 		Schema:     subscriptiongraph.New(subscriptiongraph.WithPubSub(bus)),
-		Plugins:    []plugin.Plugin{p},
-		Middleware: []Middleware{RequestID("X-Request-Id")},
+		Plugins:    []plugins.Plugin{p},
+		Middleware: []Middleware{Middleware(middlewares.RequestID("X-Request-Id"))},
 	})
 	if err != nil {
 		t.Fatalf("new server: %v", err)
@@ -541,7 +542,7 @@ func TestRequestIDMiddlewarePropagatesContext(t *testing.T) {
 }
 
 type errorRecorder struct {
-	plugin.Base
+	plugins.Base
 	errors []error
 }
 
@@ -555,7 +556,7 @@ func TestSecurityMasksResolverErrorsAndPreservesRawError(t *testing.T) {
 	recorder := &errorRecorder{}
 	srv, err := New(Config{
 		Schema:             subscriptiongraph.New(subscriptiongraph.WithPubSub(bus)),
-		Plugins:            []plugin.Plugin{recorder},
+		Plugins:            []plugins.Plugin{recorder},
 		MaskInternalErrors: true,
 		ClientErrorMessage: "hidden",
 	})
@@ -797,6 +798,7 @@ func TestNewCoversOptionalConfigBranches(t *testing.T) {
 		MaskInternalErrors:     true,
 		ClientErrorMessage:     "masked",
 		RejectUnknownVariables: true,
+		MaxSelectionDepth:      10,
 		MaxSelectionCount:      10,
 		MaxAliasCount:          10,
 		MaxRootFieldCount:      10,
@@ -816,6 +818,32 @@ func TestNewCoversOptionalConfigBranches(t *testing.T) {
 	})
 	if err != nil {
 		t.Fatalf("new server with options: %v", err)
+	}
+}
+
+func TestServerMaxSelectionDepthRejectsDeepQuery(t *testing.T) {
+	srv, err := New(Config{
+		Schema:            schema.Config{Query: depthLimitQuery{}},
+		MaxSelectionDepth: 1,
+	})
+	if err != nil {
+		t.Fatalf("new server: %v", err)
+	}
+	h := wrapServerInHarness(t, srv)
+
+	status, raw := postGraphQLRaw(t, h, []byte(`{"query":"{ node { child { value } } }"}`))
+
+	if status != http.StatusOK {
+		t.Fatalf("status = %d, want %d", status, http.StatusOK)
+	}
+	body := decodeGraphQLResponseMap(t, raw)
+	errors := graphQLErrors(t, body)
+	if len(errors) != 1 {
+		t.Fatalf("errors = %#v", errors)
+	}
+	message := graphQLError(t, errors, 0)["message"].(string)
+	if !strings.Contains(message, "selection depth exceeds limit") {
+		t.Fatalf("message = %q", message)
 	}
 }
 
@@ -1091,7 +1119,7 @@ func TestServeHTTPReturnsRequestIDInResponseExtensions(t *testing.T) {
 	t.Cleanup(func() { _ = bus.Close() })
 	srv, err := New(Config{
 		Schema:     subscriptiongraph.New(subscriptiongraph.WithPubSub(bus)),
-		Middleware: []Middleware{RequestID("X-Request-Id")},
+		Middleware: []Middleware{Middleware(middlewares.RequestID("X-Request-Id"))},
 	})
 	if err != nil {
 		t.Fatalf("new server: %v", err)
@@ -1114,7 +1142,7 @@ func TestServeHTTPRequestErrorIncludesRequestIDInExtensions(t *testing.T) {
 	t.Cleanup(func() { _ = bus.Close() })
 	srv, err := New(Config{
 		Schema:     subscriptiongraph.New(subscriptiongraph.WithPubSub(bus)),
-		Middleware: []Middleware{RequestID("X-Request-Id")},
+		Middleware: []Middleware{Middleware(middlewares.RequestID("X-Request-Id"))},
 	})
 	if err != nil {
 		t.Fatalf("new server: %v", err)
@@ -1608,7 +1636,7 @@ func TestNewServerBuildsSubscriptionRoot(t *testing.T) {
 			Query:        schemaQueryRoot{},
 			Subscription: subscription,
 		},
-		Plugins:    []plugin.Plugin{},
+		Plugins:    []plugins.Plugin{},
 		Transports: []core.Transport{websocket.New(), sse.New()},
 	})
 	if err != nil {
@@ -1621,9 +1649,51 @@ func TestNewServerBuildsSubscriptionRoot(t *testing.T) {
 	}
 }
 
+func TestNewAppliesRequestLimitsToSSETransport(t *testing.T) {
+	srv, err := New(Config{
+		Schema: schema.Config{
+			Query:        schemaQueryRoot{},
+			Subscription: schemaSubscriptionRoot{},
+		},
+		Transports:          []core.Transport{sse.New()},
+		MaxHTTPRequestBytes: 12,
+	})
+	if err != nil {
+		t.Fatalf("new server: %v", err)
+	}
+	h := wrapServerInHarness(t, srv)
+
+	req, err := http.NewRequest(http.MethodPost, h.HTTP.URL+srv.GraphqlPath, strings.NewReader(`{"query":"subscription { hello }"}`))
+	if err != nil {
+		t.Fatalf("new request: %v", err)
+	}
+	req.Header.Set("Accept", "text/event-stream")
+	req.Header.Set("Content-Type", "application/json")
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("post sse: %v", err)
+	}
+	defer res.Body.Close()
+
+	if res.StatusCode != http.StatusRequestEntityTooLarge {
+		t.Fatalf("status = %d, want %d", res.StatusCode, http.StatusRequestEntityTooLarge)
+	}
+}
+
 type schemaQueryRoot struct{}
 
 func (schemaQueryRoot) Hello() string { return "hi" }
+
+type depthLimitQuery struct{}
+
+func (depthLimitQuery) Node() depthLimitNode {
+	return depthLimitNode{Child: &depthLimitNode{Value: "ok"}, Value: "ok"}
+}
+
+type depthLimitNode struct {
+	Child *depthLimitNode
+	Value string
+}
 
 type schemaSubscriptionRoot struct{}
 

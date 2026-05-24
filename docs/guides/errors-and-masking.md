@@ -19,7 +19,7 @@ Database driver text, JWT parsing failures, **`fmt.Errorf("%w")` chains exposing
 
 ### What **`MaskInternalErrors`** changes
 
-Configured through **`server.Config`**, masking swaps internal resolver/plugin/panic fallout for a deterministic client string while richer detail still reaches **`plugin.Error`** hooks for logging dashboards.
+Configured through **`server.Config`**, masking swaps internal resolver/plugin/panic fallout for a deterministic client string while richer detail still reaches **`plugins.Plugin.Error`** hooks for logging dashboards.
 
 ::: tip Designing mutation payloads  
 For CRUD ergonomics expose **`MutationResult { ok user userErrors validationErrors }`** style unions consciously - GraphQL **`errors`** are transport-level signalling, not necessarily your UX domain **`errors`** field.

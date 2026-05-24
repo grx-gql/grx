@@ -1,4 +1,4 @@
-// Package logger provides a [plugin.Plugin] that records GraphQL request
+// Package logger provides a [plugins.Plugin] that records GraphQL request
 // lifecycle events through a structured slog logger. It is the canonical
 // example of a built-in plugin and a useful drop-in for production
 // observability.
@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"github.com/grx-gql/grx/core"
-	"github.com/grx-gql/grx/plugin"
+	"github.com/grx-gql/grx/plugins"
 )
 
 type requestStartedAtCtxKey struct{}
@@ -45,16 +45,16 @@ func graphqlResponseTimeAttr(d time.Duration) slog.Attr {
 // Config configures a [Logger]. Logger is required.
 type Config struct {
 	// Logger is the slog logger used to emit lifecycle events. The
-	// plugin attaches the request context to every log call so that
+	// plugins attaches the request context to every log call so that
 	// per-request fields propagated via the context are preserved.
 	Logger *slog.Logger
 }
 
-// Logger is a [plugin.Plugin] that emits a structured log entry at every
-// stage of the GraphQL request lifecycle. It embeds [plugin.Base] and
+// Logger is a [plugins.Plugin] that emits a structured log entry at every
+// stage of the GraphQL request lifecycle. It embeds [plugins.Base] and
 // therefore satisfies the full Plugin interface.
 type Logger struct {
-	plugin.Base
+	plugins.Base
 	logger *slog.Logger
 }
 
@@ -62,7 +62,7 @@ type Logger struct {
 // nil so that misconfigured deployments fail fast at startup.
 func New(config Config) (*Logger, error) {
 	if config.Logger == nil {
-		return nil, errors.New("logger plugin requires a slog logger")
+		return nil, errors.New("logger plugins requires a slog logger")
 	}
 
 	return &Logger{logger: config.Logger}, nil
@@ -107,7 +107,7 @@ func (l *Logger) ExecutionStart(ctx context.Context, req core.Request) error {
 // FieldResolveStart logs that a field resolver is about to be invoked.
 // Field-level events are emitted at debug level to keep production logs
 // manageable on schemas with large selection sets.
-func (l *Logger) FieldResolveStart(ctx context.Context, field plugin.FieldContext) error {
+func (l *Logger) FieldResolveStart(ctx context.Context, field plugins.FieldContext) error {
 	l.logger.DebugContext(ctx, "graphql.field.resolve.start",
 		slog.String("field_name", field.FieldName),
 		slog.Any("path", field.Path),

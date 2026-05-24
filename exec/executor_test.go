@@ -16,7 +16,7 @@ import (
 	"time"
 
 	"github.com/grx-gql/grx/core"
-	"github.com/grx-gql/grx/plugin"
+	"github.com/grx-gql/grx/plugins"
 	"github.com/grx-gql/grx/schema"
 )
 
@@ -1060,7 +1060,7 @@ func TestExecutorInternalHelpers(t *testing.T) {
 }
 
 type hookPlugin struct {
-	plugin.Base
+	plugins.Base
 	errAt string
 	seen  []string
 }
@@ -1110,11 +1110,11 @@ func (p *hookPlugin) Error(context.Context, error) {
 }
 
 type fieldHookPlugin struct {
-	plugin.Base
+	plugins.Base
 	errField string
 }
 
-func (p fieldHookPlugin) FieldResolveStart(ctx context.Context, field plugin.FieldContext) error {
+func (p fieldHookPlugin) FieldResolveStart(ctx context.Context, field plugins.FieldContext) error {
 	if field.FieldName == p.errField {
 		return errors.New("field hook failed")
 	}
@@ -1126,7 +1126,7 @@ func TestExecutorPluginAndSecurityHelpers(t *testing.T) {
 	doc := document{Kind: operationQuery, Name: "Q", Variables: []string{"known"}, Selections: []selection{{Name: "a", Alias: "x"}, {Name: "b", Selections: []selection{{Name: "c", Alias: "y"}}}}}
 	for _, phase := range []string{"request", "parsing", "validation", "execution"} {
 		hook := &hookPlugin{errAt: phase}
-		e := &Executor{Plugins: []plugin.Plugin{hook}}
+		e := &Executor{Plugins: []plugins.Plugin{hook}}
 		switch phase {
 		case "request":
 			_, _ = e.startRequest(context.Background(), req)
@@ -1166,7 +1166,7 @@ func TestExecutorPluginAndSecurityHelpers(t *testing.T) {
 		t.Fatalf("trusted document: %v", err)
 	}
 	responseHook := &hookPlugin{errAt: "response"}
-	if res := (&Executor{Plugins: []plugin.Plugin{responseHook}}).sendResponse(context.Background(), core.Response{Data: "ok"}); len(res.Errors) == 0 {
+	if res := (&Executor{Plugins: []plugins.Plugin{responseHook}}).sendResponse(context.Background(), core.Response{Data: "ok"}); len(res.Errors) == 0 {
 		t.Fatal("expected response hook error")
 	}
 }
@@ -1907,10 +1907,10 @@ func (failingSubscription) UserCreated(ctx context.Context) (<-chan *testUser, e
 	return nil, errors.New("source failed")
 }
 
-type failSubscribeResponseSendPlugin struct{ plugin.Base }
+type failSubscribeResponseSendPlugin struct{ plugins.Base }
 
 func (failSubscribeResponseSendPlugin) ResponseSend(context.Context, core.Response) error {
-	return fmt.Errorf("response halted by plugin")
+	return fmt.Errorf("response halted by plugins")
 }
 
 func TestExecutorSubscribeRejectsInvalidSources(t *testing.T) {
@@ -1937,19 +1937,19 @@ func TestExecutorSubscribeRejectsInvalidSources(t *testing.T) {
 	}
 }
 
-type failSubscribeParsingPlugin struct{ plugin.Base }
+type failSubscribeParsingPlugin struct{ plugins.Base }
 
 func (failSubscribeParsingPlugin) ParsingStart(context.Context, core.Request) error {
 	return fmt.Errorf("parsing blocked")
 }
 
-type failSubscribeValidationPlugin struct{ plugin.Base }
+type failSubscribeValidationPlugin struct{ plugins.Base }
 
 func (failSubscribeValidationPlugin) ValidationStart(context.Context, core.Request) error {
 	return fmt.Errorf("validation blocked")
 }
 
-type failSubscribeExecutionPlugin struct{ plugin.Base }
+type failSubscribeExecutionPlugin struct{ plugins.Base }
 
 func (failSubscribeExecutionPlugin) ExecutionStart(context.Context, core.Request) error {
 	return fmt.Errorf("execution blocked")
@@ -1964,7 +1964,7 @@ func (panicSubscribeRoot) UserCreated(context.Context) (<-chan *testUser, error)
 func TestExecutorSubscribePropagatesParsingHookFailure(t *testing.T) {
 	source := make(chan *testUser)
 	base := newTestSubscriptionExecutor(t, source)
-	ex := New(base.Schema, []plugin.Plugin{failSubscribeParsingPlugin{}})
+	ex := New(base.Schema, []plugins.Plugin{failSubscribeParsingPlugin{}})
 	defer close(source)
 
 	if _, err := ex.Subscribe(context.Background(), core.Request{Query: `subscription { userCreated { id } }`}); err == nil || !strings.Contains(err.Error(), "parsing blocked") {
@@ -1975,7 +1975,7 @@ func TestExecutorSubscribePropagatesParsingHookFailure(t *testing.T) {
 func TestExecutorSubscribePropagatesValidationHookFailure(t *testing.T) {
 	source := make(chan *testUser)
 	base := newTestSubscriptionExecutor(t, source)
-	ex := New(base.Schema, []plugin.Plugin{failSubscribeValidationPlugin{}})
+	ex := New(base.Schema, []plugins.Plugin{failSubscribeValidationPlugin{}})
 	defer close(source)
 
 	if _, err := ex.Subscribe(context.Background(), core.Request{Query: `subscription { userCreated { id } }`}); err == nil || !strings.Contains(err.Error(), "validation blocked") {
@@ -1986,7 +1986,7 @@ func TestExecutorSubscribePropagatesValidationHookFailure(t *testing.T) {
 func TestExecutorSubscribePropagatesExecutionHookFailure(t *testing.T) {
 	source := make(chan *testUser)
 	base := newTestSubscriptionExecutor(t, source)
-	ex := New(base.Schema, []plugin.Plugin{failSubscribeExecutionPlugin{}})
+	ex := New(base.Schema, []plugins.Plugin{failSubscribeExecutionPlugin{}})
 	defer close(source)
 
 	if _, err := ex.Subscribe(context.Background(), core.Request{Query: `subscription { userCreated { id } }`}); err == nil || !strings.Contains(err.Error(), "execution blocked") {
@@ -2015,7 +2015,7 @@ func TestExecutorSubscribePropagatesResponseSendHookFailure(t *testing.T) {
 	close(source)
 
 	base := newTestSubscriptionExecutor(t, source)
-	executor := New(base.Schema, []plugin.Plugin{failSubscribeResponseSendPlugin{}})
+	executor := New(base.Schema, []plugins.Plugin{failSubscribeResponseSendPlugin{}})
 	stream, err := executor.Subscribe(context.Background(), core.Request{
 		Query: `subscription { userCreated { id name } }`,
 	})

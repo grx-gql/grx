@@ -1,6 +1,5 @@
 import type { DefaultTheme } from "vitepress";
 import { defineConfig } from "vitepress";
-import { withMermaid } from "vitepress-plugin-mermaid";
 
 /** Sidebar: Start here → Concepts → Getting Started → Guides (grouped) → reference & project. */
 const docsSidebar: DefaultTheme.SidebarItem[] = [
@@ -176,8 +175,9 @@ const docsSidebar: DefaultTheme.SidebarItem[] = [
       { text: "schema", link: "/reference/schema/" },
       { text: "exec", link: "/reference/exec/" },
       { text: "server", link: "/reference/server/" },
-      { text: "plugin", link: "/reference/plugin/" },
-      { text: "plugin/logger", link: "/reference/plugin/logger/" },
+      { text: "plugins", link: "/reference/plugins/" },
+      { text: "middlewares", link: "/reference/middlewares/" },
+      { text: "plugins/logger", link: "/reference/plugins/logger/" },
       { text: "http", link: "/reference/http/" },
       { text: "sse", link: "/reference/sse/" },
       { text: "websocket", link: "/reference/websocket/" },
@@ -253,8 +253,7 @@ const examplesSidebar: DefaultTheme.SidebarItem[] = [
 ];
 
 // https://vitepress.dev/reference/site-config
-export default withMermaid(
-  defineConfig({
+export default defineConfig({
     title: "grx",
     // Browser tabs: descriptive page titles with a fixed brand suffix (Hono-style separator).
     titleTemplate: ":title · grx",
@@ -315,15 +314,4 @@ export default withMermaid(
         provider: "local",
       },
     },
-
-    mermaid: {
-      theme: "neutral",
-      themeVariables: {
-        primaryColor: "#6366f1",
-      },
-    },
-    mermaidPlugin: {
-      class: "mermaid",
-    },
-  }),
-);
+});

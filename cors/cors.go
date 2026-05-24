@@ -67,12 +67,16 @@ type policy struct {
 }
 
 func newPolicy(config Config) policy {
+	allowAnyOrigin := containsString(config.AllowedOrigins, "*", false)
+	if config.AllowCredentials {
+		allowAnyOrigin = false
+	}
 	return policy{
 		allowedOrigins:   stringSet(config.AllowedOrigins, false),
 		allowedMethods:   methodSet(config.AllowedMethods),
 		allowedHeaders:   stringSet(config.AllowedHeaders, true),
 		exposedHeaders:   strings.Join(config.ExposedHeaders, ", "),
-		allowAnyOrigin:   containsString(config.AllowedOrigins, "*", false),
+		allowAnyOrigin:   allowAnyOrigin,
 		allowAnyHeader:   containsString(config.AllowedHeaders, "*", true),
 		allowCredentials: config.AllowCredentials,
 		maxAge:           config.MaxAge,

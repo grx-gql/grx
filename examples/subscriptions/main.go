@@ -8,12 +8,12 @@ import (
 	"time"
 
 	"github.com/grx-gql/grx"
-	"github.com/grx-gql/grx/examples/subscriptions/graph"
 	"github.com/grx-gql/grx/cors"
+	"github.com/grx-gql/grx/examples/subscriptions/graph"
 	"github.com/grx-gql/grx/memory-pubsub"
+	"github.com/grx-gql/grx/plugins/logger"
 	"github.com/grx-gql/grx/sse"
 	"github.com/grx-gql/grx/websocket"
-	"github.com/grx-gql/grx/plugin/logger"
 )
 
 const (

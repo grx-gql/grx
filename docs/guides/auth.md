@@ -19,7 +19,7 @@ To authenticate users:
    [`grx.WithMiddleware`](/reference/grx/) middleware (or Chi/Gin adapters that wrap the [`grx.Server`](https://pkg.go.dev/github.com/grx-gql/grx#Server) handler).
 2. **Attach identity**  -  put a verified subject/session on the context (`context.WithValue`).
 3. **Authorize**  -  use [`WithFieldAuthorizer`](#field-level-guards),
-   [`WithOperationAuthorizer`](#operation-level-rules), resolver checks - or a [`plugin.Plugin`](/reference/plugin/)
+   [`WithOperationAuthorizer`](#operation-level-rules), resolver checks - or a [`plugins.Plugin`](/reference/plugins/)
    hook when you want a single cross-cutting policy point.
 
 The runnable **`examples/auth/`** folder follows that trio end to end (`go run ./examples/auth`).

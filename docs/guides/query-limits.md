@@ -13,7 +13,7 @@ GraphQL’s flexibility means a single **`POST`** may reference thousands of sel
 | **`MaxSelectionCount`** | Total field selections in the operation |
 | **`MaxAliasCount`** | Number of aliased fields |
 | **`MaxRootFieldCount`** | Parallel top-level selections |
-| **`exec.WithMaxSelectionDepth`** | Nested selection depth *(only when assembling **[`exec.Executor`](https://pkg.go.dev/github.com/grx-gql/grx/exec#New)** yourself today - **not** surfaced on **`grx.With…` yet**)* |
+| **`MaxSelectionDepth`** / **`grx.WithMaxSelectionDepth`** | Nested selection depth |
 
 ::: warning Not a full “cost engine”  
 Counters are **cheap guard rails**, not GraphQL cost analysis (no per-type weights). Pair with **gateway rate limits**, **`WithRequestTimeout`**, and **APQ**/trusted documents for public APIs.
@@ -38,6 +38,7 @@ import (
 func main() {
 	srv, err := server.New(server.Config{
 		Schema:             graph.NewSchema(),
+		MaxSelectionDepth:  16,
 		MaxSelectionCount:  750,
 		MaxAliasCount:      120,
 		MaxRootFieldCount:  8,

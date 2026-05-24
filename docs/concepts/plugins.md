@@ -10,10 +10,30 @@ Plugins are how grx exposes the request lifecycle. They're the right place
 for logging, tracing, metrics, request-scoped state, and policy decisions
 that shouldn't live inside resolvers.
 
+## Plugins vs middleware
+
+Middleware wraps the HTTP handler before a request becomes GraphQL. It works
+with `http.Request` and `http.ResponseWriter`, so it is the right place for
+transport concerns: headers, cookies, CORS, request IDs, IP allowlists,
+authentication tokens, and request size checks.
+
+Plugins run after a transport has decoded the GraphQL operation and handed it
+to the executor. They see GraphQL lifecycle phases and field metadata, so they
+are the right place for tracing, validation/execution metrics, field-level
+access logging, response hooks, and reporting execution errors.
+
+| Concern | Use | Why |
+| --- | --- | --- |
+| Request ID header | Middleware (`middlewares.RequestID` or `grx.RequestID`) | It reads/writes HTTP headers before GraphQL execution. |
+| Bearer token parsing | Middleware | Tokens live in HTTP headers, not `core.Request`. |
+| Field tracing | Plugin | It needs GraphQL field names, return types, and response paths. |
+| Validation/execution metrics | Plugin | It follows executor lifecycle hooks. |
+| CORS / Origin checks | Middleware or transport config | It is an HTTP/WebSocket boundary concern. |
+
 ## The interface
 
 ```go
-// plugin/plugin.go
+// plugins/plugins.go
 type Plugin interface {
     RequestStart(ctx context.Context, req core.Request) (context.Context, error)
     ParsingStart(ctx context.Context, req core.Request) error
@@ -32,13 +52,13 @@ Two things make this interface comfortable to implement:
 - All hooks but `Error` may return an error. A non-nil error short-circuits
   the request  -  useful for auth, rate-limiting, and budget checks.
 
-## `plugin.Base`
+## `plugins.Base`
 
-Embed `plugin.Base` to inherit no-op defaults for every hook. New hooks
+Embed `plugins.Base` to inherit no-op defaults for every hook. New hooks
 added in future releases will keep your plugin compiling:
 
 ```go
-type RequestID struct{ plugin.Base }
+type RequestID struct{ plugins.Base }
 
 func (RequestID) RequestStart(ctx context.Context, _ core.Request) (context.Context, error) {
     return context.WithValue(ctx, requestIDKey{}, uuid.NewString()), nil
@@ -57,7 +77,7 @@ import (
     "os"
 
     "github.com/grx-gql/grx"
-    "github.com/grx-gql/grx/plugin/logger"
+    "github.com/grx-gql/grx/plugins/logger"
 )
 
 loggerPlugin, _ := logger.New(logger.Config{
@@ -88,7 +108,7 @@ Pair that with [`WithFieldAuthorizer`](/reference/grx/) / [`WithOperationAuthori
 
 ## Built-in plugins
 
-The [`plugin/logger`](/reference/plugin/logger/) subpackage ships a
+The [`plugins/logger`](/reference/plugins/logger/) subpackage ships a
 structured logger that emits a `log/slog` event for each lifecycle hook
 with operation name, payload sizes, and any error. See
 [Custom Plugin](/guides/custom-plugin) for a worked example of writing

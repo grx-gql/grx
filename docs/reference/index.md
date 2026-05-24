@@ -20,8 +20,9 @@ in the source tree and regenerate.
 | [`schema`](/reference/schema/)                   | Code-first schema builder (`schema.Config`, `schema.Build`). Reflects user Go types into runtime metadata. |
 | [`exec`](/reference/exec/)                       | Lexer, parser, AST, executor, introspection fast-path.                                                     |
 | [`server`](/reference/server/)                   | `http.Handler`, GraphiQL playground, transport dispatch (auto-appends the [`http`](/reference/http/) transport). |
-| [`plugin`](/reference/plugin/)                   | Plugin lifecycle interface, `plugin.Base` no-op embed.                                                     |
-| [`plugin/logger`](/reference/plugin/logger/)     | Built-in `log/slog`-backed request logger.                                                                 |
+| [`plugins`](/reference/plugins/)                   | Plugin lifecycle interface, `plugins.Base` no-op embed.                                                     |
+| [`plugins/logger`](/reference/plugins/logger/)     | Built-in `log/slog`-backed request logger.                                                                 |
+| [`middlewares`](/reference/middlewares/)           | HTTP middleware helpers such as request ID propagation.                                                     |
 | [`http`](/reference/http/)                         | GraphQL-over-HTTP+JSON transport (the canonical `POST /graphql` request).                                    |
 | [`sse`](/reference/sse/)                           | GraphQL over Server-Sent Events transport.                                                                  |
 | [`websocket`](/reference/websocket/)               | RFC 6455 WebSockets implementing the `graphql-transport-ws` subprotocol.                                  |

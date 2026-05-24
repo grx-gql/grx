@@ -38,6 +38,7 @@ func main() {
 		grx.WithSchema(graph.NewSchema()),
 		grx.WithRequestTimeout(15*time.Second),
 		grx.WithMaxHTTPRequestBytes(1<<20),
+		grx.WithMaxSelectionDepth(16),
 	)
 	if err != nil {
 		log.Fatal(err)
@@ -74,7 +75,7 @@ Executors reject parses that explode combinationally (**[Execution pipeline](/co
 | Total selections | **`server.Config.MaxSelectionCount`** |
 | Aliases | **`MaxAliasCount`** |
 | Parallel root fields | **`MaxRootFieldCount`** |
-| Deepest nesting | [`exec.WithMaxSelectionDepth`](https://pkg.go.dev/github.com/grx-gql/grx/exec#WithMaxSelectionDepth) (**custom [`exec.Executor`](https://pkg.go.dev/github.com/grx-gql/grx/exec#New)** only - not on **`server.Config` yet**) |
+| Deepest nesting | **`grx.WithMaxSelectionDepth(n)`** / **`server.Config.MaxSelectionDepth`** |
 
 ```go
 package main
@@ -90,6 +91,7 @@ import (
 func main() {
 	srv, err := server.New(server.Config{
 		Schema:            graph.NewSchema(),
+		MaxSelectionDepth: 16,
 		MaxSelectionCount: 750,
 		MaxAliasCount:     200,
 		MaxRootFieldCount: 10,

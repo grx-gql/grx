@@ -21,7 +21,7 @@ import (
 	"time"
 
 	"github.com/grx-gql/grx/core"
-	"github.com/grx-gql/grx/plugin"
+	"github.com/grx-gql/grx/plugins"
 	"github.com/grx-gql/grx/schema"
 )
 
@@ -35,7 +35,7 @@ var ErrSubscriptionOperation = errors.New("subscription operations must use the 
 // [core.Executor] and is safe for concurrent use.
 type Executor struct {
 	Schema                  *schema.Schema
-	Plugins                 []plugin.Plugin
+	Plugins                 []plugins.Plugin
 	disableIntrospection    bool
 	maxSelectionDepth       int
 	maxSelectionCount       int
@@ -52,7 +52,7 @@ type Executor struct {
 	abstractTypeResolver    AbstractTypeResolver
 	executableIntrospection bool
 	apolloTracing           bool
-	fieldEnders             []plugin.FieldResolveEnder
+	fieldEnders             []plugins.FieldResolveEnder
 	documentCache           map[string]documentBundle
 	documentCacheOrder      []string
 	documentCacheLimit      int
@@ -64,16 +64,16 @@ type Executor struct {
 	lexMu         sync.RWMutex
 }
 
-// New returns an [Executor] bound to schemaValue and plugins. plugins
+// New returns an [Executor] bound to schemaValue and pluginList. pluginList
 // may be nil; an Executor with no plugins simply skips the lifecycle
 // notifications.
-func New(schemaValue *schema.Schema, plugins []plugin.Plugin, opts ...ExecutorOption) *Executor {
-	e := &Executor{Schema: schemaValue, Plugins: plugins}
+func New(schemaValue *schema.Schema, pluginList []plugins.Plugin, opts ...ExecutorOption) *Executor {
+	e := &Executor{Schema: schemaValue, Plugins: pluginList}
 	for _, opt := range opts {
 		opt(e)
 	}
-	for _, p := range plugins {
-		if ender, ok := p.(plugin.FieldResolveEnder); ok {
+	for _, p := range pluginList {
+		if ender, ok := p.(plugins.FieldResolveEnder); ok {
 			e.fieldEnders = append(e.fieldEnders, ender)
 		}
 	}
@@ -83,7 +83,7 @@ func New(schemaValue *schema.Schema, plugins []plugin.Plugin, opts ...ExecutorOp
 // Execute runs a query or mutation operation and returns the completed
 // response. Subscription operations are rejected with
 // [ErrSubscriptionOperation]; use [Executor.Subscribe] instead. Errors
-// produced during plugin notifications, parsing, or field resolution are
+// produced during plugins notifications, parsing, or field resolution are
 // surfaced via the returned response.
 func (e *Executor) Execute(ctx context.Context, req core.Request) (response core.Response) {
 	defer func() {
@@ -219,7 +219,7 @@ func (e *Executor) shortResponse(ctx context.Context, err error) (context.Contex
 }
 
 // OperationKind parses req and reports the kind of the selected operation.
-// It performs no plugin notifications and runs no resolvers, so transports
+// It performs no plugins notifications and runs no resolvers, so transports
 // can call it cheaply to decide whether to dispatch a request to Execute
 // or Subscribe. With [WithLexerCache], tokenisation is LRU-cached per
 // normalised query so a transport that checks OperationKind before Execute can
@@ -548,9 +548,9 @@ func (e *Executor) resolveSelectedField(ctx context.Context, object *schema.Obje
 
 	// fieldCtx (notably field.Type.Name(), which allocates for wrapped types)
 	// is built only when an observer needs it, keeping the hot path allocation-free.
-	var fieldCtx plugin.FieldContext
+	var fieldCtx plugins.FieldContext
 	if needFieldContext {
-		fieldCtx = plugin.FieldContext{
+		fieldCtx = plugins.FieldContext{
 			Path:       pathParts,
 			FieldName:  selected.Name,
 			ParentType: object.Name(),

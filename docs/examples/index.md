@@ -301,7 +301,7 @@ import (
 	"github.com/grx-gql/grx/memory-pubsub"
 	"github.com/grx-gql/grx/sse"
 	"github.com/grx-gql/grx/websocket"
-	"github.com/grx-gql/grx/plugin/logger"
+	"github.com/grx-gql/grx/plugins/logger"
 )
 
 const (

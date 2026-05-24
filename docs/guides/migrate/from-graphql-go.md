@@ -275,7 +275,7 @@ import (
     "os"
 
     "github.com/grx-gql/grx"
-    "github.com/grx-gql/grx/plugin/logger"
+    "github.com/grx-gql/grx/plugins/logger"
     "github.com/grx-gql/grx/schema"
 )
 

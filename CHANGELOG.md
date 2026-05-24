@@ -23,14 +23,14 @@ see **`release-please-config.json`**). **`docs/changelog.md`** mirrors this file
 
 ### ✨ Added
 
-- `plugin/logger`: `graphql.response.send` and `graphql.error` include
+- `plugins/logger`: `graphql.response.send` and `graphql.error` include
   `graphql.response.time` (wall-clock elapsed since this plugin's `RequestStart`,
   formatted with `ms` or `s` suffix) when hooks run on the derived request context
   produced by the executor.
-- `plugin.Plugin` lifecycle hooks (`RequestStart`, `ParsingStart`,
+- `plugins.Plugin` lifecycle hooks (`RequestStart`, `ParsingStart`,
   `ValidationStart`, `ExecutionStart`, `FieldResolveStart`, `ResponseSend`,
-  `Error`) with `plugin.Base` partial-implementation helper.
-- Structured `plugin/logger` on `log/slog`.
+  `Error`) with `plugins.Base` partial-implementation helper.
+- Structured `plugins/logger` on `log/slog`.
 - Executor and server limits for abusive documents:
   `exec.WithMaxSelectionCount`, `exec.WithMaxAliasCount`,
   `exec.WithMaxRootFieldCount`, matching `server.Config` (`MaxSelectionCount`,

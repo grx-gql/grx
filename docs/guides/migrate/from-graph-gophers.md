@@ -335,7 +335,7 @@ to attach values to `r.Context()`. grx prefers
 participate in the GraphQL lifecycle, not just the HTTP boundary:
 
 ```go
-type RequestID struct{ plugin.Base }
+type RequestID struct{ plugins.Base }
 
 func (RequestID) RequestStart(ctx context.Context, _ core.Request) (context.Context, error) {
     return context.WithValue(ctx, requestIDKey{}, newID()), nil

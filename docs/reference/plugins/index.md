@@ -1,16 +1,19 @@
 ---
-title: plugin
-description: API reference for the plugin package, generated from Go doc comments.
+title: plugins
+description: API reference for the plugins package, generated from Go doc comments.
 outline: [2, 4]
 lastUpdated: false
 ---
 
-# plugin
+# plugins
 
 ```go
+import "github.com/grx-gql/grx/plugins"
 ```
 
-Package plugin defines the lifecycle hook interface that observers and middleware implement to participate in GraphQL request processing. A plugin is consulted at each phase of a request \(parsing, validation, execution, response, errors\). Embed [Base](<#Base>) when implementing only a subset of the hooks.
+Package plugins defines GraphQL execution lifecycle hooks.
+
+Plugins run inside the GraphQL executor after an HTTP transport has decoded a request. Use them for GraphQL-aware concerns such as parsing, validation, execution, field resolution, response, and error observation. Use HTTP middleware for transport concerns such as headers, cookies, CORS, request IDs, and authentication before the GraphQL request is decoded.
 
 ## Index
 
@@ -114,7 +117,7 @@ type FieldContext struct {
 <a name="Plugin"></a>
 ## type Plugin
 
-Plugin is the lifecycle interface an observer or middleware implements. Hooks are invoked in registration order; returning a non\-nil error from any hook \(other than RequestStart\) aborts the current request and surfaces the error to the client. RequestStart may additionally return a derived context that becomes the parent context for every subsequent hook of the same request.
+Plugin is the lifecycle interface a GraphQL observer or extension implements. Hooks are invoked in registration order; returning a non\-nil error from any hook \(other than RequestStart\) aborts the current request and surfaces the error to the client. RequestStart may additionally return a derived context that becomes the parent context for every subsequent hook of the same request.
 
 Implementations should be safe for concurrent use because a single Plugin instance is shared across all in\-flight requests.
 

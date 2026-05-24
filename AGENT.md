@@ -29,7 +29,8 @@ The authoritative feature scope and roadmap live in **`README.md`** and **`ROADM
 | `schema/` | Schema builder. Reflects user Go types (root `Query`, `Mutation`, input structs, output structs) into the internal type metadata used by the executor. |
 | `exec/` | GraphQL lexer, parser, AST, executor, and introspection fast-path. The hot execution path lives here. |
 | `server/` | HTTP entry point, GraphiQL playground, transport dispatch (`Config.Transports`). Implements `http.Handler`. The default HTTP+JSON transport from `http` is appended automatically to the chain so plain `POST /graphql` keeps working out of the box. |
-| `plugin/` | Plugin lifecycle interface (`RequestStart`, `ParsingStart`, `ValidationStart`, `ExecutionStart`, `FieldResolveStart`, `ResponseSend`, `Error`) and built-in plugins like `Logger`. Embed `plugin.Base` for partial implementations. |
+| `plugins/` | Plugin lifecycle interface (`RequestStart`, `ParsingStart`, `ValidationStart`, `ExecutionStart`, `FieldResolveStart`, `ResponseSend`, `Error`) and built-in plugins like `Logger`. Embed `plugins.Base` for partial implementations. |
+| `middlewares/` | HTTP middleware helpers such as request ID propagation. Middleware runs before transports decode GraphQL requests. |
 | `examples/basic/` | End-to-end example wiring resolvers, schema, plugin, transports, and server. Mirror this structure when adding new examples. |
 
 Human-facing documentation: **`https://grx-gql.github.io/grx/`**
@@ -64,13 +65,13 @@ go test -race ./...
 
 ## Architectural Conventions
 
-- **Single module, internal packages by responsibility.** Do not introduce a new top-level package without a clear, distinct responsibility. Prefer extending `core`, `schema`, `exec`, `server`, or `plugin`, or the small sibling transport/pubsub folders at the repo root.
-- **`core` has no upward imports.** It must not import `schema`, `exec`, `server`, or `plugin`. Other packages depend on `core`, never the reverse. Transports (`http`, `sse`, `websocket`) may import `core` but follow the same upward-import ban.
+- **Single module, internal packages by responsibility.** Do not introduce a new top-level package without a clear, distinct responsibility. Prefer extending `core`, `schema`, `exec`, `server`, `plugins`, or `middlewares`, or the small sibling transport/pubsub folders at the repo root.
+- **`core` has no upward imports.** It must not import `schema`, `exec`, `server`, `plugins`, or `middlewares`. Other packages depend on `core`, never the reverse. Transports (`http`, `sse`, `websocket`) may import `core` but follow the same upward-import ban.
 - **Every network protocol — including HTTP+JSON — implements `core.Transport`** in its own top-level folder (for example `http/`, `sse/`, `websocket/`). `server` wires transports via `Config.Transports` and appends the default `http.Transport` chain at the end. `server` itself only owns playground, favicon, and request routing; it never parses GraphQL payloads inline.
-- **`server` depends on `core`, `http`, `exec`, `schema`, `plugin`** (and pulls in `websocket` / `sse` only when examples or callers register those transports). Keep GraphQL execution out of transports; transports talk to `core.Executor` only.
+- **`server` depends on `core`, `http`, `exec`, `schema`, `plugins`** (and pulls in `websocket` / `sse` only when examples or callers register those transports). Keep GraphQL execution out of transports; transports talk to `core.Executor` only.
 - **`exec` owns parsing, validation, execution, introspection.** It must remain transport-agnostic.
 - **`schema` is the only package allowed to use reflection-heavy schema introspection** for building metadata. Keep reflection out of the per-request hot path; precompute and cache in `schema` so `exec` can stay allocation-aware.
-- **Plugins receive `context.Context` and may return a derived context from `RequestStart`.** Use `plugin.Base` to provide no-op defaults when implementing only a subset.
+- **Plugins receive `context.Context` and may return a derived context from `RequestStart`.** Use `plugins.Base` to provide no-op defaults when implementing only a subset.
 
 ## Resolver and Schema Patterns
 
@@ -130,7 +131,7 @@ These are restated from `README.md` because they constrain implementation choice
 
 ## Plugin Conventions
 
-- Always embed `plugin.Base` in new plugins to remain forward-compatible with new lifecycle hooks.
+- Always embed `plugins.Base` in new plugins to remain forward-compatible with new lifecycle hooks.
 - `RequestStart` is the only hook that may return a new `context.Context`. Other hooks return only `error`.
 - Plugins must be safe for concurrent use across requests. Per-request state goes in `context.Context` via typed keys, not on the plugin struct.
 - Errors returned from lifecycle hooks should short-circuit the request; ensure new hooks document this contract.

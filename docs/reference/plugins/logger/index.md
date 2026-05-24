@@ -1,16 +1,16 @@
 ---
-title: plugin/logger
-description: API reference for the plugin/logger package, generated from Go doc comments.
+title: plugins/logger
+description: API reference for the plugins/logger package, generated from Go doc comments.
 outline: [2, 4]
 lastUpdated: false
 ---
 
-# plugin/logger
+# plugins/logger
 
 ```go
 ```
 
-Package logger provides a [plugin.Plugin](<https://pkg.go.dev/plugin/#Plugin>) that records GraphQL request lifecycle events through a structured slog logger. It is the canonical example of a built\-in plugin and a useful drop\-in for production observability.
+Package logger provides a [plugins.Plugin](<https://pkg.go.dev/github.com/grx-gql/grx/plugins#Plugin>) that records GraphQL request lifecycle events through a structured slog logger. It is the canonical example of a built\-in plugin and a useful drop\-in for production observability.
 
 ## Index
 
@@ -19,7 +19,7 @@ Package logger provides a [plugin.Plugin](<https://pkg.go.dev/plugin/#Plugin>) t
   - [func New\(config Config\) \(\*Logger, error\)](<#New>)
   - [func \(l \*Logger\) Error\(ctx context.Context, err error\)](<#Logger.Error>)
   - [func \(l \*Logger\) ExecutionStart\(ctx context.Context, req core.Request\) error](<#Logger.ExecutionStart>)
-  - [func \(l \*Logger\) FieldResolveStart\(ctx context.Context, field plugin.FieldContext\) error](<#Logger.FieldResolveStart>)
+  - [func \(l \*Logger\) FieldResolveStart\(ctx context.Context, field plugins.FieldContext\) error](<#Logger.FieldResolveStart>)
   - [func \(l \*Logger\) ParsingStart\(ctx context.Context, req core.Request\) error](<#Logger.ParsingStart>)
   - [func \(l \*Logger\) RequestStart\(ctx context.Context, req core.Request\) \(context.Context, error\)](<#Logger.RequestStart>)
   - [func \(l \*Logger\) ResponseSend\(ctx context.Context, res core.Response\) error](<#Logger.ResponseSend>)
@@ -43,11 +43,11 @@ type Config struct {
 <a name="Logger"></a>
 ## type Logger
 
-Logger is a [plugin.Plugin](<https://pkg.go.dev/plugin/#Plugin>) that emits a structured log entry at every stage of the GraphQL request lifecycle. It embeds [plugin.Base](<https://pkg.go.dev/plugin/#Base>) and therefore satisfies the full Plugin interface.
+Logger is a [plugins.Plugin](<https://pkg.go.dev/github.com/grx-gql/grx/plugins#Plugin>) that emits a structured log entry at every stage of the GraphQL request lifecycle. It embeds [plugins.Base](<https://pkg.go.dev/github.com/grx-gql/grx/plugins#Base>) and therefore satisfies the full Plugin interface.
 
 ```go
 type Logger struct {
-    plugin.Base
+    plugins.Base
     // contains filtered or unexported fields
 }
 ```
@@ -83,7 +83,7 @@ ExecutionStart logs the start of the execution phase.
 ### func \(\*Logger\) FieldResolveStart
 
 ```go
-func (l *Logger) FieldResolveStart(ctx context.Context, field plugin.FieldContext) error
+func (l *Logger) FieldResolveStart(ctx context.Context, field plugins.FieldContext) error
 ```
 
 FieldResolveStart logs that a field resolver is about to be invoked. Field\-level events are emitted at debug level to keep production logs manageable on schemas with large selection sets.

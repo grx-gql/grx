@@ -4,15 +4,16 @@ import (
 	"bufio"
 	"bytes"
 	"crypto/rand"
-	"fmt"
 	"encoding/base64"
 	"encoding/binary"
 	"errors"
+	"fmt"
 	"io"
 	"net"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -232,6 +233,120 @@ func TestSubprotocolNegotiationPicksSupportedFirst(t *testing.T) {
 	got = negotiateSubprotocol([]string{"unknown"}, []string{Subprotocol})
 	if got != "" {
 		t.Fatalf("expected empty negotiation, got %q", got)
+	}
+}
+
+type fakeNetErr struct{ timeout bool }
+
+func (fakeNetErr) Error() string   { return "fake net error" }
+func (f fakeNetErr) Timeout() bool { return f.timeout }
+func (fakeNetErr) Temporary() bool { return false }
+
+func TestIsTimeoutBranches(t *testing.T) {
+	if IsTimeout(nil) {
+		t.Fatal("nil must not be a timeout")
+	}
+	if !IsTimeout(os.ErrDeadlineExceeded) {
+		t.Fatal("deadline exceeded must be a timeout")
+	}
+	if !IsTimeout(fakeNetErr{timeout: true}) {
+		t.Fatal("net.Error with Timeout()=true must be a timeout")
+	}
+	if IsTimeout(fakeNetErr{timeout: false}) {
+		t.Fatal("net.Error with Timeout()=false must not be a timeout")
+	}
+	if IsTimeout(errors.New("plain")) {
+		t.Fatal("plain error must not be a timeout")
+	}
+}
+
+func TestConnCompressionRoundTrips(t *testing.T) {
+	cases := [][]byte{
+		{},
+		[]byte("hi"),
+		bytes.Repeat([]byte("graphql-"), 8192),
+	}
+	for _, in := range cases {
+		compressed, err := deflate(in)
+		if err != nil {
+			t.Fatalf("deflate(%d bytes): %v", len(in), err)
+		}
+		out, err := inflate(compressed, DefaultMaxMessageSize)
+		if err != nil {
+			t.Fatalf("inflate(%d bytes): %v", len(in), err)
+		}
+		if !bytes.Equal(out, in) {
+			t.Fatalf("round-trip mismatch for %d bytes", len(in))
+		}
+	}
+	if _, err := inflate([]byte{0x01, 0x02, 0x03}, 0); err == nil {
+		t.Fatal("expected error inflating garbage")
+	}
+}
+
+func TestConnReadPayloadLengthEncodings(t *testing.T) {
+	if n, err := readPayloadLength(bufio.NewReader(bytes.NewReader(nil)), 42); err != nil || n != 42 {
+		t.Fatalf("7-bit: n=%d err=%v", n, err)
+	}
+	if n, err := readPayloadLength(bufio.NewReader(bytes.NewReader([]byte{0x01, 0x00})), 126); err != nil || n != 256 {
+		t.Fatalf("16-bit: n=%d err=%v", n, err)
+	}
+	if n, err := readPayloadLength(bufio.NewReader(bytes.NewReader([]byte{0, 0, 0, 0, 0, 0, 0x01, 0x00})), 127); err != nil || n != 256 {
+		t.Fatalf("64-bit: n=%d err=%v", n, err)
+	}
+	if _, err := readPayloadLength(bufio.NewReader(bytes.NewReader([]byte{0x01})), 126); err == nil {
+		t.Fatal("expected error on truncated 16-bit length")
+	}
+	if _, err := readPayloadLength(bufio.NewReader(bytes.NewReader([]byte{0x01})), 127); err == nil {
+		t.Fatal("expected error on truncated 64-bit length")
+	}
+}
+
+func TestConnWriteFrameLengthEncodings(t *testing.T) {
+	client, server := net.Pipe()
+	conn := &Conn{conn: server, reader: bufio.NewReader(server), writeTimeout: time.Second}
+	defer conn.Close()
+	defer client.Close()
+
+	done := make(chan struct{})
+	go func() {
+		_, _ = io.Copy(io.Discard, client)
+		close(done)
+	}()
+
+	if err := conn.writeFrame(OpcodeText, []byte("small")); err != nil {
+		t.Fatalf("small write: %v", err)
+	}
+	if err := conn.writeFrame(OpcodeText, bytes.Repeat([]byte("a"), 1000)); err != nil {
+		t.Fatalf("medium write: %v", err)
+	}
+	if err := conn.writeFrame(OpcodeText, bytes.Repeat([]byte("b"), 70000)); err != nil {
+		t.Fatalf("large write: %v", err)
+	}
+	if err := conn.writeFrame(OpcodePong, nil); err != nil {
+		t.Fatalf("empty write: %v", err)
+	}
+	_ = conn.Close()
+	_ = client.Close()
+	<-done
+}
+
+func TestConnReadMessageSkipsPong(t *testing.T) {
+	client, conn := netPipeConn(t)
+	defer client.Close()
+	defer conn.conn.Close()
+
+	go func() {
+		writeMaskedFrame(t, client, OpcodePong, nil)
+		writeMaskedFrame(t, client, OpcodeText, []byte("hi"))
+	}()
+
+	op, payload, err := conn.ReadMessage()
+	if err != nil {
+		t.Fatalf("ReadMessage: %v", err)
+	}
+	if op != OpcodeText || string(payload) != "hi" {
+		t.Fatalf("op=%d payload=%q", op, payload)
 	}
 }
 

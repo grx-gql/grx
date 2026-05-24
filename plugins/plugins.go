@@ -1,9 +1,11 @@
-// Package plugin defines the lifecycle hook interface that observers and
-// middleware implement to participate in GraphQL request processing. A
-// plugin is consulted at each phase of a request (parsing, validation,
-// execution, response, errors). Embed [Base] when implementing only a
-// subset of the hooks.
-package plugin
+// Package plugins defines GraphQL execution lifecycle hooks.
+//
+// Plugins run inside the GraphQL executor after an HTTP transport has decoded
+// a request. Use them for GraphQL-aware concerns such as parsing, validation,
+// execution, field resolution, response, and error observation. Use HTTP
+// middleware for transport concerns such as headers, cookies, CORS, request
+// IDs, and authentication before the GraphQL request is decoded.
+package plugins
 
 import (
 	"context"
@@ -38,7 +40,7 @@ type FieldResolveEnder interface {
 	FieldResolveEnd(ctx context.Context, field FieldContext, err error)
 }
 
-// Plugin is the lifecycle interface an observer or middleware
+// Plugin is the lifecycle interface a GraphQL observer or extension
 // implements. Hooks are invoked in registration order; returning a
 // non-nil error from any hook (other than RequestStart) aborts the
 // current request and surfaces the error to the client. RequestStart may

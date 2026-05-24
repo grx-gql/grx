@@ -15,10 +15,10 @@ import (
 	"github.com/grx-gql/grx/core"
 	"github.com/grx-gql/grx/exec"
 	grxhttp "github.com/grx-gql/grx/http"
+	"github.com/grx-gql/grx/plugins"
+	"github.com/grx-gql/grx/schema"
 	"github.com/grx-gql/grx/sse"
 	"github.com/grx-gql/grx/websocket"
-	"github.com/grx-gql/grx/plugin"
-	"github.com/grx-gql/grx/schema"
 )
 
 // Middleware wraps the HTTP handler exposed by Server.
@@ -35,7 +35,7 @@ type Config struct {
 	// Plugins are invoked at every lifecycle stage of a GraphQL
 	// request, in registration order. They may short-circuit a request
 	// by returning an error.
-	Plugins []plugin.Plugin
+	Plugins []plugins.Plugin
 
 	// PlaygroundPath is the URL path at which the bundled GraphiQL
 	// playground is served on GET. The empty string disables the
@@ -106,7 +106,7 @@ type Config struct {
 	MaxVariableBytes int64
 
 	// MaskInternalErrors replaces internal resolver, hook, and panic errors in
-	// client-facing GraphQL responses. Raw errors still reach plugin.Error.
+	// client-facing GraphQL responses. Raw errors still reach plugins.Error.
 	MaskInternalErrors bool
 
 	// ClientErrorMessage is used when MaskInternalErrors is enabled. Empty uses
@@ -130,6 +130,10 @@ type Config struct {
 	// RejectUnknownVariables rejects variables not declared by the selected
 	// operation.
 	RejectUnknownVariables bool
+
+	// MaxSelectionDepth limits nested selection depth during parsing. Zero
+	// disables the limit.
+	MaxSelectionDepth int
 
 	// MaxSelectionCount limits total selections in an operation. Zero disables
 	// the limit.
@@ -225,6 +229,9 @@ func New(config Config) (*Server, error) {
 	if config.RejectUnknownVariables {
 		execOpts = append(execOpts, exec.WithRejectUnknownVariables())
 	}
+	if config.MaxSelectionDepth > 0 {
+		execOpts = append(execOpts, exec.WithMaxSelectionDepth(config.MaxSelectionDepth))
+	}
 	if config.MaxSelectionCount > 0 {
 		execOpts = append(execOpts, exec.WithMaxSelectionCount(config.MaxSelectionCount))
 	}
@@ -263,6 +270,7 @@ func New(config Config) (*Server, error) {
 		for _, transport := range config.Transports {
 			switch transport.(type) {
 			case *websocket.WebSocketTransport, *sse.Transport:
+				applySSEServerLimits(transport, config)
 				sub = append(sub, pathRestricted{path: subPath, Transport: transport})
 			default:
 				main = append(main, transport)
@@ -272,6 +280,9 @@ func New(config Config) (*Server, error) {
 			return nil, errors.New(`server: SubscriptionPath differs from GraphQLPath but no *websocket.WebSocketTransport or *sse.Transport was registered`)
 		}
 	} else {
+		for _, transport := range config.Transports {
+			applySSEServerLimits(transport, config)
+		}
 		main = append(main, config.Transports...)
 	}
 
@@ -318,6 +329,14 @@ func New(config Config) (*Server, error) {
 	}
 	srv.handler = applyMiddleware(http.HandlerFunc(srv.serveHTTP), config.Middleware)
 	return srv, nil
+}
+
+func applySSEServerLimits(transport core.Transport, config Config) {
+	sseTransport, ok := transport.(*sse.Transport)
+	if !ok {
+		return
+	}
+	sseTransport.ApplyServerLimits(config.MaxHTTPRequestBytes, config.MaxVariableBytes)
 }
 
 func applyMiddleware(handler http.Handler, middleware []Middleware) http.Handler {

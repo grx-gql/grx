@@ -35,7 +35,7 @@ type Config struct {
     // Plugins are invoked at every lifecycle stage of a GraphQL
     // request, in registration order. They may short-circuit a request
     // by returning an error.
-    Plugins []plugin.Plugin
+    Plugins []plugins.Plugin
 
     // PlaygroundPath is the URL path at which the bundled GraphiQL
     // playground is served on GET. The empty string disables the

@@ -1,4 +1,6 @@
-package server
+// Package middlewares contains HTTP middleware helpers that run outside the
+// GraphQL execution lifecycle.
+package middlewares
 
 import (
 	"crypto/rand"
@@ -11,6 +13,9 @@ import (
 
 // randRead injects entropy for request IDs (overridden in tests).
 var randRead = rand.Read
+
+// Middleware wraps an HTTP handler.
+type Middleware func(http.Handler) http.Handler
 
 // RequestID returns middleware that ensures each request carries a request ID
 // in context ([core.RequestIDFromContext]) and echoes it on the response.
