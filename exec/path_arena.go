@@ -16,6 +16,17 @@ type pathArena struct {
 	// collector is non-nil only while an incremental-delivery request is in
 	// flight; it gathers deferred/streamed work without per-field ctx lookups.
 	collector *incrementalCollector
+	// resolverCache memoizes raw resolver outputs within a single query
+	// request when WithResolverCache is enabled; nil disables memoization.
+	resolverCache map[string]resolverCacheEntry
+	// apollo accumulates per-field timings for the Apollo tracing extension
+	// when WithApolloTracing is enabled; nil disables tracing.
+	apollo *apolloTrace
+}
+
+type resolverCacheEntry struct {
+	value any
+	err   error
 }
 
 var pathArenaPool = sync.Pool{
@@ -26,6 +37,8 @@ func withPathArena(ctx context.Context) context.Context {
 	a := pathArenaPool.Get().(*pathArena)
 	a.buf = a.buf[:0]
 	a.collector = nil
+	a.resolverCache = nil
+	a.apollo = nil
 	return context.WithValue(ctx, pathArenaCtxKey{}, a)
 }
 

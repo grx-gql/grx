@@ -168,6 +168,12 @@ func (e *Enum) Serialize(value any) (any, error) {
 // a single field. Implementations should be safe for concurrent use.
 type Resolver func(ctx context.Context, params ResolveParams) (any, error)
 
+// Thunk is a deferred (promise-style) field value. A resolver may return a
+// Thunk instead of a concrete value to defer the actual work until the executor
+// is ready to complete the field. The executor invokes the Thunk and uses its
+// result as if the resolver had returned it directly.
+type Thunk func() (any, error)
+
 // ResolveParams carries the inputs delivered to a [Resolver]. Source is
 // the parent object value (nil at the root) and Args is the validated
 // argument map for the field.

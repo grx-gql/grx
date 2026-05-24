@@ -18,6 +18,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/patrickkabwe/grx/core"
 	"github.com/patrickkabwe/grx/plugin"
@@ -47,6 +48,11 @@ type Executor struct {
 	rateLimiter          RateLimiter
 	trustedDocuments     map[string]string
 	rejectUnknownVars    bool
+	resolverCacheEnabled    bool
+	abstractTypeResolver    AbstractTypeResolver
+	executableIntrospection bool
+	apolloTracing           bool
+	fieldEnders             []plugin.FieldResolveEnder
 	documentCache        map[string]documentBundle
 	documentCacheOrder   []string
 	documentCacheLimit   int
@@ -65,6 +71,11 @@ func New(schemaValue *schema.Schema, plugins []plugin.Plugin, opts ...ExecutorOp
 	e := &Executor{Schema: schemaValue, Plugins: plugins}
 	for _, opt := range opts {
 		opt(e)
+	}
+	for _, p := range plugins {
+		if ender, ok := p.(plugin.FieldResolveEnder); ok {
+			e.fieldEnders = append(e.fieldEnders, ender)
+		}
 	}
 	return e
 }
@@ -92,6 +103,11 @@ func (e *Executor) Execute(ctx context.Context, req core.Request) (response core
 
 	ctx = withPathArena(ctx)
 	defer recyclePathArena(ctx)
+	e.enableResolverCache(ctx, doc.Kind)
+	arena := lookupPathArena(ctx)
+	if e.apolloTracing && arena != nil {
+		arena.apollo = newApolloTrace()
+	}
 
 	data, fieldErrors := e.executeSelectionSet(ctx, root, nil, doc.Selections, doc.Fragments, nil)
 	res := core.Response{Errors: fieldErrors}
@@ -103,7 +119,20 @@ func (e *Executor) Execute(ctx context.Context, req core.Request) (response core
 	if len(fieldErrors) == 0 {
 		res.Errors = nil
 	}
+	res = attachApolloTracing(arena, res)
 	return e.sendResponse(ctx, res)
+}
+
+// enableResolverCache attaches a per-request memoization map to the path arena
+// for query operations when WithResolverCache is set. Mutations and
+// subscriptions are never memoized.
+func (e *Executor) enableResolverCache(ctx context.Context, kind operationKind) {
+	if !e.resolverCacheEnabled || kind != operationQuery {
+		return
+	}
+	if arena := lookupPathArena(ctx); arena != nil {
+		arena.resolverCache = make(map[string]resolverCacheEntry)
+	}
 }
 
 // prepareExecution runs the shared query/mutation preamble: request start,
@@ -126,6 +155,20 @@ func (e *Executor) prepareExecution(ctx context.Context, req core.Request) (cont
 			err := fmt.Errorf("introspection is disabled")
 			e.notifyError(ctx, err)
 			return e.shortResponse(ctx, err)
+		}
+		if e.executableIntrospection {
+			data, errs := e.executeIntrospection(ctx, req)
+			out := core.Response{Errors: errs}
+			if data == nil && len(errs) > 0 {
+				out.DataNull = true
+			} else {
+				out.Data = data
+			}
+			if len(errs) == 0 {
+				out.Errors = nil
+			}
+			res := e.sendResponse(ctx, out)
+			return ctx, nil, document{}, &res
 		}
 		res := e.sendResponse(ctx, core.Response{Data: introspectionData(e.Schema, req)})
 		return ctx, nil, document{}, &res
@@ -483,7 +526,9 @@ func (e *Executor) resolveSelectedField(ctx context.Context, object *schema.Obje
 
 	fieldPath := extendAppendedPath(arena, path, key)
 
-	needPathStrings := e.fieldAuthorizer != nil || len(e.Plugins) > 0
+	traceFields := len(e.fieldEnders) > 0 || e.apolloTracing
+	needFieldContext := len(e.Plugins) > 0 || traceFields
+	needPathStrings := e.fieldAuthorizer != nil || needFieldContext
 	var pathParts []string
 	if needPathStrings {
 		pathParts = pathStrings(fieldPath)
@@ -501,11 +546,27 @@ func (e *Executor) resolveSelectedField(ctx context.Context, object *schema.Obje
 		}
 	}
 
+	// fieldCtx (notably field.Type.Name(), which allocates for wrapped types)
+	// is built only when an observer needs it, keeping the hot path allocation-free.
+	var fieldCtx plugin.FieldContext
+	if needFieldContext {
+		fieldCtx = plugin.FieldContext{
+			Path:       pathParts,
+			FieldName:  selected.Name,
+			ParentType: object.Name(),
+			ReturnType: field.Type.Name(),
+		}
+	}
 	for _, hook := range e.Plugins {
-		if err := hook.FieldResolveStart(ctx, plugin.FieldContext{Path: pathParts, FieldName: selected.Name}); err != nil {
+		if err := hook.FieldResolveStart(ctx, fieldCtx); err != nil {
 			e.notifyError(ctx, err)
 			return key, nil, []core.Error{newFieldError(e.maskError(err, false).Error(), fieldPath, selected.Location)}, false
 		}
+	}
+
+	var fieldStart time.Time
+	if traceFields {
+		fieldStart = time.Now()
 	}
 
 	args, err := coerceArguments(field.Args, selected.Arguments)
@@ -514,7 +575,7 @@ func (e *Executor) resolveSelectedField(ctx context.Context, object *schema.Obje
 		return key, nil, []core.Error{newFieldError(e.maskError(err, false).Error(), fieldPath, selected.Location)}, false
 	}
 
-	value, resolverErr := field.Resolver(ctx, schema.ResolveParams{Source: source, Args: args})
+	value, resolverErr := e.invokeResolver(ctx, arena, field, selected, source, args)
 	var resolverMsgs []core.Error
 	if resolverErr != nil {
 		e.notifyError(ctx, resolverErr)
@@ -537,6 +598,16 @@ func (e *Executor) resolveSelectedField(ctx context.Context, object *schema.Obje
 		resolved, nestedErrors = e.completeValue(ctx, field.Type, value, selected.Selections, fragments, fieldPath)
 	}
 	errs := append(resolverMsgs, nestedErrors...)
+
+	if traceFields {
+		for _, ender := range e.fieldEnders {
+			ender.FieldResolveEnd(ctx, fieldCtx, resolverErr)
+		}
+		if e.apolloTracing {
+			recordApolloFieldTrace(arena, fieldCtx, fieldStart, time.Now())
+		}
+	}
+
 	var wire bool
 	switch {
 	case resolverErr != nil:
@@ -549,6 +620,100 @@ func (e *Executor) resolveSelectedField(ctx context.Context, object *schema.Obje
 		wire = true
 	}
 	return key, resolved, errs, wire
+}
+
+// resolveAbstractType resolves the concrete object type for an interface or
+// union value, consulting the configured AbstractTypeResolver first and falling
+// back to the schema's default reflection-based resolver.
+func (e *Executor) resolveAbstractType(abstractName string, value any, fallback func(any) (*schema.Object, error)) (*schema.Object, error) {
+	if e.abstractTypeResolver != nil {
+		name, err := e.abstractTypeResolver(value)
+		if err != nil {
+			return nil, err
+		}
+		if name != "" {
+			typ, ok := e.Schema.Types[name]
+			if !ok {
+				return nil, fmt.Errorf("abstract type resolver returned unknown type %q for %s", name, abstractName)
+			}
+			object, ok := typ.(*schema.Object)
+			if !ok {
+				return nil, fmt.Errorf("abstract type resolver returned non-object type %q for %s", name, abstractName)
+			}
+			return object, nil
+		}
+	}
+	return fallback(value)
+}
+
+// invokeResolver runs a field resolver, applying request-scoped memoization
+// when enabled and unwrapping any returned [schema.Thunk] (deferred value).
+func (e *Executor) invokeResolver(ctx context.Context, arena *pathArena, field *schema.Field, selected selection, source any, args map[string]any) (any, error) {
+	if arena != nil && arena.resolverCache != nil {
+		if key, ok := resolverCacheKey(field, source, selected.Arguments); ok {
+			if entry, hit := arena.resolverCache[key]; hit {
+				return entry.value, entry.err
+			}
+			value, err := e.callResolver(ctx, field, source, args)
+			arena.resolverCache[key] = resolverCacheEntry{value: value, err: err}
+			return value, err
+		}
+	}
+	return e.callResolver(ctx, field, source, args)
+}
+
+func (e *Executor) callResolver(ctx context.Context, field *schema.Field, source any, args map[string]any) (any, error) {
+	value, err := field.Resolver(ctx, schema.ResolveParams{Source: source, Args: args})
+	if err != nil {
+		return nil, err
+	}
+	return resolveThunk(value)
+}
+
+// resolveThunk unwraps a deferred resolver value. Both schema.Thunk and a bare
+// func() (any, error) are supported; non-thunk values pass through unchanged.
+func resolveThunk(value any) (any, error) {
+	switch thunk := value.(type) {
+	case schema.Thunk:
+		return thunk()
+	case func() (any, error):
+		return thunk()
+	default:
+		return value, nil
+	}
+}
+
+// resolverCacheKey builds a memoization key from the field, source identity, and
+// arguments. It returns ok=false when the source has no stable identity (so the
+// call must not be cached).
+func resolverCacheKey(field *schema.Field, source any, args map[string]any) (string, bool) {
+	sourceKey, ok := sourceIdentity(source)
+	if !ok {
+		return "", false
+	}
+	return field.Name + "\x00" + sourceKey + "\x00" + fmt.Sprint(args), true
+}
+
+func sourceIdentity(source any) (string, bool) {
+	if source == nil {
+		return "root", true
+	}
+	v := reflect.ValueOf(source)
+	switch v.Kind() {
+	case reflect.Pointer, reflect.UnsafePointer, reflect.Chan, reflect.Map, reflect.Func:
+		if v.IsNil() {
+			return "nil", true
+		}
+		return fmt.Sprintf("%s@%x", v.Type(), v.Pointer()), true
+	case reflect.String, reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
+		reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64,
+		reflect.Float32, reflect.Float64, reflect.Bool:
+		return fmt.Sprintf("%s:%v", v.Type(), source), true
+	default:
+		// Structs and other non-addressable values have no stable identity for
+		// memoization; skip caching to stay correct.
+		return "", false
+	}
 }
 
 func (e *Executor) completeValue(ctx context.Context, fieldType schema.Type, value any, selections []selection, fragments map[string]*fragmentDef, path []any) (any, []core.Error) {
@@ -577,14 +742,14 @@ func (e *Executor) completeValue(ctx context.Context, fieldType schema.Type, val
 	case *schema.Object:
 		return e.executeSelectionSet(ctx, typed, value, selections, fragments, path)
 	case *schema.Interface:
-		objectType, err := typed.Resolve(value)
+		objectType, err := e.resolveAbstractType(typed.Name(), value, typed.Resolve)
 		if err != nil {
 			e.notifyError(ctx, err)
 			return nil, []core.Error{newFieldError(e.maskError(err, true).Error(), path, core.Location{})}
 		}
 		return e.executeSelectionSet(ctx, objectType, value, selections, fragments, path)
 	case *schema.Union:
-		objectType, err := typed.Resolve(value)
+		objectType, err := e.resolveAbstractType(typed.Name(), value, typed.Resolve)
 		if err != nil {
 			e.notifyError(ctx, err)
 			return nil, []core.Error{newFieldError(e.maskError(err, true).Error(), path, core.Location{})}
