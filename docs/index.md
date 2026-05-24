@@ -1,7 +1,8 @@
 ---
 layout: home
-title: grx
+title: "grx: Go GraphQL server for struct-first APIs"
 titleTemplate: false
+description: Struct-first GraphQL server for Go with net/http integration, subscriptions, SSE, WebSocket, persisted queries, plugins, pub/sub, and production controls.
 
 hero:
   name: grx
@@ -20,40 +21,40 @@ hero:
 
 features:
   - icon: ✨
-    title: Shipped capability matrix
-    details: Tables that list executable schema authoring JSON GraphQL transports optional GraphiQL gzip and CORS subscriptions over WebSocket and SSE publishers for mutations field and operation guardrails timeouts and payload caps persisted and trusted queries plugins pub sub backends and benchmarking notes.
+    title: Production-ready GraphQL out of the box
+    details: Persisted queries, subscriptions, streaming transports, limits, CORS, gzip, plugins, pub/sub, and security controls built into the runtime.
     link: /concepts/what-is-grx
-    linkText: Open the feature tables
+    linkText: Explore capabilities
   - icon: 📘
-    title: Struct-first schema authoring
-    details: gql struct tags declare fields arguments nullability deprecation and descriptions while schema.Config binds Query Mutation and Subscription roots resolver methods stay beside the structs they expose for code review and refactoring.
+    title: Define schemas directly from Go structs
+    details: Build schemas from Go types and struct tags so fields, arguments, nullability, descriptions, and resolvers stay close to your code.
     link: /concepts/schema-basics
-    linkText: Define types and roots
+    linkText: See schemas
   - icon: 📡
-    title: Bundled HTTP surface
-    details: Serve JSON operations over configurable GraphQL paths add the playground path helper when debugging enable gzip middleware for responses and Cors helper for browsers everything composes through net/http so chi Gin Fiber Echo or ServeMux own routing.
+    title: Works with the Go HTTP stack you already use
+    details: Compose with net/http, Gin, Fiber, Echo, Chi, and custom routers without giving up your existing middleware or observability.
     link: /concepts/transports
-    linkText: Mount transports
+    linkText: Mount GRX
   - icon: 🛡
-    title: Operational guardrail APIs
-    details: Turn introspection GraphiQL and persisted-query modes per environment mask surfaced errors authorize whole operations or single fields clamp document depth alias counts variable bytes elapsed time and streamed payloads using documented server and executor configuration.
+    title: Secure and control GraphQL in production
+    details: Control introspection, trusted operations, depth, complexity, payloads, authorization, and abusive traffic from one runtime surface.
     link: /concepts/graphql-security-production
-    linkText: Review hardening options
+    linkText: Review controls
   - icon: ⚡
-    title: Streaming stack in the box
-    details: graphql-transport-ws with idle and origin checks SSE one-way transports optional memory pub-sub plus redis pubsub module for horizontally scaled fleets typed publish subscribe helpers mutations publish subscription resolvers stream Go channels flushed by executor.
+    title: Real-time GraphQL without extra infrastructure
+    details: Run subscriptions over graphql-transport-ws or SSE with connection handling, origin checks, idle timeouts, and optional Redis pub/sub.
     link: /guides/subscriptions
-    linkText: Enable WebSocket SSE pub sub
+    linkText: Build realtime APIs
   - icon: 🧭
-    title: Lifecycle plugin hooks
-    details: Inspect parse validation subscription setup and resolver phases through the plugin interfaces build logging denial telemetry or cache layers transport extensions reuse the same executor by implementing core.Transport for bespoke gateways.
+    title: Observe and extend the execution pipeline
+    details: Hook into parsing, validation, execution, transports, subscriptions, and resolvers for logging, tracing, auth, caching, and metrics.
     link: /concepts/plugins
-    linkText: See plugins transports
+    linkText: Inspect hooks
   - icon: 📦
-    title: Exported packages and refs
-    details: Dedicated modules for schema exec core server websocket sse http client cors plugin observability memory pubsub redis-pubsub gomarkdoc-derived reference pages duplicate Go doc prose so navigating signatures feels like browsing any idiomatic dependency.
+    title: Modular packages without framework lock-in
+    details: Use focused packages for execution, schemas, transports, subscriptions, plugins, HTTP integration, CORS, pub/sub, and streaming.
     link: /reference/
-    linkText: Browse package refs
+    linkText: Browse packages
 
 footer:
   message: Execution targets the GraphQL October 2021 spec.

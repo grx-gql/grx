@@ -1,11 +1,49 @@
-import type { DefaultTheme } from "vitepress";
+import type { DefaultTheme, HeadConfig } from "vitepress";
 import { defineConfig } from "vitepress";
+
+const siteUrl: string = "https://grx-gql.github.io";
+const siteBasePath: string = "/grx/";
+const siteBaseUrl: string = `${siteUrl}${siteBasePath}`;
+const siteImageUrl: string = `${siteBaseUrl}hero.png`;
+const siteName: string = "grx";
+const twitterCard: string = "summary_large_image";
+
+function pageUrl(page: string): string {
+  const cleanPath: string = page
+    .replace(/(^|\/)index\.md$/, "$1")
+    .replace(/\.md$/, "");
+
+  if (cleanPath === "") {
+    return siteBaseUrl;
+  }
+
+  return `${siteBaseUrl}${cleanPath}`;
+}
+
+function seoHead(page: string, title: string, description: string): HeadConfig[] {
+  const canonicalUrl: string = pageUrl(page);
+
+  return [
+    ["link", { rel: "canonical", href: canonicalUrl }],
+    ["meta", { name: "description", content: description }],
+    ["meta", { property: "og:type", content: "website" }],
+    ["meta", { property: "og:site_name", content: siteName }],
+    ["meta", { property: "og:title", content: title }],
+    ["meta", { property: "og:description", content: description }],
+    ["meta", { property: "og:url", content: canonicalUrl }],
+    ["meta", { property: "og:image", content: siteImageUrl }],
+    ["meta", { name: "twitter:card", content: twitterCard }],
+    ["meta", { name: "twitter:title", content: title }],
+    ["meta", { name: "twitter:description", content: description }],
+    ["meta", { name: "twitter:image", content: siteImageUrl }],
+  ];
+}
 
 /** Sidebar: Start here → Concepts → Getting Started → Guides (grouped) → reference & project. */
 const docsSidebar: DefaultTheme.SidebarItem[] = [
   {
     text: "Start here",
-    collapsed: false,
+    collapsed: true,
     items: [
       {
         text: "What grx is · feature surface",
@@ -19,7 +57,7 @@ const docsSidebar: DefaultTheme.SidebarItem[] = [
   },
   {
     text: "Understanding GraphQL",
-    collapsed: false,
+    collapsed: true,
     items: [
       {
         text: "How GraphQL backends work (FAQ)",
@@ -29,7 +67,7 @@ const docsSidebar: DefaultTheme.SidebarItem[] = [
   },
   {
     text: "Concepts",
-    collapsed: false,
+    collapsed: true,
     items: [
       { text: "Routers & transports", link: "/concepts/transports" },
       { text: "Benchmarks", link: "/benchmarks" },
@@ -57,7 +95,7 @@ const docsSidebar: DefaultTheme.SidebarItem[] = [
     items: [
       {
         text: "Query and mutation",
-        collapsed: false,
+        collapsed: true,
         items: [
           {
             text: "Queries and mutations",
@@ -79,7 +117,7 @@ const docsSidebar: DefaultTheme.SidebarItem[] = [
       },
       {
         text: "Subscriptions",
-        collapsed: false,
+        collapsed: true,
         items: [
           {
             text: "Realtime subscriptions",
@@ -93,7 +131,7 @@ const docsSidebar: DefaultTheme.SidebarItem[] = [
       },
       {
         text: "Schema",
-        collapsed: false,
+        collapsed: true,
         items: [
           {
             text: "Define your schema",
@@ -108,7 +146,7 @@ const docsSidebar: DefaultTheme.SidebarItem[] = [
       },
       {
         text: "Other guides",
-        collapsed: false,
+        collapsed: true,
         items: [
           {
             text: "AI assistants",
@@ -266,10 +304,18 @@ export default defineConfig({
     lang: "en-US",
     base: "/grx/",
     srcDir: ".",
+    srcExclude: ["README.md"],
     lastUpdated: true,
     cleanUrls: true,
+    sitemap: {
+      hostname: siteBaseUrl,
+    },
 
     ignoreDeadLinks: [/^https?:\/\/localhost(?::\d+)?/],
+
+    transformHead(context) {
+      return seoHead(context.page, context.title, context.description);
+    },
 
     markdown: {
       theme: { light: "github-light", dark: "github-dark" },
