@@ -32,8 +32,8 @@ type sdlParser struct {
 	source string
 }
 
-func (p *sdlParser) peek() token         { return p.tokens[p.index] }
-func (p *sdlParser) next() token         { t := p.tokens[p.index]; p.index++; return t }
+func (p *sdlParser) peek() token { return p.tokens[p.index] }
+func (p *sdlParser) next() token { t := p.tokens[p.index]; p.index++; return t }
 func (p *sdlParser) expect(k tokenKind) (token, error) {
 	t := p.next()
 	if t.kind != k {
@@ -44,10 +44,10 @@ func (p *sdlParser) expect(k tokenKind) (token, error) {
 
 // sdlTypeRef is the intermediate representation of a parsed type reference.
 type sdlTypeRef struct {
-	name     string     // named type
-	isList   bool       // [inner]
-	isNonNull bool      // T!
-	inner    *sdlTypeRef // for list types
+	name      string      // named type
+	isList    bool        // [inner]
+	isNonNull bool        // T!
+	inner     *sdlTypeRef // for list types
 }
 
 func (r sdlTypeRef) resolve(types map[string]schema.Type) (schema.Type, error) {
@@ -1044,6 +1044,11 @@ func validateSDLTypeRefs(defs []sdlDef, types map[string]schema.Type) error {
 				checkRef(f.typeRef)
 			}
 			for _, a := range f.args {
+				// parseInputFieldDefs encodes scalar defaults inside placeholder arg rows
+				// that omit a real type reference; only validate shaped arguments.
+				if a.typeRef.name == "" {
+					continue
+				}
 				checkRef(a.typeRef)
 			}
 		}

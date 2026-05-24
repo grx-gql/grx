@@ -176,6 +176,7 @@ func (e *Executor) ExecuteIncremental(ctx context.Context, req core.Request) (co
 	if arena := lookupPathArena(ctx); arena != nil {
 		arena.collector = collector
 	}
+	e.enableResolverCache(ctx, doc.Kind)
 
 	data, fieldErrors := e.executeSelectionSet(ctx, root, nil, doc.Selections, doc.Fragments, nil)
 	initial := core.Response{Errors: fieldErrors}

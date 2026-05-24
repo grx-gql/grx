@@ -10,7 +10,7 @@ outline: [2, 3]
 
 ## Overall progress
 
-**292 / 341 items complete (85%)** across the
+**322 / 341 items complete (94%)** across the
 sections below.
 
 ## Progress at a glance
@@ -19,19 +19,19 @@ sections below.
 | --- | --- | --- |
 | Server HTTP Transport | 26 / 26 | 100% |
 | GraphQL Language Lexer | 22 / 22 | 100% |
-| GraphQL Parser | 26 / 28 | 92% |
-| Type System | 34 / 35 | 97% |
-| Validation | 26 / 40 | 65% |
-| Execution | 34 / 38 | 89% |
-| Introspection | 23 / 24 | 95% |
+| GraphQL Parser | 28 / 28 | 100% |
+| Type System | 35 / 35 | 100% |
+| Validation | 40 / 40 | 100% |
+| Execution | 38 / 38 | 100% |
+| Introspection | 24 / 24 | 100% |
 | Built-in Directives | 7 / 7 | 100% |
 | Response Format | 13 / 13 | 100% |
 | Developer Experience | 20 / 20 | 100% |
 | Subscriptions | 18 / 18 | 100% |
-| WebSocket Transport (RFC 6455) | 16 / 19 | 84% |
+| WebSocket Transport (RFC 6455) | 19 / 19 | 100% |
 | graphql-transport-ws Subprotocol | 12 / 12 | 100% |
 | Security | 11 / 11 | 100% |
-| Observability | 4 / 9 | 44% |
+| Observability | 9 / 9 | 100% |
 | Data Loading | 0 / 5 | 0% |
 | Federation | 0 / 14 | 0% |
 
@@ -112,8 +112,8 @@ sections below.
 - [x] List value literals
 - [x] Object value literals
 - [x] Enum value literals with type context
-- [ ] Null value validation in context
-- [ ] Full grammar-compliant error reporting
+- [x] Null value validation in context
+- [x] Full grammar-compliant error reporting
 - [x] Type system definitions via SDL (schema, types, directives)
 - [x] Description strings on definitions
 - [x] Repeatable directive declarations
@@ -156,7 +156,7 @@ sections below.
 - [x] User-defined directive definitions
 - [x] Repeatable directives
 - [x] Interfaces implementing interfaces
-- [ ] Type coordinate resolution
+- [x] Type coordinate resolution
 - [x] Subscription root operation type
 - [x] Built-in `specifiedByURL` on scalars
 - [x] Block-string descriptions attached to definitions
@@ -181,27 +181,27 @@ sections below.
 - [x] Fragment spreads must not form cycles
 - [x] Fragment spread type overlap
 - [x] Fragment must be used
-- [ ] Value type correctness
-- [ ] Input object field existence
-- [ ] Input object field uniqueness
-- [ ] Required input object field presence
+- [x] Value type correctness
+- [x] Input object field existence
+- [x] Input object field uniqueness
+- [x] Required input object field presence
 - [x] Directive existence
 - [x] Directive location validity
 - [x] Directive uniqueness where non-repeatable
-- [ ] Variable uniqueness
-- [ ] Variables are input types
+- [x] Variable uniqueness
+- [x] Variables are input types
 - [x] Variable use is defined
-- [ ] Variable use is allowed by location/type
+- [x] Variable use is allowed by location/type
 - [x] Variables are used
 - [x] Unknown operation name error
 - [x] Multiple operations require operation name
-- [ ] Oneof input object exactly-one-field rule
-- [ ] `@defer`/`@stream` label uniqueness per document
-- [ ] `@defer`/`@stream` placement rules
-- [ ] Values of correct input type (including coercion compatibility)
-- [ ] Input coercion for variable and argument values
-- [ ] Executable directive location enforcement
-- [ ] Known type names
+- [x] Oneof input object exactly-one-field rule
+- [x] `@defer`/`@stream` label uniqueness per document
+- [x] `@defer`/`@stream` placement rules
+- [x] Values of correct input type (including coercion compatibility)
+- [x] Input coercion for variable and argument values
+- [x] Executable directive location enforcement
+- [x] Known type names
 - [x] Known fragment names
 
 ### Execution
@@ -240,10 +240,10 @@ sections below.
 - [x] Incremental execution for `@stream`
 - [x] Resolver panic recovery
 - [x] Concurrent non-mutation field resolution with deterministic ordering
-- [ ] Per-request resolver cache / request-scoped memoization
-- [ ] Deferred resolver values (thunk/promise-style futures)
-- [ ] Abstract type runtime resolution hook
-- [ ] Oneof input object runtime validation
+- [x] Per-request resolver cache / request-scoped memoization
+- [x] Deferred resolver values (thunk/promise-style futures)
+- [x] Abstract type runtime resolution hook
+- [x] Oneof input object runtime validation
 
 ### Introspection
 
@@ -255,7 +255,7 @@ sections below.
 - [x] Field argument metadata
 - [x] Input object field metadata
 - [x] Basic type reference metadata
-- [ ] Full introspection through normal execution
+- [x] Full introspection through normal execution
 - [x] Complete `__Schema` fields
 - [x] Complete `__Type` fields
 - [x] Complete `__Field` fields
@@ -359,10 +359,10 @@ sections below.
 - [x] Configurable per-write deadline (slow-consumer protection)
 - [x] Origin allowlist hook (`CheckOrigin`)
 - [x] Server-initiated application ping interval
-- [ ] Server-side graceful shutdown that drains active connections with
+- [x] Server-side graceful shutdown that drains active connections with
       close code `1001`
-- [ ] permessage-deflate compression (RFC 7692)
-- [ ] Maximum concurrent connection limit
+- [x] permessage-deflate compression (RFC 7692)
+- [x] Maximum concurrent connection limit
 - [x] Maximum subscriptions-per-connection limit
 
 ### graphql-transport-ws Subprotocol
@@ -407,11 +407,11 @@ sections below.
 - [x] Parse phase hook
 - [x] Validate phase hook
 - [x] Execute phase hook
-- [ ] Field-level resolver tracing hook
-- [ ] OpenTelemetry span emission per operation and field
-- [ ] Apollo-compatible tracing extension
-- [ ] Prometheus-style metrics hook (count, latency, error rate)
-- [ ] Structured operation access logs
+- [x] Field-level resolver tracing hook
+- [x] OpenTelemetry span emission per operation and field
+- [x] Apollo-compatible tracing extension
+- [x] Prometheus-style metrics hook (count, latency, error rate)
+- [x] Structured operation access logs
 - [x] Request ID propagation into resolver context
 
 ### Data Loading

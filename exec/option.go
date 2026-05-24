@@ -123,3 +123,49 @@ func WithRejectUnknownVariables() ExecutorOption {
 		e.rejectUnknownVars = true
 	}
 }
+
+// WithResolverCache enables request-scoped resolver memoization. Within a single
+// query operation, identical resolver invocations (same field, same source
+// value, same arguments) run once and reuse the result. Mutations and
+// subscriptions are never cached because their resolvers may have side effects.
+func WithResolverCache() ExecutorOption {
+	return func(e *Executor) {
+		e.resolverCacheEnabled = true
+	}
+}
+
+// WithApolloTracing attaches an Apollo-tracing-format "tracing" object to the
+// response extensions, recording overall request timing and per-resolver
+// startOffset/duration. It adds no third-party dependencies; consumers such as
+// Apollo Studio or apollo-tracing-aware tools read the extension directly.
+func WithApolloTracing() ExecutorOption {
+	return func(e *Executor) {
+		e.apolloTracing = true
+	}
+}
+
+// WithExecutableIntrospection runs introspection (__schema/__type) through the
+// normal selection-execution path instead of the built-in fast path. Field
+// hooks (plugins, field authorizer) then observe introspection fields and the
+// response honors the exact selection set. The fast path remains the default to
+// preserve its performance characteristics.
+func WithExecutableIntrospection() ExecutorOption {
+	return func(e *Executor) {
+		e.executableIntrospection = true
+	}
+}
+
+// AbstractTypeResolver returns the concrete GraphQL type name for a value of an
+// interface or union type. It lets applications override the default
+// reflection-based resolution (for example, when one Go type backs several
+// GraphQL types). Returning an empty name falls back to default resolution.
+type AbstractTypeResolver func(value any) (string, error)
+
+// WithAbstractTypeResolver installs a runtime hook consulted to resolve the
+// concrete object type for interface and union values before the built-in
+// reflection-based resolver.
+func WithAbstractTypeResolver(resolver AbstractTypeResolver) ExecutorOption {
+	return func(e *Executor) {
+		e.abstractTypeResolver = resolver
+	}
+}

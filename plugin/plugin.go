@@ -19,10 +19,23 @@ type RequestContext struct {
 
 // FieldContext describes a single field resolution inside a selection
 // set. Path is the response path (using GraphQL response-path semantics)
-// and FieldName is the GraphQL field name being resolved.
+// and FieldName is the GraphQL field name being resolved. ParentType and
+// ReturnType carry the GraphQL type names, enabling tracing exporters
+// (OpenTelemetry, Apollo tracing) to label spans precisely.
 type FieldContext struct {
-	Path      []string
-	FieldName string
+	Path       []string
+	FieldName  string
+	ParentType string
+	ReturnType string
+}
+
+// FieldResolveEnder is an optional companion to [Plugin]. Plugins that
+// implement it receive a callback after each field finishes resolving (with the
+// resolver error, if any), enabling field-level tracing and metrics without a
+// breaking change to the core Plugin interface. The executor invokes it only
+// for plugins that implement it.
+type FieldResolveEnder interface {
+	FieldResolveEnd(ctx context.Context, field FieldContext, err error)
 }
 
 // Plugin is the lifecycle interface an observer or middleware

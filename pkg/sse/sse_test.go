@@ -1,4 +1,4 @@
-package sse_test
+package sse
 
 import (
 	"bufio"
@@ -15,7 +15,6 @@ import (
 	"time"
 
 	"github.com/patrickkabwe/grx/core"
-	grxsse "github.com/patrickkabwe/grx/pkg/sse"
 )
 
 type streamingExecutor struct {
@@ -120,7 +119,7 @@ func readSSEEvents(t *testing.T, body io.Reader, count int) []sseEvent {
 }
 
 func TestMatchRequiresEventStreamAccept(t *testing.T) {
-	transport := grxsse.New()
+	transport := New()
 	postOK := sseRequest(http.MethodPost, "/graphql", strings.NewReader(`{"query":"subscription { x }"}`))
 	if !transport.Match(postOK) {
 		t.Fatal("expected Match true for POST with Accept: text/event-stream")
@@ -144,7 +143,7 @@ func TestMatchRequiresEventStreamAccept(t *testing.T) {
 
 func TestServeStreamsSubscriptionPayloads(t *testing.T) {
 	executor := newStreamingExecutor()
-	transport := grxsse.New()
+	transport := New()
 
 	body := strings.NewReader(`{"query":"subscription { userCreated { id } }"}`)
 	req := sseRequest(http.MethodPost, "/graphql", body)
@@ -195,7 +194,7 @@ func TestServeStreamsSubscriptionPayloads(t *testing.T) {
 
 func TestServeSupportsGetWithQueryParameters(t *testing.T) {
 	executor := newStreamingExecutor()
-	transport := grxsse.New()
+	transport := New()
 
 	values := url.Values{
 		"query":     {"subscription { userCreated { id } }"},
@@ -224,7 +223,7 @@ func TestServeSupportsGetWithQueryParameters(t *testing.T) {
 }
 
 func TestServeReturns400ForInvalidJSON(t *testing.T) {
-	transport := grxsse.New()
+	transport := New()
 	req := sseRequest(http.MethodPost, "/graphql", strings.NewReader(`{"query":`))
 	rec := httptest.NewRecorder()
 
@@ -243,7 +242,7 @@ func TestServeReturns400ForInvalidJSON(t *testing.T) {
 }
 
 func TestServeReturns400ForMissingQueryOnGet(t *testing.T) {
-	transport := grxsse.New()
+	transport := New()
 	req := sseRequest(http.MethodGet, "/graphql", nil)
 	rec := httptest.NewRecorder()
 
@@ -263,7 +262,7 @@ func TestServeReturns400ForMissingQueryOnGet(t *testing.T) {
 
 func TestServeEmitsErrorAndCompleteOnSubscribeFailure(t *testing.T) {
 	executor := &streamingExecutor{subErr: errors.New("subscribe failed")}
-	transport := grxsse.New()
+	transport := New()
 
 	req := sseRequest(http.MethodPost, "/graphql", strings.NewReader(`{"query":"subscription { x }"}`))
 	rec := httptest.NewRecorder()
@@ -289,7 +288,7 @@ func TestServeEmitsErrorAndCompleteOnSubscribeFailure(t *testing.T) {
 }
 
 func TestServeReturns500WhenStreamingUnsupported(t *testing.T) {
-	transport := grxsse.New()
+	transport := New()
 	req := sseRequest(http.MethodPost, "/graphql", strings.NewReader(`{"query":"subscription { x }"}`))
 	w := &nonFlusherResponseWriter{header: make(http.Header)}
 
@@ -311,5 +310,81 @@ func (w *nonFlusherResponseWriter) Write(b []byte) (int, error) { return w.body.
 func (w *nonFlusherResponseWriter) WriteHeader(status int)      { w.status = status }
 
 func TestSatisfiesCoreTransport(t *testing.T) {
-	var _ core.Transport = grxsse.New()
+	var _ core.Transport = New()
+}
+
+func TestServeEnforcesMaxActiveSubscriptions(t *testing.T) {
+	started := make(chan struct{})
+	out := make(chan core.Response)
+	exec := &signalHoldExecutor{out: out, started: started}
+	transport := New(Config{MaxActiveSubscriptions: 1})
+
+	req1 := sseRequest(http.MethodPost, "/graphql", strings.NewReader(`{"query":"subscription { x }"}`))
+	rec1 := httptest.NewRecorder()
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		transport.Serve(rec1, req1, exec)
+	}()
+
+	<-started
+
+	req2 := sseRequest(http.MethodPost, "/graphql", strings.NewReader(`{"query":"subscription { y }"}`))
+	rec2 := httptest.NewRecorder()
+	transport.Serve(rec2, req2, newStreamingExecutor())
+
+	if rec2.Code != http.StatusTooManyRequests {
+		t.Fatalf("second stream status = %d, want 429", rec2.Code)
+	}
+
+	close(out)
+	<-done
+}
+
+type signalHoldExecutor struct {
+	out     chan core.Response
+	started chan struct{}
+}
+
+func (signalHoldExecutor) Execute(context.Context, core.Request) core.Response {
+	return core.Response{}
+}
+
+func (signalHoldExecutor) OperationKind(core.Request) (core.OperationKind, error) {
+	return core.OperationSubscription, nil
+}
+
+func (e *signalHoldExecutor) Subscribe(context.Context, core.Request) (<-chan core.Response, error) {
+	close(e.started)
+	return e.out, nil
+}
+
+func TestReadRequestRejectsUnsupportedMethod(t *testing.T) {
+	req := httptest.NewRequest(http.MethodPut, "/", nil)
+	_, err := readRequest(req)
+	if err == nil || !strings.Contains(err.Error(), "not allowed") {
+		t.Fatalf("expected method error, got %v", err)
+	}
+}
+
+func TestWriteEventFallsBackOnMarshalError(t *testing.T) {
+	unencodable := map[string]any{"x": make(chan int)}
+	rec := httptest.NewRecorder()
+	writeEvent(rec, "next", unencodable)
+	body := rec.Body.String()
+	if !strings.Contains(body, "failed to encode payload") {
+		t.Fatalf("unexpected SSE body:\n%s", body)
+	}
+}
+
+func TestWriteEventEmptyEventName(t *testing.T) {
+	rec := httptest.NewRecorder()
+	writeEvent(rec, "", map[string]string{"ping": "pong"})
+	raw := strings.TrimSpace(rec.Body.String())
+	if strings.Contains(raw, "event:") {
+		t.Fatalf("empty event must omit event line\n%s", raw)
+	}
+	if !strings.Contains(raw, `"pong"`) {
+		t.Fatalf("expected ping/pong payload\n%s", raw)
+	}
 }

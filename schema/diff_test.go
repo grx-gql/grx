@@ -1,6 +1,7 @@
 package schema_test
 
 import (
+	"context"
 	"strings"
 	"testing"
 
@@ -16,6 +17,12 @@ func mustParseSDL(t *testing.T, sdl string) *schema.Schema {
 	}
 	return s
 }
+
+type diffCoordScalar string
+
+type diffScalarSmokeQuery struct{}
+
+func (diffScalarSmokeQuery) Ping(context.Context) (string, error) { return "pong", nil }
 
 // findChange returns the first change whose message contains substr.
 func findChange(changes []schema.Change, substr string) (schema.Change, bool) {
@@ -109,5 +116,30 @@ func TestDiffOptionalArgAdditionIsSafe(t *testing.T) {
 	}
 	if _, ok := findChange(changes, `Optional argument "limit" was added`); !ok {
 		t.Fatalf("expected optional arg addition change, got %v", changes)
+	}
+	if got := schema.ChangeSeverity(999).String(); got != "non-breaking" {
+		t.Fatalf("unexpected severity label: %q", got)
+	}
+}
+
+func TestDiffIgnoresStructuralDiffForMatchingCustomScalars(t *testing.T) {
+	cfg := schema.Config{
+		Query: diffScalarSmokeQuery{},
+		Scalars: []schema.ScalarConfig{{
+			Type:  diffCoordScalar(""),
+			Name:  "Coord",
+			Parse: func(input any) (any, error) { return diffCoordScalar(input.(string)), nil },
+		}},
+	}
+	a, err := schema.Build(cfg)
+	if err != nil {
+		t.Fatalf("build a: %v", err)
+	}
+	b, err := schema.Build(cfg)
+	if err != nil {
+		t.Fatalf("build b: %v", err)
+	}
+	if changes := schema.Diff(a, b); len(changes) != 0 {
+		t.Fatalf("identical schemas with custom scalar should diff cleanly: %v", changes)
 	}
 }

@@ -2,8 +2,11 @@ package client_test
 
 import (
 	"context"
+	"errors"
+	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/patrickkabwe/grx"
@@ -79,5 +82,54 @@ func TestClientRequestHeaderOption(t *testing.T) {
 	}
 	if saw != "alpha" {
 		t.Fatalf("X-Test = %q", saw)
+	}
+}
+
+type roundTripFunc func(*http.Request) (*http.Response, error)
+
+func (f roundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) {
+	return f(req)
+}
+
+func TestClientOptionsAndErrorBranches(t *testing.T) {
+	var sawAccept string
+	httpClient := &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		sawAccept = req.Header.Get("Accept")
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Header:     make(http.Header),
+			Body:       io.NopCloser(strings.NewReader(`{"data":{"ok":true}}`)),
+		}, nil
+	})}
+
+	c := client.New(" http://example.com/graphql ", client.WithHTTPClient(httpClient), client.WithAccept(""))
+	resp, err := c.Exec(context.Background(), &client.Request{Query: `{ ok }`})
+	if err != nil {
+		t.Fatalf("exec: %v", err)
+	}
+	if resp.Data == nil {
+		t.Fatal("expected data")
+	}
+	if sawAccept != client.DefaultAccept {
+		t.Fatalf("accept = %q", sawAccept)
+	}
+
+	empty := client.New(" ")
+	if _, err := empty.PostGraphQL(context.Background(), []byte(`{}`)); err == nil {
+		t.Fatal("expected empty URL error")
+	}
+
+	badJSONClient := client.New("http://example.com/graphql", client.WithHTTPClient(&http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
+		return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(`not-json`))}, nil
+	})}))
+	if _, err := badJSONClient.Exec(context.Background(), &client.Request{Query: `{ ok }`}); err == nil {
+		t.Fatal("expected decode error")
+	}
+
+	failingClient := client.New("http://example.com/graphql", client.WithHTTPClient(&http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
+		return nil, errors.New("network failed")
+	})}))
+	if _, err := failingClient.Exec(context.Background(), &client.Request{Query: `{ ok }`}); err == nil {
+		t.Fatal("expected transport error")
 	}
 }

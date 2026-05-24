@@ -2,9 +2,11 @@ package websocket
 
 import (
 	"bufio"
+	"bytes"
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/binary"
+	"errors"
 	"io"
 	"net"
 	"net/http"
@@ -20,6 +22,25 @@ import (
 // Conn directly. They focus on the hardening surface (UTF-8 validation,
 // reserved bits, control frame validation, max-message limits) since the
 // happy paths are already covered by the integration tests in `server`.
+
+func TestIsUpgradeRequiresGetMethod(t *testing.T) {
+	t.Parallel()
+
+	post := httptest.NewRequest(http.MethodPost, "/", nil)
+	post.Header.Set("Connection", "Upgrade")
+	post.Header.Set("Upgrade", "websocket")
+	if IsUpgrade(post) {
+		t.Fatal("non-GET requests must not qualify as websocket upgrades")
+	}
+}
+
+func TestConnReadBinaryUtf8BypassesUnicodeCheck(t *testing.T) {
+	t.Parallel()
+
+	client, srv := dialUpgraded(t, Config{}, OpcodeBinary, []byte(`payload`))
+	defer srv.Close()
+	defer client.Close()
+}
 
 func TestConnRejectsInvalidUTF8Text(t *testing.T) {
 	t.Parallel()
@@ -372,4 +393,247 @@ func readFrame(t *testing.T, conn net.Conn) (opcode byte, payload []byte, fin bo
 		}
 	}
 	return opcode, payload, fin, nil
+}
+
+func TestUpgradeRejectsInvalidRequests(t *testing.T) {
+	cases := []struct {
+		name    string
+		request *http.Request
+		opts    upgradeOptions
+		status  int
+	}{
+		{name: "plain", request: httptest.NewRequest(http.MethodGet, "/", nil), status: http.StatusOK},
+		{name: "bad version", request: func() *http.Request {
+			req := websocketRequest("bad", Subprotocol)
+			req.Header.Set("Sec-WebSocket-Version", "12")
+			return req
+		}(), status: http.StatusUpgradeRequired},
+		{name: "missing key", request: websocketRequest("", Subprotocol), status: http.StatusBadRequest},
+		{name: "forbidden origin", request: websocketRequest("key", Subprotocol), opts: upgradeOptions{checkOrigin: func(*http.Request) bool { return false }}, status: http.StatusForbidden},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			rec := httptest.NewRecorder()
+			if _, err := upgrade(rec, tc.request, tc.opts); err == nil {
+				t.Fatal("expected upgrade error")
+			}
+			if rec.Code != tc.status {
+				t.Fatalf("status = %d, want %d", rec.Code, tc.status)
+			}
+		})
+	}
+}
+
+func TestConnFrameLengthAndWriteBranches(t *testing.T) {
+	lengths := []struct {
+		indicator byte
+		extra     []byte
+		want      uint64
+	}{
+		{5, nil, 5},
+		{126, []byte{1, 2}, 258},
+		{127, []byte{0, 0, 0, 0, 0, 0, 1, 2}, 258},
+	}
+	for _, tc := range lengths {
+		reader := bufio.NewReader(bytes.NewReader(tc.extra))
+		got, err := readPayloadLength(reader, tc.indicator)
+		if err != nil {
+			t.Fatalf("read len: %v", err)
+		}
+		if got != tc.want {
+			t.Fatalf("len = %d, want %d", got, tc.want)
+		}
+	}
+	if _, err := readPayloadLength(bufio.NewReader(bytes.NewReader(nil)), 126); err == nil {
+		t.Fatal("expected short length read error")
+	}
+
+	client, server := net.Pipe()
+	conn := &Conn{conn: server, reader: bufio.NewReader(server), writeTimeout: time.Second}
+	done := make(chan struct{})
+	go func() {
+		_, _, _, _ = readFrame(t, client)
+		close(done)
+	}()
+	if err := conn.writeFrame(OpcodeText, []byte(strings.Repeat("x", 130))); err != nil {
+		t.Fatalf("write frame: %v", err)
+	}
+	<-done
+	_ = conn.Close()
+	_ = client.Close()
+	if err := conn.writeFrame(OpcodeText, []byte("x")); err == nil {
+		t.Fatal("expected closed write error")
+	}
+}
+
+func TestConnReadMessageControlAndCompressionBranches(t *testing.T) {
+	t.Run("ping then fragmented text", func(t *testing.T) {
+		client, server := netPipeConn(t)
+		defer client.Close()
+		defer server.conn.Close()
+		pongRead := make(chan error, 1)
+		go func() {
+			op, payload, _, err := readFrame(t, client)
+			if err != nil {
+				pongRead <- err
+				return
+			}
+			if op != OpcodePong || string(payload) != "ok" {
+				pongRead <- errors.New("unexpected pong frame")
+				return
+			}
+			pongRead <- nil
+		}()
+
+		writes := make(chan struct{})
+		go func() {
+			writeMaskedFrame(t, client, OpcodePing, []byte("ok"))
+			writeMaskedFrameOpts(t, client, OpcodeText, []byte("he"), false, false)
+			writeMaskedFrame(t, client, OpcodeContinuation, []byte("llo"))
+			close(writes)
+		}()
+
+		op, payload, err := server.ReadMessage()
+		if err != nil {
+			t.Fatalf("read message: %v", err)
+		}
+		if op != OpcodeText || string(payload) != "hello" {
+			t.Fatalf("message opcode=%d payload=%q", op, payload)
+		}
+		if err := <-pongRead; err != nil {
+			t.Fatalf("read pong: %v", err)
+		}
+		<-writes
+	})
+
+	t.Run("compressed text", func(t *testing.T) {
+		client, server := netPipeConn(t)
+		defer client.Close()
+		defer server.conn.Close()
+		server.permessageDeflate = true
+		server.maxMessageSize = 64
+
+		compressed, err := deflate([]byte("compressed"))
+		if err != nil {
+			t.Fatalf("deflate: %v", err)
+		}
+		writes := make(chan struct{})
+		go func() {
+			writeMaskedFrameOpts(t, client, OpcodeText, compressed, true, true)
+			close(writes)
+		}()
+		op, payload, err := server.ReadMessage()
+		if err != nil {
+			t.Fatalf("read compressed: %v", err)
+		}
+		if op != OpcodeText || string(payload) != "compressed" {
+			t.Fatalf("compressed opcode=%d payload=%q", op, payload)
+		}
+		if _, err := inflate(compressed, 1); err == nil {
+			t.Fatal("expected inflate size limit error")
+		}
+		<-writes
+	})
+}
+
+func TestConnReadMessageProtocolErrors(t *testing.T) {
+	cases := []struct {
+		name    string
+		first   byte
+		payload []byte
+	}{
+		{name: "reserved opcode", first: 0x80 | 0x03},
+		{name: "unexpected continuation", first: 0x80 | OpcodeContinuation},
+		{name: "fragmented control", first: OpcodePing},
+		{name: "invalid text", first: 0x80 | OpcodeText, payload: []byte{0xff}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			client, server := netPipeConn(t)
+			defer client.Close()
+			defer server.conn.Close()
+			done := make(chan struct{})
+			go func() {
+				_, _, _, _ = readFrame(t, client)
+				close(done)
+			}()
+			go writeRawMaskedFrame(t, client, tc.first, tc.payload)
+			if _, _, err := server.ReadMessage(); err == nil {
+				t.Fatal("expected protocol error")
+			}
+			<-done
+		})
+	}
+}
+
+func netPipeConn(t *testing.T) (net.Conn, *Conn) {
+	t.Helper()
+	client, server := net.Pipe()
+	return client, &Conn{conn: server, reader: bufio.NewReader(server)}
+}
+
+func websocketRequest(key string, subprotocol string) *http.Request {
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.Header.Set("Connection", "Upgrade")
+	req.Header.Set("Upgrade", "websocket")
+	req.Header.Set("Sec-WebSocket-Version", "13")
+	if key != "" {
+		req.Header.Set("Sec-WebSocket-Key", key)
+	}
+	if subprotocol != "" {
+		req.Header.Set("Sec-WebSocket-Protocol", subprotocol)
+	}
+	return req
+}
+
+func writeRawMaskedFrame(t *testing.T, conn net.Conn, first byte, payload []byte) {
+	t.Helper()
+	length := len(payload)
+	if length > 125 {
+		t.Fatalf("raw helper only supports small payloads, got %d", length)
+	}
+	mask := []byte{0xA1, 0xB2, 0xC3, 0xD4}
+	frame := []byte{first, 0x80 | byte(length)}
+	frame = append(frame, mask...)
+	for index, value := range payload {
+		frame = append(frame, value^mask[index%4])
+	}
+	if _, err := conn.Write(frame); err != nil {
+		t.Fatalf("write raw frame: %v", err)
+	}
+}
+
+func writeMaskedFrameOpts(t *testing.T, conn net.Conn, opcode byte, payload []byte, fin bool, rsv1 bool) {
+	t.Helper()
+	first := opcode & 0x0F
+	if fin {
+		first |= 0x80
+	}
+	if rsv1 {
+		first |= 0x40
+	}
+	header := []byte{first}
+	length := len(payload)
+	maskBit := byte(0x80)
+	switch {
+	case length < 126:
+		header = append(header, maskBit|byte(length))
+	case length <= 0xFFFF:
+		header = append(header, maskBit|126, 0, 0)
+		binary.BigEndian.PutUint16(header[len(header)-2:], uint16(length))
+	default:
+		header = append(header, maskBit|127, 0, 0, 0, 0, 0, 0, 0, 0)
+		binary.BigEndian.PutUint64(header[len(header)-8:], uint64(length))
+	}
+	mask := []byte{0xA1, 0xB2, 0xC3, 0xD4}
+	frame := append([]byte{}, header...)
+	frame = append(frame, mask...)
+	masked := make([]byte, length)
+	for i := 0; i < length; i++ {
+		masked[i] = payload[i] ^ mask[i%4]
+	}
+	frame = append(frame, masked...)
+	if _, err := conn.Write(frame); err != nil {
+		t.Fatalf("write frame: %v", err)
+	}
 }

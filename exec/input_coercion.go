@@ -118,8 +118,15 @@ func coerceInputObject(inputType *schema.InputObject, raw any) (any, error) {
 		}
 		out[name] = coerced
 	}
-	if inputType.IsOneOf && len(out) != 1 {
-		return nil, fmt.Errorf("input object %s must specify exactly one field", inputType.Name())
+	if inputType.IsOneOf {
+		if len(out) != 1 {
+			return nil, fmt.Errorf("OneOf input object %s must specify exactly one field", inputType.Name())
+		}
+		for fieldName, value := range out {
+			if value == nil {
+				return nil, fmt.Errorf("OneOf input object %s field %q must not be null", inputType.Name(), fieldName)
+			}
+		}
 	}
 	return out, nil
 }
