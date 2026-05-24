@@ -3,8 +3,9 @@
 # → tag push runs pkg.go.dev warmup below.
 #
 # release-please opens a PR → needs pull-requests (+ usually issues) scopes.
-# If you see «not permitted to create or approve pull requests», fix repo/org
-# Settings (see RELEASING.md § Permissions) or set RELEASE_PLEASE_TOKEN PAT.
+# If you see «not permitted to create or approve pull requests», set the repo to
+# Settings → Actions → General → Workflow permissions: Read and write, and
+# allow Actions to create pull requests — or set RELEASE_PLEASE_TOKEN PAT.
 name: Release
 
 on:
@@ -63,5 +64,15 @@ jobs:
           fi
 
           echo "Warming proxy for ${MODULE}@${VERSION}"
-          curl -fsSL "https://proxy.golang.org/${MODULE}/@v/${VERSION}.info" || \
-            echo "::warning::proxy.golang.org did not return ${MODULE}@${VERSION} yet (it may take a few minutes)"
+          URL="https://proxy.golang.org/${MODULE}/@v/${VERSION}.info"
+          MAX=10
+          INTERVAL=30
+          for i in $(seq 1 "${MAX}"); do
+            if curl -fsSL "$URL" -o /dev/null; then
+              echo "✓ Proxy warmed (${MODULE}@${VERSION}) after ${i} attempt(s)"
+              exit 0
+            fi
+            echo "Attempt ${i}/${MAX}: indexer not ready; sleeping ${INTERVAL}s…"
+            if [[ "${i}" -lt "${MAX}" ]]; then sleep "${INTERVAL}"; fi
+          done
+          echo "::warning::proxy.golang.org still had no .info for ${MODULE}@${VERSION} after retries — the Go proxy can lag newly pushed tags by several minutes; try: go get ${MODULE}@${VERSION}"
