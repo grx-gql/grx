@@ -22,14 +22,13 @@ on:
       - "**/*.go"
   workflow_dispatch:
 
-# Pause automatic GitHub Pages deploys. Set to 'false' or remove to resume.
 env:
-  PAUSE_DOCS_DEPLOY: "true"
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
 
 # Required by actions/deploy-pages. `contents: read` is enough for the
-# checkout, `pages: write` and `id-token: write` are what the official
-# Pages deploy action expects.
+# checkout; `pages: write` and `id-token: write` are what the official
+# Pages deploy action expects. Deploy runs on push to `main` and
+# workflow_dispatch only (pull requests still build without uploading).
 permissions:
   contents: read
   pages: write
@@ -46,8 +45,6 @@ jobs:
   build:
     name: Build site
     runs-on: ubuntu-latest
-    outputs:
-      pause_deploy: ${{ env.PAUSE_DOCS_DEPLOY }}
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -84,14 +81,14 @@ jobs:
           echo "✓ docs/.vitepress/dist looks healthy (${file_count} files)"
 
       - name: Upload Pages artifact
-        if: github.event_name != 'pull_request' && env.PAUSE_DOCS_DEPLOY != 'true'
+        if: github.event_name != 'pull_request'
         uses: actions/upload-pages-artifact@v3
         with:
           path: ./docs/.vitepress/dist
 
   deploy:
     name: Deploy to GitHub Pages
-    if: github.event_name != 'pull_request' && needs.build.outputs.pause_deploy != 'true'
+    if: github.event_name != 'pull_request'
     needs: build
     runs-on: ubuntu-latest
     environment:
