@@ -31,6 +31,7 @@ on:
 # Pause automatic GitHub Pages deploys. Set to 'false' or remove to resume.
 env:
   PAUSE_DOCS_DEPLOY: "true"
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
 
 # Required by actions/deploy-pages. `contents: read` is enough for the
 # checkout, `pages: write` and `id-token: write` are what the official

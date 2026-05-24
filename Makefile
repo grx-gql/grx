@@ -108,12 +108,6 @@ docs-clean: ## Remove the built docs site and node_modules.
 	rm -rf $(DOCS_DIR)/.vitepress/dist $(DOCS_DIR)/.vitepress/cache \
 		$(DOCS_DIR)/node_modules
 
-## ---- GitHub / CI ---------------------------------------------------------
-
-.PHONY: validate-issue-templates
-validate-issue-templates: ## Validate .github/ISSUE_TEMPLATE YAML (stdlib Ruby).
-	ruby .github/scripts/validate_issue_templates.rb
-
 ## ---- Benchmark & profiling ----------------------------------------------
 
 PROFILE_DIR ?= .profiles

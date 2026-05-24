@@ -155,7 +155,7 @@ These are restated from `README.md` because they constrain implementation choice
 
 ## GitHub (issues and CI)
 
-- Issue forms live under `.github/ISSUE_TEMPLATE/`. CI validates them via `.github/workflows/issue-templates.yml` (`make validate-issue-templates` runs the same Ruby check locally).
+- Issue forms live under `.github/ISSUE_TEMPLATE/`.
 - High-level parity gaps are tracked as section issues created from `ROADMAP.md` using `python3 scripts/gh_roadmap_tracking_issues.py` (dry-run) or `... --apply` with the GitHub CLI authenticated. The wrapper `scripts/gh-roadmap-tracking-issues.sh` forwards the same flags.
 
 ## When in Doubt
