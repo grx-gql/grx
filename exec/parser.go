@@ -89,7 +89,6 @@ type token struct {
 type parser struct {
 	tokens       []token
 	index        int
-	vars         map[string]any
 	source       string
 	maxDepth     int // 0 = unlimited
 	variableUses []variableUse
@@ -418,8 +417,7 @@ func (p *parser) parseValue() (any, error) {
 			Name:     name.value,
 			Location: locationForOffset(p.source, current.offset),
 		})
-		value, ok := p.vars[name.value]
-		return variableRef{Name: name.value, Value: value, HasValue: ok}, nil
+		return variableRef{Name: name.value}, nil
 	case tokenBraceOpen:
 		return p.parseObjectLiteral()
 	case tokenBracketOpen:
@@ -472,8 +470,8 @@ func (p *parser) parseListLiteral() ([]any, error) {
 }
 
 // parseVariableDefinitions parses a parenthesised variable definition list,
-// captures default values, and injects them into p.vars for any variable that
-// is not already present. It returns the list of declared variable names.
+// captures defaults without binding request values. Defaults belong to the
+// selected operation, including references inside shared fragments.
 func (p *parser) parseVariableDefinitions() ([]string, map[string]string, map[string]variableDefinition, error) {
 	if err := p.expect(tokenParenOpen); err != nil {
 		return nil, nil, nil, err
@@ -510,12 +508,6 @@ func (p *parser) parseVariableDefinitions() ([]string, map[string]string, map[st
 			definition.DefaultValue, err = p.parseConstValue()
 			if err != nil {
 				return nil, nil, nil, err
-			}
-			if _, exists := p.vars[name.value]; !exists {
-				if p.vars == nil {
-					p.vars = make(map[string]any)
-				}
-				p.vars[name.value] = definition.DefaultValue
 			}
 		}
 		definition.Directives, err = p.parseDirectives()
