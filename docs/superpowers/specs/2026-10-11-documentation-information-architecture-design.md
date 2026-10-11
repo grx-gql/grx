@@ -37,12 +37,20 @@ Contents:
 
 The quickstart remains available without requiring the reader to study the product rationale first.
 
+The product overview must explain the boundary between grx and the host HTTP
+application. grx handles GraphQL schema building, execution, the default
+HTTP transport, optional WebSocket and SSE transports, and GraphQL-specific
+limits and hooks. The host application handles HTTP concerns around the
+returned `http.Handler`, including CORS, authentication middleware, routing,
+TLS, and non-GraphQL endpoints.
+
 ### 2. Concepts
 
 Concept pages explain the model used by all integrations and guides.
 
 Contents:
 
+- What grx handles and what the host application handles.
 - Schema mapping and root resolver types.
 - Resolver methods and arguments.
 - Execution and validation.
@@ -50,6 +58,12 @@ Contents:
 - Plugins and lifecycle hooks.
 - Subscriptions and pub/sub.
 - Runtime architecture.
+
+The HTTP boundary concept must include a CORS example. It must explain that
+grx does not provide a CORS package, show how to wrap the returned handler with
+`rs/cors` for `net/http`, show the equivalent middleware placement for common
+routers, and explain that WebSocket origin checks use
+`websocket.Config.CheckOrigin` separately.
 
 Each concept page should state its prerequisites and link to the next related concept.
 
@@ -82,6 +96,12 @@ Groups:
 - Deployment and migration from other Go GraphQL libraries.
 
 Each guide should define the problem, show the smallest useful implementation, explain production considerations, and link to the relevant reference package.
+
+The CORS guide should begin with the request path through the host server,
+then cover preflight requests, allowed origins, credentials, headers, router
+middleware placement, and the separate WebSocket origin check. It must state
+clearly which behavior comes from grx and which behavior comes from the host
+framework.
 
 ### 5. Examples
 
