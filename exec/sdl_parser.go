@@ -247,9 +247,12 @@ func (p *sdlParser) parseInterfaceDef(description string, isExtend bool) (sdlDef
 	if err != nil {
 		return sdlDef{}, err
 	}
-	fields, err := p.parseFieldDefs()
-	if err != nil {
-		return sdlDef{}, err
+	var fields []sdlFieldDef
+	if !isExtend || p.peek().kind == tokenBraceOpen {
+		fields, err = p.parseFieldDefs()
+		if err != nil {
+			return sdlDef{}, err
+		}
 	}
 	return sdlDef{kind: "interface", isExtend: isExtend, name: nameTok.value, description: description, interfaces: implements, directives: dirs, fields: fields}, nil
 }
@@ -293,6 +296,9 @@ func (p *sdlParser) parseEnumDef(description string, isExtend bool) (sdlDef, err
 	if err != nil {
 		return sdlDef{}, err
 	}
+	if isExtend && p.peek().kind != tokenBraceOpen {
+		return sdlDef{kind: "enum", isExtend: true, name: nameTok.value, directives: dirs}, nil
+	}
 	if _, err := p.expect(tokenBraceOpen); err != nil {
 		return sdlDef{}, err
 	}
@@ -329,9 +335,12 @@ func (p *sdlParser) parseInputDef(description string, isExtend bool) (sdlDef, er
 	if err != nil {
 		return sdlDef{}, err
 	}
-	fields, err := p.parseInputFieldDefs()
-	if err != nil {
-		return sdlDef{}, err
+	var fields []sdlFieldDef
+	if !isExtend || p.peek().kind == tokenBraceOpen {
+		fields, err = p.parseInputFieldDefs()
+		if err != nil {
+			return sdlDef{}, err
+		}
 	}
 	return sdlDef{kind: "input", isExtend: isExtend, name: nameTok.value, description: description, directives: dirs, fields: fields}, nil
 }
@@ -743,21 +752,8 @@ func buildSchemaFromDefs(defs []sdlDef) (*schema.Schema, error) {
 		if !def.isExtend {
 			continue
 		}
-		switch def.kind {
-		case "type":
-			obj, ok := types[def.name].(*schema.Object)
-			if !ok {
-				return nil, fmt.Errorf("cannot extend unknown type %q", def.name)
-			}
-			if err := populateObjectFields(obj, def, types); err != nil {
-				return nil, err
-			}
-		case "input":
-			inputObj, ok := types[def.name].(*schema.InputObject)
-			if !ok {
-				return nil, fmt.Errorf("cannot extend unknown input type %q", def.name)
-			}
-			if err := populateInputFields(inputObj, def, types); err != nil {
+		if def.kind != "schema" {
+			if err := extendSDLType(def, types); err != nil {
 				return nil, err
 			}
 		}
