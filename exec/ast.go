@@ -18,6 +18,7 @@ type directive struct {
 
 // fragmentDef is a named fragment definition from the document.
 type fragmentDef struct {
+	VariableUses  []variableUse
 	Directives    []directive
 	Name          string
 	TypeCondition string
@@ -26,6 +27,7 @@ type fragmentDef struct {
 }
 
 type document struct {
+	VariableUses        []variableUse
 	Directives          []directive
 	VariableDefinitions map[string]variableDefinition
 	Location            core.Location

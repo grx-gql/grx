@@ -9,45 +9,41 @@ import (
 	"github.com/grx-gql/grx/schema"
 )
 
-// ValidateDocument runs GraphQL validation rules on the selected operation.
-// Error messages follow graphql-js conventions.
-func ValidateDocument(s *schema.Schema, bundle documentBundle, op document) []validationError {
+// ValidateDocument validates every operation in the executable document.
+// The selected operation is retained in the signature for executor compatibility.
+func ValidateDocument(s *schema.Schema, bundle documentBundle, _ document) []validationError {
 	if s == nil {
 		return nil
 	}
-
 	var errs []validationError
 	errs = append(errs, validateUniqueOperationNames(bundle)...)
 	errs = append(errs, validateLoneAnonymousOperation(bundle)...)
-	errs = append(errs, validateDefinitionDirectives(s, bundle, op)...)
-	errs = append(errs, validateVariables(bundle, op)...)
-	errs = append(errs, validateVariableDefinitions(s, op)...)
 	errs = append(errs, validateFragmentDefinitions(s, bundle.fragments)...)
-	errs = append(errs, validateDeferStreamLabels(op)...)
-
-	root, rootErr := rootObjectForKind(s, op.Kind)
-	if rootErr != nil {
-		errs = append(errs, newValidationError(core.Location{Line: 1, Column: 1}, "%s", rootErr.Error()))
-		return errs
-	}
-
-	if op.Kind == operationSubscription {
-		errs = append(errs, validateSubscriptionRoot(op)...)
-	}
-
 	usedFragments := make(map[string]bool)
-	errs = append(errs, validateSelections(s, root, op.Selections, op.Fragments, usedFragments, nil, root.Name(), variableScope{Types: op.VariableTypes, Definitions: op.VariableDefinitions})...)
-
-	for name := range op.Fragments {
+	for _, op := range bundle.operations {
+		reachable := reachableFragments(op.Selections, bundle.fragments)
+		for name := range reachable {
+			usedFragments[name] = true
+		}
+		errs = append(errs, validateDefinitionDirectives(s, bundle, op, reachable)...)
+		errs = append(errs, validateVariables(op, bundle.fragments, reachable)...)
+		errs = append(errs, validateVariableDefinitions(s, op)...)
+		errs = append(errs, validateDeferStreamLabels(op)...)
+		root, rootErr := rootObjectForKind(s, op.Kind)
+		if rootErr != nil {
+			errs = append(errs, newValidationError(op.Location, "%s", rootErr.Error()))
+			continue
+		}
+		if op.Kind == operationSubscription {
+			errs = append(errs, validateSubscriptionRoot(op)...)
+		}
+		errs = append(errs, validateSelections(s, root, op.Selections, bundle.fragments, usedFragments, nil, root.Name(), variableScope{Types: op.VariableTypes, Definitions: op.VariableDefinitions})...)
+	}
+	for name, fragment := range bundle.fragments {
 		if !usedFragments[name] {
-			fd := op.Fragments[name]
-			errs = append(errs, newValidationError(
-				locationForOffset(bundle.source, fd.NameOffset),
-				`Fragment "%s" is never used.`, name,
-			))
+			errs = append(errs, newValidationError(locationForOffset(bundle.source, fragment.NameOffset), `Fragment "%s" is never used.`, name))
 		}
 	}
-
 	return errs
 }
 
@@ -354,24 +350,28 @@ func validateArguments(sel selection, field *schema.Field, parentType string, va
 	return errs
 }
 
-func validateVariables(bundle documentBundle, op document) []validationError {
+func validateVariables(op document, fragments map[string]*fragmentDef, reachable map[string]bool) []validationError {
 	declared := make(map[string]bool, len(op.Variables))
-	for _, variable := range op.Variables {
-		declared[variable] = false
+	for _, name := range op.Variables {
+		declared[name] = false
 	}
 	var errs []validationError
-	for _, variable := range bundle.variableUses {
-		if _, ok := declared[variable.Name]; !ok {
-			errs = append(errs, newValidationError(variable.Location,
-				`Variable "$%s" is not defined by operation "%s".`, variable.Name, op.Name))
-			continue
+	checkUses := func(uses []variableUse) {
+		for _, variable := range uses {
+			if _, ok := declared[variable.Name]; !ok {
+				errs = append(errs, newValidationError(variable.Location, `Variable "$%s" is not defined by operation "%s".`, variable.Name, op.Name))
+			} else {
+				declared[variable.Name] = true
+			}
 		}
-		declared[variable.Name] = true
+	}
+	checkUses(op.VariableUses)
+	for name := range reachable {
+		checkUses(fragments[name].VariableUses)
 	}
 	for name, used := range declared {
 		if !used {
-			errs = append(errs, newValidationError(core.Location{Line: 1, Column: 1},
-				`Variable "$%s" is never used in operation "%s".`, name, op.Name))
+			errs = append(errs, newValidationError(op.Location, `Variable "$%s" is never used in operation "%s".`, name, op.Name))
 		}
 	}
 	return errs
