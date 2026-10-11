@@ -32,7 +32,7 @@ body:
     id: go-version
     attributes:
       label: Go version & GOARCH
-      placeholder: "go1.22.5 darwin/arm64"
+      placeholder: "go1.25.0 darwin/arm64"
     validations:
       required: true
 
