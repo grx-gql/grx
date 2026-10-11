@@ -812,10 +812,19 @@ func (e *Executor) completeList(ctx context.Context, itemType schema.Type, value
 					return objs[:index], append(errors, newFieldError(err.Error(), path, core.Location{}))
 				}
 				itemPath := extendAppendedPath(arena, path, index)
+				if raw.Index(index).IsNil() {
+					if !isNullableGraphQLType(itemType) {
+						return nil, append(errors, newFieldError("non-null field resolved to null", itemPath, core.Location{}))
+					}
+					continue
+				}
 				item, itemErrors := e.executeSelectionSet(ctx, gqlObj, raw.Index(index).Interface(), selections, fragments, itemPath)
 				objs[index] = item
 				if len(itemErrors) > 0 {
 					errors = append(errors, itemErrors...)
+					if item == nil && !isNullableGraphQLType(itemType) {
+						return nil, errors
+					}
 				}
 			}
 			return objs, errors
@@ -833,6 +842,9 @@ func (e *Executor) completeList(ctx context.Context, itemType schema.Type, value
 		items[index] = item
 		if len(itemErrors) > 0 {
 			errors = append(errors, itemErrors...)
+			if item == nil && !isNullableGraphQLType(itemType) {
+				return nil, errors
+			}
 		}
 	}
 	return items, errors

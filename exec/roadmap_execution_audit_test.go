@@ -69,3 +69,48 @@ func TestRoadmapNullableChildErrorPreservesRequiredParent(t *testing.T) {
 		t.Fatalf("got %s errors=%+v", got, r.Errors)
 	}
 }
+func TestRoadmapNonNullListElementNullsList(t *testing.T) {
+	s := roadmapAuditSchema(t)
+	s.Query.Fields["values"] = &schema.Field{Name: "values", Type: &schema.List{OfType: &schema.NonNull{OfType: s.Types["String"]}}, Resolver: func(context.Context, schema.ResolveParams) (any, error) { return []any{"ok", nil}, nil }}
+	r := New(s, nil).Execute(context.Background(), core.Request{Query: `{ values ok }`})
+	if got := roadmapAuditJSON(t, r.Data); got != `{"values":null,"ok":"ok"}` {
+		t.Fatalf("null non-null list element must null containing list; got %s, errors=%+v", got, r.Errors)
+	}
+}
+
+func TestRoadmapObjectListFastPathPreservesNullElement(t *testing.T) {
+	s, err := schema.Build(schema.Config{Query: orderedListQuery{}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.Query.Fields["items"].Resolver = func(context.Context, schema.ResolveParams) (any, error) {
+		return []*orderedListRow{nil}, nil
+	}
+	r := New(s, nil).Execute(context.Background(), core.Request{Query: `{ items { name } }`})
+	if len(r.Errors) != 0 || roadmapAuditJSON(t, r.Data) != `{"items":[null]}` {
+		t.Fatalf("nullable nil object list element must remain null without resolver errors; got %s", roadmapAuditJSON(t, r))
+	}
+}
+
+func TestRoadmapNonNullStreamInitialElementNullsList(t *testing.T) {
+	s := roadmapAuditSchema(t)
+	s.Query.Fields["values"] = &schema.Field{Name: "values", Type: &schema.List{OfType: &schema.NonNull{OfType: s.Types["String"]}}, Resolver: func(context.Context, schema.ResolveParams) (any, error) { return []any{nil, "next"}, nil }}
+	initial, patches := New(s, nil).ExecuteIncremental(context.Background(), core.Request{Query: `{ values @stream(initialCount:1) ok }`})
+	if got := roadmapAuditJSON(t, initial.Data); got != `{"values":null,"ok":"ok"}` || len(initial.Errors) != 1 || len(patches) != 0 {
+		t.Fatalf("data=%s errors=%+v patches=%+v", got, initial.Errors, patches)
+	}
+}
+
+func TestRoadmapObjectListNonNullElementBubbles(t *testing.T) {
+	s, err := schema.Build(schema.Config{Query: orderedListQuery{}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	list := s.Query.Fields["items"].Type.(*schema.List)
+	s.Query.Fields["items"].Type = &schema.List{OfType: &schema.NonNull{OfType: list.OfType}}
+	s.Query.Fields["items"].Resolver = func(context.Context, schema.ResolveParams) (any, error) { return []*orderedListRow{nil}, nil }
+	r := New(s, nil).Execute(context.Background(), core.Request{Query: `{ items { name } }`})
+	if got := roadmapAuditJSON(t, r.Data); got != `{"items":null}` || len(r.Errors) != 1 {
+		t.Fatalf("data=%s errors=%+v", got, r.Errors)
+	}
+}
