@@ -1,54 +1,100 @@
 ---
 title: CORS & browsers
-description: Serving GraphQL and GraphiQL from browser origins - grx.Cors plus matching WebSocket origin checks for subscriptions.
+description: Configure browser CORS at the HTTP host layer around a grx GraphQL handler.
 outline: deep
 ---
 
 # CORS & browsers
 
-SPA **GraphQL** traffic combines **`credentials`**, headers like **`Authorization`**, **`OPTIONS` preflight**, and - for subscriptions - WebSocket **`Origin`** checks. That lives in **HTTP middleware** and **`websocket.WebSocketTransport`**, not resolvers alone.
+CORS is HTTP policy, not GraphQL execution. `grx` returns an
+`http.Handler`; configure CORS in the HTTP server or framework that owns that
+handler. This keeps preflight requests, credentials, and non-GraphQL routes in
+one host-level policy.
 
-[`grx.Cors`](https://pkg.go.dev/github.com/grx-gql/grx#Cors) attaches standard CORS middleware and can align with websocket origin policies when transports share configs.
+`grx` does not provide a CORS package. Use the middleware for your HTTP stack.
 
-Minimal pattern:
+## `net/http`
+
+The [`rs/cors`](https://github.com/rs/cors) package wraps any `http.Handler`:
 
 ```go
-package main
-
-import (
-	"log"
-	"net/http"
-
-	"example.com/hello-grx/graph"
-
-	"github.com/grx-gql/grx"
+graphql, err := grx.NewServer(
+	grx.WithSchema(graph.New()),
 )
-
-func main() {
-	srv, err := grx.NewServer(
-		grx.WithSchema(graph.NewSchema()),
-		grx.WithPlaygroundPath("/"),
-		grx.WithMiddleware(grx.Cors(grx.CorsConfig{
-			AllowedOrigins:   []string{"https://app.example.com"},
-			AllowedMethods:   []string{http.MethodPost, http.MethodGet, http.MethodOptions},
-			AllowedHeaders:   []string{"Content-Type", "Authorization"},
-			AllowCredentials: true,
-		})),
-	)
-	if err != nil {
-		log.Fatal(err)
-	}
-	_ = srv
+if err != nil {
+	log.Fatal(err)
 }
+
+handler := cors.New(cors.Options{
+	AllowedOrigins:   []string{"https://app.example.com"},
+	AllowedMethods:   []string{"GET", "POST", "OPTIONS"},
+	AllowedHeaders:   []string{"Content-Type", "Authorization"},
+	AllowCredentials: true,
+}).Handler(graphql)
+
+log.Fatal(http.ListenAndServe(":4000", handler))
 ```
 
-Prefer explicit origins over `*` whenever **`AllowCredentials`** is **`true`** (browser enforced).
+## Fiber
 
-::: tip Companion doc  
-[**Authentication & authorization**](/guides/auth) expands Bearer propagation through middleware before **`executor.Execute`** runs.
+Use Fiber's native CORS middleware and adapt the `net/http` GraphQL handler at
+the route boundary:
 
-:::
+```go
+app := fiber.New()
+app.Use(fibercors.New(fibercors.Config{
+	AllowOrigins:     "https://app.example.com",
+	AllowMethods:     "GET,POST,OPTIONS",
+	AllowHeaders:     "Content-Type, Authorization",
+	AllowCredentials: true,
+}))
+app.All("/graphql", adaptor.HTTPHandler(graphql))
 
-## Related
+log.Fatal(app.Listen(":4000"))
+```
 
-- [**Realtime subscriptions**](/guides/subscriptions)  -  **`websocket.Config.CheckOrigin`** and idle timeouts alongside CORS tuning.
+## Gin
+
+Use Gin's CORS middleware before mounting the adapted GraphQL handler:
+
+```go
+router := gin.New()
+router.Use(gincors.New(gincors.Config{
+	AllowOrigins:     []string{"https://app.example.com"},
+	AllowMethods:     []string{"GET", "POST", "OPTIONS"},
+	AllowHeaders:     []string{"Content-Type", "Authorization"},
+	AllowCredentials: true,
+}))
+router.Any("/graphql", gin.WrapH(graphql))
+
+log.Fatal(router.Run(":4000"))
+```
+
+## Chi
+
+Chi uses ordinary `net/http` middleware, so the same CORS middleware can wrap
+the GraphQL handler or the whole router:
+
+```go
+router := chi.NewRouter()
+router.Use(cors.New(cors.Options{
+	AllowedOrigins:   []string{"https://app.example.com"},
+	AllowedMethods:   []string{"GET", "POST", "OPTIONS"},
+	AllowedHeaders:   []string{"Content-Type", "Authorization"},
+	AllowCredentials: true,
+}).Handler)
+router.Mount("/graphql", graphql)
+
+log.Fatal(http.ListenAndServe(":4000", router))
+```
+
+## Credentials and subscriptions
+
+Use explicit origins when credentials are enabled. Browsers reject credentialed
+requests with `Access-Control-Allow-Origin: *`.
+
+HTTP CORS does not replace WebSocket origin checks. Configure
+`websocket.Config.CheckOrigin` separately for WebSocket subscriptions.
+
+See [HTTP middleware](/guides/middleware) for authentication, request IDs,
+and other host-level middleware.

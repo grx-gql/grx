@@ -5,10 +5,8 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
-	"time"
 
 	"github.com/grx-gql/grx"
-	"github.com/grx-gql/grx/cors"
 	"github.com/grx-gql/grx/examples/subscriptions/graph"
 	"github.com/grx-gql/grx/plugins/logger"
 	"github.com/grx-gql/grx/pubsub/memory"
@@ -38,15 +36,6 @@ func main() {
 		}))),
 		grx.WithPlugins(loggerPlugin),
 		grx.WithPlaygroundPath(playgroundPath),
-		grx.WithMiddleware(cors.New(cors.Config{
-			AllowedOrigins: []string{
-				"http://localhost:" + port,
-				"http://127.0.0.1:" + port,
-			},
-			AllowedMethods: []string{http.MethodGet, http.MethodPost, http.MethodOptions},
-			AllowedHeaders: []string{"Content-Type", "Authorization"},
-			MaxAge:         10 * time.Minute,
-		})),
 		grx.WithTransports(
 			websocket.New(),
 			sse.New(),

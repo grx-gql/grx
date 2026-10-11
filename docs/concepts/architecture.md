@@ -86,7 +86,7 @@ Pick the cheapest layer  -  don’t put HTTP concerns inside resolvers unless yo
 
 | Need | Prefer | Nuance |
 | ---- | ------ | ------ |
-| CORS, auth headers, JWT on `ctx` | [`WithMiddleware`](/reference/grx/) wrapping the final [`http.Handler`](https://pkg.go.dev/net/http#Handler) | Runs before transports; propagate with `r.WithContext`. |
+| CORS, auth headers, JWT on `ctx` | Host-router middleware wrapping the final [`http.Handler`](https://pkg.go.dev/net/http#Handler) | Runs before transports; propagate with `r.WithContext`. |
 | New wire format or bespoke gateway | Implement [`core.Transport`](/reference/core/) | **`Match`** must stay cheap & side‑effect‑free  -  see [Custom transport](/guides/custom-transport). |
 | Lifecycle logging, quotas, coarse deny | [`WithPlugins`](/reference/grx/) implementing [`plugins.Plugin`](/reference/plugins/)  -  [Hooks](/concepts/plugins) | `RequestStart` can replace `ctx`; hooks can abort before expensive work. |
 | “No mutations anonymous” blanket rule | [`WithOperationAuthorizer`](/reference/grx/)  -  also [Authentication guide](/guides/auth) | Evaluated during document validation (alongside trusted-doc / rate‑limit knobs on server config when enabled). |

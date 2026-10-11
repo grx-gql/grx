@@ -28,5 +28,9 @@ jobs:
         working-directory: pubsub/redis
         run: go test -race -coverprofile=/tmp/grx-redis-coverage.out ./...
 
+      - name: Test external CORS integrations
+        working-directory: integration/cors
+        run: go test -race ./...
+
       - name: Coverage
         run: env COVER_MIN=90 ./scripts/cover-lib.sh

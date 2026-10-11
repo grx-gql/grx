@@ -219,28 +219,9 @@ shows the full pattern with typed context helpers.
 
 ## Compose CORS
 
-Browser CORS belongs outside GraphQL execution. Use
-[`grx.Cors`](https://pkg.go.dev/github.com/grx-gql/grx#Cors) as normal
-middleware:
-
-```go
-srv, err := grx.NewServer(
-	grx.WithSchema(graph.NewSchema()),
-	grx.WithMiddleware(grx.Cors(grx.CorsConfig{
-		AllowedOrigins:   []string{"https://app.example.com"},
-		AllowedMethods:   []string{http.MethodGet, http.MethodPost, http.MethodOptions},
-		AllowedHeaders:   []string{"Content-Type", "Authorization"},
-		AllowCredentials: true,
-	})),
-)
-```
-
-Keep credentialed browser deployments on explicit origins. `AllowedOrigins:
-[]string{"*"}` with `AllowCredentials: true` fails closed because reflecting
-arbitrary origins with credentials is unsafe.
-
-For subscriptions, pair HTTP CORS with
-[`websocket.Config.CheckOrigin`](/guides/subscriptions#origin-policy-checkorigin).
+Browser CORS belongs outside GraphQL execution. Wrap the `grx.Server` with the
+CORS middleware provided by your HTTP stack. See [CORS & browsers](/guides/cors-browsers)
+for `net/http`, Fiber, Gin, and Chi examples.
 
 ## Wrap from a router
 
@@ -287,11 +268,10 @@ whatever reaches `grx.Server` after `StripPrefix`. The router guides for
 Use order to keep cheap rejection and context setup before expensive work:
 
 ```go
-grx.WithMiddleware(
+	grx.WithMiddleware(
 	grx.RequestID("X-Request-Id"),
 	ipAllowlist,
 	bearerAuth,
-	grx.Cors(corsConfig),
 )
 ```
 

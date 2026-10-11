@@ -14,11 +14,6 @@
 //	    grx.WithPlugins(loggerPlugin),
 //	    grx.WithPlaygroundPath("/"),
 //	    grx.WithSubscriptionPath("/graphql/ws"),
-//	    grx.WithMiddleware(cors.New(cors.Config{
-//	        AllowedOrigins: []string{"https://app.example.com"},
-//	        AllowedMethods: []string{http.MethodGet, http.MethodPost, http.MethodOptions},
-//	        AllowedHeaders: []string{"Content-Type", "Authorization"},
-//	    })),
 //	    grx.WithTransports(
 //	        websocket.New(),
 //	        sse.New(),
@@ -33,7 +28,6 @@ import (
 	"time"
 
 	"github.com/grx-gql/grx/core"
-	"github.com/grx-gql/grx/cors"
 	"github.com/grx-gql/grx/exec"
 	"github.com/grx-gql/grx/middlewares"
 	"github.com/grx-gql/grx/plugins"
@@ -212,14 +206,6 @@ func WithSchemaSDLPath(path string) Option {
 	return func(c *server.Config) {
 		c.SchemaSDLPath = path
 	}
-}
-
-// CorsConfig configures [Cors].
-type CorsConfig = cors.Config
-
-// Cors returns middleware that handles HTTP CORS and WebSocket Origin checks.
-func Cors(config CorsConfig) Middleware {
-	return Middleware(cors.New(config))
 }
 
 // RequestID returns middleware that propagates a request ID through
