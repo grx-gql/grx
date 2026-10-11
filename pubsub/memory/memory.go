@@ -21,16 +21,16 @@ type Config struct {
 
 const defaultBuffer = 16
 
-// inMemoryPubSub is a single-process [pubsub.PubSub]. Messages are delivered to
-// local subscribers without serialization. [inMemoryPubSub.Publish] forwards the
+// memoryPubSub is a single-process [pubsub.PubSub]. Messages are delivered to
+// local subscribers without serialization. [memoryPubSub.Publish] forwards the
 // payload slice without copying; callers and subscribers must honour the
 // [pubsub.Message] ownership rules. This is the fastest backend and the
 // right default for development, tests, and single-replica deployments.
 // Swap in [github.com/grx-gql/grx/pubsub/redis] (or any other [pubsub.PubSub]
 // implementation) to fan messages across replicas.
 //
-// inMemoryPubSub is safe for concurrent use.
-type inMemoryPubSub struct {
+// memoryPubSub is safe for concurrent use.
+type memoryPubSub struct {
 	buffer int
 
 	mu     sync.RWMutex
@@ -46,10 +46,10 @@ type memorySub struct {
 	closeOnce sync.Once
 }
 
-// New returns a [inMemoryPubSub] ready for use. Pass an optional [Config] to
+// New returns a [memoryPubSub] ready for use. Pass an optional [Config] to
 // override the per-subscriber buffer size; only the first config is
 // honoured so callers can use New() with no arguments.
-func New(cfgs ...Config) *inMemoryPubSub {
+func New(cfgs ...Config) *memoryPubSub {
 	cfg := Config{}
 	if len(cfgs) > 0 {
 		cfg = cfgs[0]
@@ -57,7 +57,7 @@ func New(cfgs ...Config) *inMemoryPubSub {
 	if cfg.Buffer <= 0 {
 		cfg.Buffer = defaultBuffer
 	}
-	return &inMemoryPubSub{
+	return &memoryPubSub{
 		buffer: cfg.Buffer,
 		subs:   map[string]map[uint64]*memorySub{},
 	}
@@ -66,7 +66,7 @@ func New(cfgs ...Config) *inMemoryPubSub {
 // Publish delivers payload to every active subscriber of topic. Slow
 // subscribers whose buffer is full are skipped rather than blocking
 // the publisher.
-func (m *inMemoryPubSub) Publish(_ context.Context, topic string, payload []byte) error {
+func (m *memoryPubSub) Publish(_ context.Context, topic string, payload []byte) error {
 	m.mu.RLock()
 	if m.closed {
 		m.mu.RUnlock()
@@ -90,8 +90,8 @@ func (m *inMemoryPubSub) Publish(_ context.Context, topic string, payload []byte
 }
 
 // Subscribe registers a consumer on topic until ctx is cancelled or
-// [inMemoryPubSub.Close] is called.
-func (m *inMemoryPubSub) Subscribe(ctx context.Context, topic string) (<-chan pubsub.Message, error) {
+// [memoryPubSub.Close] is called.
+func (m *memoryPubSub) Subscribe(ctx context.Context, topic string) (<-chan pubsub.Message, error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -121,7 +121,7 @@ func (m *inMemoryPubSub) Subscribe(ctx context.Context, topic string) (<-chan pu
 	return sub.ch, nil
 }
 
-func (m *inMemoryPubSub) unsubscribe(topic string, id uint64, sub *memorySub) {
+func (m *memoryPubSub) unsubscribe(topic string, id uint64, sub *memorySub) {
 	m.mu.Lock()
 	if subs, ok := m.subs[topic]; ok {
 		if existing, ok := subs[id]; ok && existing == sub {
@@ -140,7 +140,7 @@ func (m *inMemoryPubSub) unsubscribe(topic string, id uint64, sub *memorySub) {
 
 // Close cancels every active subscription and refuses further
 // Publish/Subscribe calls.
-func (m *inMemoryPubSub) Close() error {
+func (m *memoryPubSub) Close() error {
 	m.mu.Lock()
 	if m.closed {
 		m.mu.Unlock()
@@ -171,4 +171,4 @@ func (m *inMemoryPubSub) Close() error {
 	return nil
 }
 
-var _ pubsub.PubSub = (*inMemoryPubSub)(nil)
+var _ pubsub.PubSub = (*memoryPubSub)(nil)
