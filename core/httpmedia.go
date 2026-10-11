@@ -84,10 +84,21 @@ func NegotiateResponseContentType(accept []string) (string, bool) {
 
 func parseAcceptCandidate(part string) (acceptCandidate, bool) {
 	part = strings.TrimSpace(part)
+	media, parameters, hasParameters := strings.Cut(part, ";")
+	media = strings.TrimSpace(media)
 	for _, mediaType := range [...]string{MediaTypeGraphQLResponse, MediaTypeJSON, "application/*", "*/*"} {
-		if len(part) == len(mediaType) && strings.EqualFold(part, mediaType) {
+		if len(media) != len(mediaType) || !strings.EqualFold(media, mediaType) {
+			continue
+		}
+		if !hasParameters {
 			return acceptCandidate{mediaType: mediaType, quality: 1}, true
 		}
+		if raw, ok := strings.CutPrefix(strings.TrimSpace(parameters), "q="); ok {
+			if quality, err := strconv.ParseFloat(raw, 64); err == nil && quality >= 0 && quality <= 1 {
+				return acceptCandidate{mediaType: mediaType, quality: quality}, true
+			}
+		}
+		break
 	}
 	mediaType, params, err := mime.ParseMediaType(part)
 	if err != nil {
