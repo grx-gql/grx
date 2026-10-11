@@ -175,8 +175,8 @@ func coerceScalarInput(typeName string, raw any) (any, error) {
 		}
 		return nil, fmt.Errorf("expected Boolean, got %T", raw)
 	case "String":
-		if value, ok := raw.(string); ok {
-			return value, nil
+		if _, ok := raw.(string); ok {
+			return raw, nil
 		}
 		return nil, fmt.Errorf("expected String, got %T", raw)
 	case "ID":
