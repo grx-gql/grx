@@ -7,7 +7,7 @@ require (
 	github.com/gin-gonic/gin v1.10.1
 	github.com/go-chi/chi/v5 v5.2.1
 	github.com/gofiber/adaptor/v2 v2.2.1
-	github.com/gofiber/fiber/v2 v2.52.6
+	github.com/gofiber/fiber/v2 v2.52.15
 	github.com/grx-gql/grx v0.0.0-00010101000000-000000000000
 	github.com/rs/cors v1.11.1
 )
