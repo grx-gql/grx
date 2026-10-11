@@ -413,49 +413,85 @@ type incrementalChunk struct {
 // payload is sent first, followed by one part per deferred/streamed payload, and
 // finally the closing boundary.
 func (t *Transport) writeIncremental(w nethttp.ResponseWriter, r *nethttp.Request, ie core.IncrementalExecutor, req core.Request) {
-	initial, payloads := ie.ExecuteIncremental(r.Context(), req)
-
-	w.Header().Set("Content-Type", `multipart/mixed; boundary="`+incrementalBoundary+`"; deferSpec=20220824`)
-	w.WriteHeader(nethttp.StatusOK)
-	flusher, _ := w.(nethttp.Flusher)
-
-	initialJSON, err := json.Marshal(initial)
-	if err != nil {
-		return
-	}
-	writeMultipartPart(w, initialJSON)
-	if flusher != nil {
-		flusher.Flush()
-	}
-
-	for i, payload := range payloads {
-		chunk := incrementalChunk{
-			Incremental: []core.IncrementalPayload{payload},
-			HasNext:     i < len(payloads)-1,
-		}
-		body, err := json.Marshal(chunk)
+	started := false
+	emitInitial := func(initial core.Response) error {
+		initialJSON, err := json.Marshal(initial)
 		if err != nil {
+			return err
+		}
+		status := responseStatus(core.MediaTypeGraphQLResponse, initial)
+		if status != nethttp.StatusOK {
+			if responseType, accepted := core.NegotiateResponseContentType(r.Header.Values("Accept")); accepted {
+				t.writeGraphQLPayload(w, r, responseStatus(responseType, initial), responseType, initial)
+				return nil
+			}
+		}
+		w.Header().Set("Content-Type", `multipart/mixed; boundary="`+incrementalBoundary+`"; deferSpec=20220824`)
+		w.WriteHeader(status)
+		started = true
+		return writeMultipartPart(w, initialJSON)
+	}
+	emitPatch := func(payload core.IncrementalPayload, hasNext bool) error {
+		body, err := json.Marshal(incrementalChunk{Incremental: []core.IncrementalPayload{payload}, HasNext: hasNext})
+		if err != nil {
+			return err
+		}
+		return writeMultipartPart(w, body)
+	}
+	if streaming, ok := ie.(core.IncrementalStreamExecutor); ok {
+		if err := streaming.ExecuteIncrementalStream(r.Context(), req, emitInitial, emitPatch); err != nil {
 			return
 		}
-		writeMultipartPart(w, body)
-		if flusher != nil {
-			flusher.Flush()
+	} else {
+		initial, payloads := ie.ExecuteIncremental(r.Context(), req)
+		if err := r.Context().Err(); err != nil {
+			return
+		}
+		if err := emitInitial(initial); err != nil {
+			return
+		}
+		for i, payload := range payloads {
+			if err := r.Context().Err(); err != nil {
+				return
+			}
+			if err := emitPatch(payload, i < len(payloads)-1); err != nil {
+				return
+			}
 		}
 	}
-
-	_, _ = w.Write([]byte("\r\n--" + incrementalBoundary + "--\r\n"))
-	if flusher != nil {
-		flusher.Flush()
+	if !started || r.Context().Err() != nil {
+		return
 	}
+	if _, err := io.WriteString(w, "\r\n--"+incrementalBoundary+"--\r\n"); err != nil {
+		return
+	}
+	_ = flushMultipart(w)
 }
 
-func writeMultipartPart(w nethttp.ResponseWriter, body []byte) {
+func writeMultipartPart(w nethttp.ResponseWriter, body []byte) error {
 	var b bytes.Buffer
 	b.WriteString("\r\n--")
 	b.WriteString(incrementalBoundary)
 	b.WriteString("\r\nContent-Type: application/json; charset=utf-8\r\n\r\n")
 	b.Write(body)
-	_, _ = w.Write(b.Bytes())
+	n, err := w.Write(b.Bytes())
+	if err != nil {
+		return err
+	}
+	if n != b.Len() {
+		return io.ErrShortWrite
+	}
+	return flushMultipart(w)
+}
+
+func flushMultipart(w nethttp.ResponseWriter) error {
+	if flusher, ok := w.(interface{ FlushError() error }); ok {
+		return flusher.FlushError()
+	}
+	if flusher, ok := w.(nethttp.Flusher); ok {
+		flusher.Flush()
+	}
+	return nil
 }
 
 func limitRequestSize(w nethttp.ResponseWriter, r *nethttp.Request, max int64) error {
