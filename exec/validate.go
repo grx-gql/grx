@@ -256,6 +256,7 @@ func validateField(
 
 	fieldName := sel.Name
 	if fieldName == "__typename" {
+		errs = append(errs, validateArguments(sel, &schema.Field{}, parent.Name(), variableTypes)...)
 		if len(sel.Selections) > 0 {
 			errs = append(errs, newValidationError(sel.Location,
 				`Field "%s" must not have a selection since type "String" has no subfields.`, sel.responseKey()))
@@ -473,7 +474,19 @@ func validateDirectives(sel selection, location string) []validationError {
 	return errs
 }
 
+var executableDirectiveArguments = map[string]map[string]bool{
+	"skip":    {"if": true},
+	"include": {"if": true},
+	"defer":   {"if": true, "label": true},
+	"stream":  {"if": true, "label": true, "initialCount": true},
+}
+
 func validateDirectiveArguments(loc core.Location, d directive) []validationError {
+	for name := range d.Args {
+		if !executableDirectiveArguments[d.Name][name] {
+			return []validationError{newValidationError(loc, `Unknown argument "%s" on directive "@%s".`, name, d.Name)}
+		}
+	}
 	switch d.Name {
 	case "skip", "include":
 		raw, ok := d.Args["if"]
