@@ -6,6 +6,10 @@ outline: deep
 
 # Testing with the HTTP client
 
+Use this guide for tests that should match production behavior. Use direct
+executor tests for focused schema and execution cases, then use an HTTP test
+for routing, middleware, transports, and serialization.
+
 The recommended way to test a **`grx` HTTP surface** “for real” is to stand up the same **`http.Handler`** you ship (`grx.NewServer` / **`server.New`**) behind [**`httptest.Server`**](https://pkg.go.dev/net/http/httptest#NewServer) and drive it with **`github.com/grx-gql/grx/client`**.
 
 That path matches browsers and **`curl`** more closely than calling **`exec.Executor`** directly, so you validate routing, transports, middleware, **`Content-Type` / `Accept`**, and serialization end-to-end.

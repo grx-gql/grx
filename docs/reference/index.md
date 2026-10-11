@@ -6,10 +6,14 @@ outline: [2, 3]
 
 # API Reference
 
-This section is generated from the Go doc comments in the grx module by
-[`gomarkdoc`](https://github.com/princjef/gomarkdoc) and rebuilt on every push
-to `main`. If something reads wrong here, update the doc comment on the symbol
-in the source tree and regenerate.
+Use this section when you already know which package or symbol you need. It
+lists the public Go API and links each package to its detailed reference page.
+For explanations and complete tasks, start with [Run your first
+server](/getting-started/) or choose a topic from [Why grx](/concepts/why-grx).
+
+The package pages are generated from Go doc comments. If a symbol description
+is incorrect, update the comment in the source tree and regenerate the
+reference pages.
 
 ## Packages
 
@@ -34,5 +38,6 @@ in the source tree and regenerate.
 For the canonical, always-up-to-date reference rendered exactly the way
 the rest of the Go ecosystem renders it, see
 [**pkg.go.dev**](https://pkg.go.dev/github.com/grx-gql/grx). The
-content here is the same source comments  -  this site just embeds them
-inside the rest of the documentation so navigation stays in one place.
+content here comes from the same source comments. This site places those
+comments inside the rest of the grx documentation so navigation stays in one
+place.

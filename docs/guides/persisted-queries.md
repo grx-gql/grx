@@ -6,6 +6,10 @@ outline: deep
 
 # Persisted queries (Automatic Persisted Queries, APQ)
 
+Use persisted queries when you want a known query corpus, smaller repeat
+requests, or tighter control over public GraphQL operations. They reduce
+payload variance but do not replace authorization or rate limiting.
+
 Clients send **`extensions.persistedQuery`** carrying a **`sha256Hash`** digest; servers look up **`hash → GraphQL query text`** and execute as if the full document shipped.
 
 ## Quick wiring with **`grx.NewServer`**
@@ -50,4 +54,6 @@ Treat APQ alongside **timeouts**, **`MaxHTTPRequestBytes`**, and **`WithDisableI
 ## See also
 
 - **[Limits  -  persisted & trusted corpus](/guides/request-limits#persisted-trusted-corpus)**
-- Roadmap ✅ automatic persisted queries in **[Roadmap](/roadmap)**
+- Automatic persisted query negotiation is not part of the current persisted
+  query guide. Use persisted and trusted documents when the server can define
+  the allowed query corpus.

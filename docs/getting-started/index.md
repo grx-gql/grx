@@ -1,52 +1,43 @@
 ---
-title: Get started
-description: Minimal GraphQL servers in plain Go - or mounted next to Chi, Gin, Echo, Fiber, and the standard library mux.
+title: Run your first server
+description: Build and run a small GraphQL server in Go with grx.
 outline: deep
 ---
 
-# Get started
+# Run your first server
 
-::: tip Reading order  
-1. New to **grx**? Skim **[What grx is](/concepts/what-is-grx)** once so advertised features (**HTTP**, subscriptions, authorizers…) map cleanly to packages.  
-2. Scan **[Define your schema](/concepts/schema-basics)** so the **`gql` tags** beside each field slot into mental model quickly.  
-3. Copy the snippets under [**Quick start**](#quick-start), then run `go run .`.  
-4. Background reading - [**How GraphQL backends work**](/guides/graphql-backend-essentials).  
-5. Harden and ship - [**Security**](/guides/production-security), [**Introspection**](/guides/introspection), [**Limits**](/guides/request-limits), then **[Deployment](/guides/deployment)** (Docker, reverse proxies, Kubernetes) when you leave localhost.
+By the end of this page you will have a Go GraphQL server running on
+`http://localhost:4000`.
 
-:::
+You will define a schema with Go types, build a grx server, run it with
+`net/http`, and send one query. Framework integrations come after this page.
 
-**New here?** **[What grx is](/concepts/what-is-grx)** inventories the bundled surface (queries/mutations/subscriptions over HTTP/WebSocket/SSE, plugins, limits, transports). Short version:
+## What you will build
 
-> Declare types and resolver methods once, attach them to **`Query`**, **`Mutation`**, and **`Subscription`** (optional); the runtime materializes your executable GraphQL schema without obligatory SDL codegen or parallel handwritten type registers.
+The request flow is:
 
-::: tip Audience  
-Comfortable maintaining Go services? Jump to [**Quick Start**](#quick-start), paste the **`graph`** package, open the framework recipe you ship with (**[Chi](./chi)** · **[Gin](./gin)** · **[Echo](./echo)** · **[Fiber](./fiber)**), and return to [**Define your schema**](/concepts/schema-basics) when you graduate past the tutorial snippets. Already productive with GraphQL elsewhere? skim the wording here for how structs replace schema files inside this toolchain.  
-:::
+1. `net/http` receives the request.
+2. The grx handler selects the HTTP transport.
+3. grx parses and validates the GraphQL document.
+4. The executor calls the `Query` resolver.
+5. grx writes a JSON response.
 
-## Quick start {#quick-start}
+This is the default path for queries and mutations. Subscriptions add a
+WebSocket or SSE transport later.
+
+## 1. Create the module
 
 ```bash
-mkdir hello-grx && cd hello-grx
+mkdir hello-grx
+cd hello-grx
 go mod init example.com/hello-grx
 go get github.com/grx-gql/grx@latest
+mkdir graph
 ```
 
-Next: add **`graph/schema.go`** (below), **`main.go`**, **`go run .`**. Prefer a clone-and-run checklist? **`examples/basic/`** stays the quickest mirror of this lesson.
+## 2. Define the schema
 
----
-
-## Prerequisites
-
-- Go **1.25 or newer**
-- Terminal + editor
-
----
-
-## Minimal schema {#minimal-schema}
-
-Exported structs describe GraphQL objects. Methods on **`Query`** become top‑level **`query`** fields (`User` ⇒ GraphQL **`user`**). **`gql:"..."`** maps wire names, nullability, and tags so Go stays idiomatic.
-
-Create **`graph/schema.go`**:
+Create `graph/schema.go`:
 
 ```go
 package graph
@@ -77,60 +68,77 @@ func Schema() schema.Config {
 }
 ```
 
-<details>
-<summary><strong>No standalone GraphQL SDL file?</strong></summary>
+`Query` is the required root. Its exported methods become top-level query
+fields. The `User` method becomes the GraphQL field `user`.
 
-Many teams ship faster when structs author the canonical contract beside resolvers; SDL appears through introspection, docs, or export tooling whenever someone downstream needs text.
+The `gql` tags make the public contract explicit. Here they mark `id` and
+`name` as non-null and define the argument name as `id`.
 
-</details>
+Read [Define your schema](/concepts/schema-basics) for objects, inputs, lists,
+custom scalars, and root composition.
 
----
+## 3. Build the server
 
-## Choose your framework {#pick-a-framework}
+Create `main.go`:
 
-[**`grx.NewServer**](/reference/grx/) returns **`http.Handler`.** Decide how URLs reach that handler:
+```go
+package main
 
-| Path | Typical use-case |
-| --- | --- |
-| [**Basic · `net/http`**](./basic-http) | Dedicated port, simplest mental model (`GET /` playground + `POST /graphql`). |
-| [**`net/http` ServeMux**](./servemux) | Embed GraphQL beside REST probes on one listener. |
-| [**Chi**](./chi) | Composable routers, lightweight middleware stacks. |
-| [**Gin**](./gin) | High‑level HTTP API ergonomics (`gin.WrapH`). |
-| [**Echo**](./echo) | Minimal surface area with first-party `WrapHandler` helpers. |
-| [**Fiber**](./fiber) | `fasthttp` stack - bridge through Fibre’s adaptor to reach `ServeHTTP`. |
+import (
+	"log"
+	"net/http"
 
-Every integration below shares:
+	"example.com/hello-grx/graph"
+	"github.com/grx-gql/grx"
+)
 
-1. **`WithPlaygroundPath("/playground")` + `WithGraphQLPath("/query")`**
-2. **`http.StripPrefix("/api", gql)` so external URLs look like **`/api/playground`** · **`POST /api/query`** while internals stay `/playground`, `/query`.  
-   Dedicated listeners keep defaults **`/`**, **`POST /graphql`**.
+func main() {
+	server, err := grx.NewServer(
+		grx.WithSchema(graph.Schema()),
+		grx.WithPlaygroundPath("/"),
+	)
+	if err != nil {
+		log.Fatal(err)
+	}
 
-Authenticate, trace, throttle, inject metadata by wrapping **`http.Handler`** middleware around **`delegated`**.
+	log.Println("GraphiQL: http://localhost:4000/")
+	log.Println("GraphQL: POST http://localhost:4000/graphql")
+	log.Fatal(http.ListenAndServe(":4000", server))
+}
+```
 
-::: tip Dependencies  
-Install each router beside grx - for example **`go get github.com/go-chi/chi/v5`**, **`github.com/gin-gonic/gin`**, **`github.com/labstack/echo/v4`**, **`github.com/gofiber/fiber/v2`**, **`github.com/gofiber/adaptor/v2`**.  
-:::
+Run it:
 
----
+```bash
+go run .
+```
 
-## Try the introspection-ready query {#try-query}
+Open `http://localhost:4000/` and run:
 
 ```graphql
 {
-  user(id: "1") {
+  user(id: "user_1") {
     id
     name
   }
 }
 ```
 
-Run it inside GraphiQL once your chosen guide prints the playground URL.
+## What grx owns
 
----
+grx builds and executes the GraphQL schema and provides the GraphQL
+transports. Your application still owns routing, CORS, authentication
+middleware, TLS, databases, and deployment.
 
-## What's next {#whats-next}
+Read [Runtime boundaries](/concepts/runtime-boundaries) before adding those
+concerns to a production service.
 
-- [**Define your schema**](/concepts/schema-basics)  -  lists, enums, unions, inputs.
-- [**Organize your code**](/concepts/schema-mapping)  -  multi-file schemas without registrar glue.
-- [**Queries & mutations**](/guides/query-mutation-server) · [**Subscriptions**](/guides/subscriptions)
-- [**How it fits together**](/concepts/architecture) · [**Migrate**](/guides/migrate/)
+## Next steps
+
+- [Why choose grx](/concepts/why-grx)
+- [Define your schema](/concepts/schema-basics)
+- [Organize your code](/concepts/schema-mapping)
+- [Choose an HTTP integration](/getting-started/basic-http)
+- [HTTP, WebSocket, and SSE](/concepts/transports)
+- [Authentication and authorization](/guides/auth)
+- [Deployment and scaling](/guides/deployment-and-scaling)

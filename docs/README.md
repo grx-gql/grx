@@ -27,7 +27,7 @@ bun run preview
 
 ## Layout
 
-The sidebar is grouped for readers: **Learn** (first-time path), **Guides** (task walkthroughs), **Internals** (runtime detail), **Project** (benchmarks, roadmap, plus an outbound GitHub link for the changelog), then **API reference** (generated package docs).
+The sidebar is grouped for readers: **Start here**, **Concepts**, **Integrations**, **Guides**, **Examples**, **API reference**, and **Under the hood**.
 
 ```
 docs/
@@ -39,27 +39,18 @@ docs/
 ├── package.json            # bun deps + scripts
 ├── public/                 # static assets (favicon, hero image, …)
 ├── index.md                # landing (layout: home)
-├── getting-started.md
+├── getting-started/          # first server and router integrations
 ├── concepts/               # learn + internals topics
 ├── guides/                 # how-to walkthroughs
 ├── reference/              # API reference (hand-maintained + mirrored)
 ├── benchmarks.md
-├── roadmap.md              # generated  -  see below
 └── README.md               # this file
 ```
 
 ## Auto-generated content
 
-**`docs/roadmap.md`** is mirrored from repo **`ROADMAP.md`**. **`CHANGELOG.md`** is **not** copied into **`docs/`**; the sidebar links to **[`CHANGELOG.md` on GitHub](https://github.com/grx-gql/grx/blob/main/CHANGELOG.md)**.
-
-**Do not edit `roadmap.md` directly** in this tree — it is overwritten whenever you run:
-
-```bash
-make docs-content
-```
-
-`docs-dev` and `docs-build` already depend on `docs-content`, so **`docs/roadmap.md`**
-stays fresh when you serve or build the site.
+There are currently no generated content pages. **`CHANGELOG.md`** is not
+copied into **`docs/`**; the sidebar links to **[`CHANGELOG.md` on GitHub](https://github.com/grx-gql/grx/blob/main/CHANGELOG.md)**.
 
 ## Deployment
 
@@ -72,7 +63,7 @@ including) the deploy so broken builds are caught at review time.
 1. Checks out the repo with full history (VitePress `lastUpdated` reads git).
 2. Sets up Node and Bun (pinned in the workflow).
 3. `bun install --frozen-lockfile` in `docs/` (uses `docs/bun.lock`).
-4. `make docs-content` regenerates **`docs/roadmap.md`** from **`ROADMAP.md`**.
+4. `make docs-content` runs the repository's derived-content step.
 5. `bun run build` → `docs/.vitepress/dist`.
 6. Verifies `docs/.vitepress/dist/index.html` exists before uploading.
 7. Uploads `docs/.vitepress/dist` as a Pages artifact (skipped on PRs).
@@ -97,8 +88,7 @@ available via **Actions → Docs → Run workflow**.
 The workflow runs when one of these paths changes:
 
 - `docs/**`
-- `scripts/sync-roadmap.sh`
-- `README.md`, `ROADMAP.md`
+- `README.md`
 - `Makefile`
 - `.github/workflows/docs.yml`
 - `**/*.go` (so doc-comment changes are picked up for future API reference tooling)

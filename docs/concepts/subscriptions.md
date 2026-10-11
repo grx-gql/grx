@@ -10,6 +10,10 @@ Subscriptions in grx are first-class. Resolvers return a Go channel; the
 executor turns each value emitted into a normal field-execution pass and
 the registered transport pushes the result to the client.
 
+Read [HTTP, WebSocket, and SSE](/concepts/transports) for transport setup and
+[Events between resolvers](/concepts/pubsub) when several publishers or
+service replicas must share events.
+
 ## Resolver shape
 
 ```go

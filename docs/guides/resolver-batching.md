@@ -10,7 +10,7 @@ GraphQL invokes resolvers independently. A query like **`users { posts { title }
 
 ## What grx provides today
 
-**No first-class batch loader hook** sits inside **`exec`** yet (**[Roadmap](/roadmap)** tracks DataLoader-style support). Until it ships:
+**No first-class batch loader hook** sits inside **`exec`** yet. Until it ships:
 
 - Implement **repository batch APIs** keyed per HTTP request (**`context`‑scoped** maps, OSS Go DataLoader-style helpers).
 - Prefer **`IN`/`JOIN`** preloads where query shapes repeat.

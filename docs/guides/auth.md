@@ -6,6 +6,10 @@ outline: deep
 
 # Authentication & authorization
 
+Use this guide when the application must identify a caller and restrict
+GraphQL operations or fields. Before starting, read [Runtime boundaries](/concepts/runtime-boundaries)
+and [HTTP middleware](/guides/middleware).
+
 Pair this guide with **[Security](/guides/production-security)** (errors, hooks), **[Introspection](/guides/introspection)** (**`__schema`** / GraphiQL), and **[Limits](/guides/request-limits)** (**`MaxHTTPRequestBytes`**, timeouts) when tightening production surfaces - or use the **[overview hub](/concepts/graphql-security-production)**.
 
 GraphQL transports call `executor.Execute` with the Go `context.Context`
@@ -23,6 +27,9 @@ To authenticate users:
    hook when you want a single cross-cutting policy point.
 
 The runnable **`examples/auth/`** folder follows that trio end to end (`go run ./examples/auth`).
+
+The rule is simple: middleware extracts identity, the context carries it, and
+grx authorizers make GraphQL-aware decisions.
 
 ## Bearer token middleware
 

@@ -6,6 +6,10 @@ outline: [2, 3]
 
 # Queries and mutations
 
+Use this guide after [Define your schema](/concepts/schema-basics) when one
+root type is no longer enough. It shows how to split a growing schema by
+domain while keeping the public GraphQL API easy to find.
+
 This guide builds a small server with a `User` and a `Post` entity, each
 with its own query and mutation surface, composed into the root types via
 embedding.

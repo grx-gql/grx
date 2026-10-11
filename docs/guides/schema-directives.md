@@ -6,11 +6,15 @@ outline: deep
 
 # Built-in directives
 
+Use this guide when a query needs conditional or incremental execution, or
+when schema metadata must appear in introspection. Start with the supported
+built-ins before designing a custom directive system.
+
 Introspection’s **`__schema.directives`** list is fixed to **seven** built-ins (**[`exec/introspection.go`](https://github.com/grx-gql/grx/blob/main/exec/introspection.go)**). Executable directives are enforced while flattening selections; schema directives surface through reflection, **`schema.ScalarConfig`**, or **`exec.ParseSDL`**.
 
 ::: tip Executable directives beyond this list  
 
-Arbitrary **`directive @example on FIELD` declarations** that attach custom semantics (like gqlgen/SDL plugins) are **not** part of **`schema.Build`** ergonomics yet - track broader extensibility on the **[Roadmap](/roadmap)**.
+Arbitrary **`directive @example on FIELD` declarations** that attach custom semantics (like gqlgen or SDL plugins) are not part of **`schema.Build`** yet. Use the built-in directives documented on this page or extend resolver behavior in Go.
 
 :::
 

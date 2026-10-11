@@ -6,6 +6,10 @@ outline: deep
 
 # HTTP middleware
 
+Use this guide when a concern needs HTTP headers, cookies, the client address,
+or the whole host route. Use a grx plugin when the concern needs operation,
+field, or execution lifecycle data.
+
 `grx.Server` implements [`http.Handler`](https://pkg.go.dev/net/http#Handler).
 HTTP middleware belongs in the host application, around that handler. This
 keeps GraphQL configuration focused on GraphQL and lets each HTTP framework

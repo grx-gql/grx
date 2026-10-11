@@ -10,6 +10,10 @@ The `exec` package owns the GraphQL hot path: lex, parse, validate,
 execute. It is intentionally transport-agnostic  -  it sees a `core.Request`
 in, returns a `core.Response` (or a stream of them, for subscriptions) out.
 
+Read [Define your schema](/concepts/schema-basics) first if the root types and
+resolver methods are new. Read [Runtime boundaries](/concepts/runtime-boundaries)
+to decide which work belongs in middleware, plugins, or application services.
+
 ## Pipeline
 
 ```text
@@ -30,8 +34,8 @@ Today the parser supports anonymous and named queries, mutations,
 subscriptions, fragments (named spreads and inline), field aliases, list and
 object literal values, scalar arguments, and variable references. Variable
 references are tracked with source locations so validation can enforce GraphQL's
-variable rules after the request map is known. The
-[Roadmap](/roadmap) tracks remaining grammar and SDL work.
+variable rules after the request map is known. See the validation sections on
+this page for current parser and execution boundaries.
 
 ## Validation
 
@@ -95,14 +99,17 @@ the parser keeps its own index into the shared slice.
 
 `__schema` and `__type(name:)` are served by a dedicated introspection
 implementation so GraphiQL and other introspecting clients work out of the
-box. A slower, fully spec-compliant path that exposes introspection as
-ordinary schema fields is on the roadmap. To disable introspection in
+box. To disable introspection in
 deployments, configure **`DisableIntrospection`** / **`grx.WithDisableIntrospection`**
 (**[Introspection guide](/guides/introspection#disable-introspection)**).
 
 ## What it doesn't do (yet)
 
-- Variable and value validation is not yet complete vs the full GraphQL spec
-  (see the [Roadmap](/roadmap) validation section).
+- Variable and value validation follows the current parser and validator
+  behavior. Check the validation tests when you need exact edge-case details.
 
-Each completed roadmap item reflects behaviour covered by tests in the repository.
+## Next steps
+
+- [Hooks and plugins](/concepts/plugins)
+- [HTTP, WebSocket, and SSE](/concepts/transports)
+- [Query and mutation guide](/guides/query-mutation-server)

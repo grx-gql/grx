@@ -8,6 +8,12 @@ outline: deep
 
 **`grx.Server`** is a plain [`http.Handler`](https://pkg.go.dev/net/http#Handler). Anything that runs a Go **`net/http`** service applies here: build a static binary (typical), listen on **`0.0.0.0`** in containers, terminate TLS at the edge, and front it with a reverse proxy when you need rate limits, WebSocket upgrades, or multi-service routing.
 
+For a service with only queries and mutations, replicas can usually be
+stateless. Subscriptions add long-lived connections and require a clear plan
+for connection draining and event fan-out. See [Deployment and scaling](/guides/deployment-and-scaling)
+for the decision model, then use this page for concrete container, proxy, and
+shutdown configuration.
+
 ::: tip Production checklist  
 
 Before traffic hits the Internet: **[Security](/guides/production-security)** · **[Introspection](/guides/introspection)** · **[Limits](/guides/request-limits)** · subscriptions **[Securing subscriptions](/guides/subscriptions#securing-subscriptions)** · **[Authentication & authorization](/guides/auth)**  

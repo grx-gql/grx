@@ -75,12 +75,8 @@ uninstall-hooks: ## Undo install-hooks for this repo (removes core.hooksPath).
 docs-install: ## Install docs site dependencies (uses bun).
 	cd $(DOCS_DIR) && $(BUN) install
 
-.PHONY: docs-roadmap
-docs-roadmap: ## Mirror ROADMAP.md into the docs site as a roadmap.
-	./scripts/sync-roadmap.sh
-
 .PHONY: docs-content
-docs-content: docs-roadmap ## Regenerate mirrored docs pages (roadmap only).
+docs-content: ## Refresh derived documentation content.
 
 .PHONY: docs-dev
 docs-dev: docs-content ## Run the docs dev server with HMR (http://localhost:4321/grx/).

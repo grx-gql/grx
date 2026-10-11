@@ -6,6 +6,10 @@ outline: deep
 
 # Custom scalars
 
+Use a custom scalar when a value has domain-specific parsing or serialization,
+such as a timestamp, money value, or upload handle. Keep validation at the
+scalar boundary and keep business rules in application services.
+
 Anything beyond **`String`**, **`Int`**, **`Float`**, **`Boolean`**, **`ID`** is a **custom scalar**: you choose the Go backing type (`struct`, `string`, `time.Time` wrapper…) and expose **`schema.ScalarConfig{ Name, Parse, Serialize, SpecifiedByURL }`**.
 
 Parsing happens when variables or literal arguments coerce into resolver structs; serialization runs when emitting response JSON.

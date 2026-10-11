@@ -36,16 +36,16 @@ shape intact while you switch executors.
 
 ## What's missing today
 
-grx does not yet implement the full October 2021 spec. Before
-committing to a migration, scan the [Roadmap](/roadmap) for any feature
-your existing schema relies on. The most likely blockers today:
+grx does not yet implement the full October 2021 spec. Before committing to a
+migration, compare your existing schema with the current grx feature set. The
+most likely blockers today are:
 
-- **Enum, interface, and union types** are not supported yet
-  ([Type System](/roadmap#type-system)).
+- **Enum, interface, and union types** may require explicit registration in
+  `schema.Config`.
 - **Custom scalars** can't be registered yet  -  only the built-in
   `String`, `Int`, `Float`, `Boolean`, `ID` scalars are available.
-- **Field aliases**, **fragments**, and **`@skip` / `@include`** are not
-  yet honoured by the executor ([Execution](/roadmap#execution)).
+- **Field aliases**, **fragments**, and **`@skip` / `@include`** should be
+  checked against the current executor behavior before migration.
 - **Default argument values** and **descriptions / deprecation
   metadata** aren't carried through.
 

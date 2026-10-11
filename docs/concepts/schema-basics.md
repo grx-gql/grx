@@ -4,8 +4,11 @@ description: For GraphQL developers - how grx turns Go types and methods into th
 outline: [2, 3]
 ---
 
-::: tip Start here  -  schema lives in Go  
-This is **code-first authoring**: structs + **`gql` tags** ARE your GraphQL schema at runtime (**no handwritten `.graphql`** unless you export one). Prefer a runnable stub first? [**Run your first server**](/getting-started/)  -  then read **[Security](/guides/production-security)**, **[Introspection](/guides/introspection)**, and **[Limits](/guides/request-limits)** before you expose a public ingress.
+::: tip Start here: schema lives in Go
+This is **code-first authoring**: structs and **`gql` tags** define your
+GraphQL schema at runtime. Prefer a runnable stub first? Start with
+[Run your first server](/getting-started/). Return here when you need to
+shape objects, inputs, lists, or root types.
 
 :::
 
@@ -21,17 +24,17 @@ Nothing about GraphQL itself changes. Clients still send queries and mutations; 
 
 Think “SDL and resolvers”, but the SDL is implied by your types and the resolvers are methods.
 
-1. **Root operations**  -  You pass a `schema.Config` into `grx.WithSchema(...)`. Put a struct in `Query` (required), and optionally in `Mutation` and `Subscription`. Every **exported method** on that struct is one **top-level GraphQL field** on that root type. The GraphQL name is the method name with the first letter lowercased, so `func (Query) User(...)` is the `user` field on `Query`.
+1. **Root operations**. Pass a `schema.Config` into `grx.WithSchema(...)`. Put a struct in `Query` (required), and optionally in `Mutation` and `Subscription`. Every **exported method** on that struct is one **top-level GraphQL field** on that root type. The GraphQL name is the method name with the first letter lowercased, so `func (Query) User(...)` is the `user` field on `Query`.
 
-2. **Object types and output fields**  -  Any struct you **return** from a resolver becomes a GraphQL **object type**. Each **exported struct field** is a **field** on that type. Nested structs are nested object fields; slices are lists.
+2. **Object types and output fields**. Any struct you **return** from a resolver becomes a GraphQL **object type**. Each **exported struct field** is a **field** on that type. Nested structs are nested object fields; slices are lists.
 
-3. **Field arguments**  -  If a root (or nested) resolver needs arguments, add a **single struct parameter** to the method. Each **exported field** on that struct is one **GraphQL argument**. Nested structs inside it are **input object** types in GraphQL.
+3. **Field arguments**. If a root (or nested) resolver needs arguments, add a **single struct parameter** to the method. Each **exported field** on that struct is one **GraphQL argument**. Nested structs inside it are **input object** types in GraphQL.
 
-4. **Scalars and lists**  -  Ordinary Go types map to the usual GraphQL scalars (`string` → `String`, integer types → `Int`, floats → `Float`, `bool` → `Boolean`). `[]T` (or a fixed array) is a GraphQL list of `T`.
+4. **Scalars and lists**. Ordinary Go types map to the usual GraphQL scalars (`string` maps to `String`, integer types map to `Int`, floats map to `Float`, and `bool` maps to `Boolean`). `[]T` (or a fixed array) is a GraphQL list of `T`.
 
-5. **Subscriptions**  -  A subscription field is still a method on your `Subscription` struct, but it returns a **receive-only channel** of values (`<-chan *YourType`). Each value pushed to the client is resolved like a normal object.
+5. **Subscriptions**. A subscription field is still a method on your `Subscription` struct, but it returns a **receive-only channel** of values (`<-chan *YourType`). Each value pushed to the client is resolved like a normal object.
 
-**Enums, interfaces, unions, and custom scalars** do not appear from structs alone. When you need them, you register them on the same `schema.Config` you already pass to the server. For the exact fields, see [`schema.Config`](/reference/schema/#Config). For what is fully supported today, see the [Roadmap](/roadmap).
+**Enums, interfaces, unions, and custom scalars** do not appear from structs alone. When you need them, register them on the same `schema.Config` you already pass to the server. For the exact fields, see [`schema.Config`](/reference/schema/#Config).
 
 ## The `gql` struct tag (when you need it) {#gql-tags}
 
@@ -82,5 +85,6 @@ At server startup you call `grx.WithSchema(schema.Config{ ... })`. grx walks you
 
 ## Where to go next
 
-- [Organize your code](/concepts/schema-mapping)  -  grow from one file to many without a central “register every field” list.
-- [Resolver methods](/concepts/resolvers)  -  optional `context`, errors, and subscription channels in more detail.
+- [Organize your code](/concepts/schema-mapping): grow from one file to many without a central registration list.
+- [Resolver methods](/concepts/resolvers): learn the supported method signatures and error behavior.
+- [Runtime boundaries](/concepts/runtime-boundaries): decide what belongs outside the GraphQL runtime.

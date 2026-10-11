@@ -11,6 +11,10 @@ This guide takes the
 real-time subscription that emits a `User` value once a second over both
 WebSocket and SSE.
 
+For one process, the memory backend is enough. For multiple replicas, use a
+shared backend and read [Deployment and scaling](/guides/deployment-and-scaling)
+before exposing long-lived connections.
+
 ## 1. Add the subscription resolver
 
 ```go
