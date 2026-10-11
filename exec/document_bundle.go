@@ -131,9 +131,11 @@ func resolveValueMapVariableRefs(values map[string]any) map[string]any {
 
 func resolveValueVariableRef(value any) any {
 	switch typed := value.(type) {
+	case enumLiteral:
+		return string(typed)
 	case variableRef:
 		if typed.HasValue {
-			return typed.Value
+			return resolveValueVariableRef(typed.Value)
 		}
 		return nil
 	case map[string]any:

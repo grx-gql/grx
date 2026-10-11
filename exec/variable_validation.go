@@ -55,3 +55,13 @@ func validateVariablePositions(expected schema.Type, value any, defaultValue any
 		return nil
 	}
 }
+
+func variableTypeFromReference(s *schema.Schema, reference string) schema.Type {
+	if strings.HasSuffix(reference, "!") {
+		return &schema.NonNull{OfType: variableTypeFromReference(s, strings.TrimSuffix(reference, "!"))}
+	}
+	if strings.HasPrefix(reference, "[") {
+		return &schema.List{OfType: variableTypeFromReference(s, reference[1:len(reference)-1])}
+	}
+	return s.Types[reference]
+}

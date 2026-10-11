@@ -406,8 +406,8 @@ func (p *parser) parseValue() (any, error) {
 		case "null":
 			return nil, nil
 		default:
-			// Treat as enum value; resolver-side coercion converts it to a typed value.
-			return current.value, nil
+			// Preserve literal kind until input validation and coercion.
+			return enumLiteral(current.value), nil
 		}
 	case tokenDollar:
 		name := p.next()
@@ -588,7 +588,7 @@ func (p *parser) parseConstValue() (any, error) {
 		case "null":
 			return nil, nil
 		default:
-			return current.value, nil // enum value
+			return enumLiteral(current.value), nil // enum value
 		}
 	case tokenBraceOpen:
 		return p.parseConstObjectLiteral()

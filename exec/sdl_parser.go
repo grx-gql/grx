@@ -507,6 +507,7 @@ func (p *sdlParser) parseInputFieldDefs() ([]sdlFieldDef, error) {
 			// Reuse the executable parser's const-value parser via a temp parser.
 			ep := &parser{tokens: p.tokens, index: p.index, source: p.source}
 			defaultVal, err = ep.parseConstValue()
+			defaultVal = resolveValueVariableRef(defaultVal)
 			if err != nil {
 				return nil, err
 			}
@@ -563,6 +564,7 @@ func (p *sdlParser) parseSDLArgDefs() ([]sdlArgDef, error) {
 			p.next()
 			ep := &parser{tokens: p.tokens, index: p.index, source: p.source}
 			defaultVal, err = ep.parseConstValue()
+			defaultVal = resolveValueVariableRef(defaultVal)
 			if err != nil {
 				return nil, err
 			}
