@@ -51,7 +51,7 @@ func NegotiateResponseContentType(accept []string) (string, bool) {
 	types := [2]string{MediaTypeGraphQLResponse, MediaTypeJSON}
 	preferences := [2]mediaPreference{{specificity: -1}, {specificity: -1}}
 	for _, raw := range accept {
-		for _, part := range strings.Split(raw, ",") {
+		for part := range strings.SplitSeq(raw, ",") {
 			candidate, ok := parseAcceptCandidate(part)
 			if !ok {
 				continue
@@ -83,7 +83,13 @@ func NegotiateResponseContentType(accept []string) (string, bool) {
 }
 
 func parseAcceptCandidate(part string) (acceptCandidate, bool) {
-	mediaType, params, err := mime.ParseMediaType(strings.TrimSpace(part))
+	part = strings.TrimSpace(part)
+	for _, mediaType := range [...]string{MediaTypeGraphQLResponse, MediaTypeJSON, "application/*", "*/*"} {
+		if len(part) == len(mediaType) && strings.EqualFold(part, mediaType) {
+			return acceptCandidate{mediaType: mediaType, quality: 1}, true
+		}
+	}
+	mediaType, params, err := mime.ParseMediaType(part)
 	if err != nil {
 		return acceptCandidate{}, false
 	}
