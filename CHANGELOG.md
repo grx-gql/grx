@@ -10,6 +10,29 @@ Published versions use section titles that match
 headings such as **`### ✨ Added`**, **`### 🐛 Fixed`**, **`### 📚 Documentation`**, … —
 see **`release-please-config.json`**). This file **`CHANGELOG.md`** is the changelog; browse it **[on GitHub](https://github.com/grx-gql/grx/blob/main/CHANGELOG.md)** (the docs site no longer duplicates it).
 
+## [0.7.1](https://github.com/grx-gql/grx/compare/v0.7.0...v0.7.1) (2026-10-11)
+
+
+### 🐛 Fixed
+
+* integrate verified roadmap audit fixes ([#73](https://github.com/grx-gql/grx/issues/73)) ([be03903](https://github.com/grx-gql/grx/commit/be0390371812339c8423aad23baeceb059c45275))
+
+
+### 🧹 Chores
+
+* add dependabot configuration ([#51](https://github.com/grx-gql/grx/issues/51)) ([9157528](https://github.com/grx-gql/grx/commit/9157528fe5e58bfcf10bb658b8d798c384d79133))
+* **deps-dev:** bump vue from 3.5.34 to 3.5.43 in /docs ([#61](https://github.com/grx-gql/grx/issues/61)) ([ec8d4a7](https://github.com/grx-gql/grx/commit/ec8d4a7d0f2e5bc4ec7455e8e1418cbee0521126))
+* **deps:** bump actions/checkout from 6.1.0 to 7.0.1 ([#60](https://github.com/grx-gql/grx/issues/60)) ([2a2d241](https://github.com/grx-gql/grx/commit/2a2d24155e8152ad5f601b8b002bc5468a098220))
+* **deps:** bump actions/deploy-pages from 4.0.5 to 5.0.1 ([#55](https://github.com/grx-gql/grx/issues/55)) ([60dd063](https://github.com/grx-gql/grx/commit/60dd063f55e756aa47f6d8a2020d7d48a5b0953d))
+* **deps:** bump actions/setup-go from 6.5.0 to 7.0.0 ([#56](https://github.com/grx-gql/grx/issues/56)) ([ce2fd78](https://github.com/grx-gql/grx/commit/ce2fd787a540e5261cd9877a27de30cefe2dbee2))
+* **deps:** bump actions/setup-node from 6.5.0 to 7.1.0 ([#63](https://github.com/grx-gql/grx/issues/63)) ([ead9397](https://github.com/grx-gql/grx/commit/ead9397445c16807afbd263a26670649fe7c1458))
+* **deps:** bump actions/upload-pages-artifact from 3.0.1 to 5.0.0 ([#58](https://github.com/grx-gql/grx/issues/58)) ([1d2b73c](https://github.com/grx-gql/grx/commit/1d2b73cdbe1f2c6f8d46738775aa8613df8dd29c))
+* **deps:** bump github.com/andybalholm/brotli from 1.2.0 to 1.2.6 ([#57](https://github.com/grx-gql/grx/issues/57)) ([45323a3](https://github.com/grx-gql/grx/commit/45323a3f27c5934934e2cc4c43fac0bba31789a3))
+* **deps:** bump github.com/gin-contrib/cors from 1.7.6 to 1.7.9 in /integration/cors ([#62](https://github.com/grx-gql/grx/issues/62)) ([ba89956](https://github.com/grx-gql/grx/commit/ba89956649c061db370a0e4aadc5b458878084dc))
+* **deps:** bump github.com/gin-gonic/gin in /integration/cors ([#65](https://github.com/grx-gql/grx/issues/65)) ([91e6bc2](https://github.com/grx-gql/grx/commit/91e6bc2fe557f56fe3c72dd5e705339a180d5e8d))
+* **deps:** bump github.com/gofiber/fiber/v2 in /integration/cors ([#64](https://github.com/grx-gql/grx/issues/64)) ([ea4f0e5](https://github.com/grx-gql/grx/commit/ea4f0e5eedf470a92114110687007c8010563f08))
+* **deps:** bump github.com/graph-gophers/graphql-go in /benchmark ([#59](https://github.com/grx-gql/grx/issues/59)) ([d468a69](https://github.com/grx-gql/grx/commit/d468a69a91886c2df3c4fbafe4643e3d84531df1))
+
 ## [0.7.0](https://github.com/grx-gql/grx/compare/v0.6.0...v0.7.0) (2026-10-11)
 
 
