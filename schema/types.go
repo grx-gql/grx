@@ -310,6 +310,7 @@ func (i *InputObject) Kind() Kind {
 // supply the corresponding root. Types is the type registry keyed by
 // GraphQL type name and is used by the introspection fast-path.
 type Schema struct {
+	introspectionTypes   map[string]Type
 	Query                *Object
 	Mutation             *Object
 	Subscription         *Object
