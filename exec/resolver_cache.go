@@ -1,7 +1,6 @@
 package exec
 
 import (
-	"fmt"
 	"math"
 	"reflect"
 	"sort"
@@ -18,11 +17,17 @@ func resolverCacheKey(field *schema.Field, source any, args map[string]any) (str
 	if !ok {
 		return "", false
 	}
-	encoded, ok := appendResolverCacheValue(nil, args)
+	var scratch [256]byte
+	encoded := append(scratch[:0], "0x"...)
+	encoded = strconv.AppendUint(encoded, uint64(reflect.ValueOf(field).Pointer()), 16)
+	encoded = append(encoded, 0)
+	encoded = append(encoded, sourceKey...)
+	encoded = append(encoded, 0)
+	encoded, ok = appendResolverCacheValue(encoded, args)
 	if !ok {
 		return "", false
 	}
-	return fmt.Sprintf("%p\x00%s\x00%s", field, sourceKey, encoded), true
+	return string(encoded), true
 }
 
 func appendResolverCacheValue(dst []byte, value any) ([]byte, bool) {
