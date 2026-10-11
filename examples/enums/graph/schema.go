@@ -19,9 +19,9 @@ const (
 	EpisodeJedi    Episode = "JEDI"
 )
 
-// NewSchema registers the Episode enum, mapping each GraphQL member name to its
+// Schema registers the Episode enum, mapping each GraphQL member name to its
 // Go value.
-func NewSchema() schema.Config {
+func Schema() schema.Config {
 	return schema.Config{
 		Query: Query{},
 		Enums: []schema.EnumConfig{

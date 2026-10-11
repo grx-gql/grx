@@ -16,7 +16,7 @@ type User struct {
 	DisplayName string `gql:"displayName,nonNull"`
 }
 
-func NewSchema() schema.Config {
+func Schema() schema.Config {
 	return schema.Config{
 		Query: Query{},
 	}

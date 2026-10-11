@@ -4,7 +4,7 @@ import "github.com/grx-gql/grx/schema"
 
 type Query struct{}
 
-func NewSchema() schema.Config {
+func Schema() schema.Config {
 	return schema.Config{
 		Query: Query{},
 	}

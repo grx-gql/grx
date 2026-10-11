@@ -31,7 +31,7 @@ func main() {
 	defer bus.Close()
 
 	srv, err := grx.NewServer(
-		grx.WithSchema(graph.New(bus)),
+		grx.WithSchema(graph.Schema(bus)),
 		grx.WithPlugins(loggerPlugin),
 		grx.WithPlaygroundPath(playgroundPath),
 		grx.WithTransports(

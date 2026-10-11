@@ -33,20 +33,9 @@ type Subscription struct {
 	MessageSubscription
 }
 
-// New composes schema.Config. With no bus, it returns the query and
-// non-event mutation schema. Passing one bus adds event mutations and
-// subscriptions.
-func New(buses ...pubsub.PubSub) schema.Config {
-	if len(buses) > 1 {
-		panic("graph: New accepts at most one pubsub.PubSub")
-	}
-	if len(buses) == 0 || buses[0] == nil {
-		return wiredSchema(nil)
-	}
-	return wiredSchema(buses[0])
-}
-
-func wiredSchema(bus pubsub.PubSub) schema.Config {
+// Schema composes schema.Config. A nil bus returns the query and non-event
+// mutation schema; a bus adds event mutations and subscriptions.
+func Schema(bus pubsub.PubSub) schema.Config {
 	config := schema.Config{
 		Query:    Query{},
 		Mutation: PostMutation{},

@@ -23,10 +23,10 @@ type Event struct {
 	StartsAt DateTime `gql:"startsAt,nonNull"`
 }
 
-// NewSchema wires the DateTime scalar into the schema. Parse converts an
+// Schema wires the DateTime scalar into the schema. Parse converts an
 // incoming GraphQL value into the Go type; Serialize does the reverse for
 // responses.
-func NewSchema() schema.Config {
+func Schema() schema.Config {
 	return schema.Config{
 		Query: Query{},
 		Scalars: []schema.ScalarConfig{

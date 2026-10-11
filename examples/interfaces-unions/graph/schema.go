@@ -39,9 +39,9 @@ type Post struct {
 func (*Post) isNode()         {}
 func (*Post) isSearchResult() {}
 
-// NewSchema registers the Node interface and SearchResult union, listing the
+// Schema registers the Node interface and SearchResult union, listing the
 // concrete implementors so the executor can resolve the runtime type.
-func NewSchema() schema.Config {
+func Schema() schema.Config {
 	return schema.Config{
 		Query: Query{},
 		Interfaces: []schema.InterfaceConfig{

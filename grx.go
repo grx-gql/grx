@@ -3,14 +3,14 @@
 // A minimal HTTP GraphQL server only needs a schema:
 //
 //	srv, err := grx.NewServer(
-//	    grx.WithSchema(graph.NewSchema()),
+//	    grx.WithSchema(graph.Schema()),
 //	)
 //
 // Advanced setups can add plugins, custom paths, pub/sub-backed
 // subscriptions, WebSocket, and SSE transports:
 //
 //	srv, err := grx.NewServer(
-//	    grx.WithSchema(graph.New(bus)),
+//	    grx.WithSchema(graph.Schema(bus)),
 //	    grx.WithPlugins(loggerPlugin),
 //	    grx.WithPlaygroundPath("/"),
 //	    grx.WithSubscriptionPath("/graphql/ws"),

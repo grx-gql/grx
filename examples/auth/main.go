@@ -63,7 +63,7 @@ func requireViewerField() grx.FieldAuthorizer {
 
 func main() {
 	srv, err := grx.NewServer(
-		grx.WithSchema(graph.NewSchema()),
+		grx.WithSchema(graph.Schema()),
 		grx.WithPlaygroundPath("/"),
 		grx.WithFieldAuthorizer(requireViewerField()),
 	)
