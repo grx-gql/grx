@@ -44,6 +44,10 @@ limits and hooks. The host application handles HTTP concerns around the
 returned `http.Handler`, including CORS, authentication middleware, routing,
 TLS, and non-GraphQL endpoints.
 
+The overview should also introduce the system decisions that appear later in
+the docs: custom pub/sub backends, deployment topology, horizontal scaling,
+connection routing, and operational ownership.
+
 ### 2. Concepts
 
 Concept pages explain the model used by all integrations and guides.
@@ -58,6 +62,20 @@ Contents:
 - Plugins and lifecycle hooks.
 - Subscriptions and pub/sub.
 - Runtime architecture.
+
+The concepts section should also cover the surrounding application boundary:
+
+- CORS and browser requests.
+- Authentication and authorization boundaries.
+- CSRF for cookie-based browser sessions.
+- Middleware and request context.
+- Request IDs, logging, tracing, and metrics.
+- Health, readiness, graceful shutdown, configuration, and secrets.
+
+The subscription concepts should cover the `pubsub.PubSub` contract, custom
+backend design, in-memory versus Redis operation, event delivery semantics,
+ordering, duplicates, buffering, backpressure, cancellation, cleanup, and
+reconnect behavior.
 
 The HTTP boundary concept must include a CORS example. It must explain that
 grx does not provide a CORS package, show how to wrap the returned handler with
@@ -103,6 +121,28 @@ middleware placement, and the separate WebSocket origin check. It must state
 clearly which behavior comes from grx and which behavior comes from the host
 framework.
 
+The guide set must also cover deployment and scaling:
+
+- Stateless HTTP scaling.
+- External pub/sub for multiple replicas.
+- WebSocket connection routing and load balancer behavior.
+- Sticky sessions versus shared event infrastructure.
+- Redis deployment considerations.
+- Reverse proxies and TLS termination.
+- Timeouts and connection limits.
+- Rolling deployments and connection draining.
+- Health checks and graceful shutdown.
+- Horizontal scaling limits and observability during scale-out.
+
+The guide set must include a custom pub/sub guide. It should explain the
+interface, ownership and copying rules for payloads, cancellation, buffering,
+error handling, durability, delivery guarantees, and the difference between a
+best-effort in-memory backend and a multi-replica backend.
+
+Application architecture guides should explain database access, transactions,
+caching, queues, background jobs, data loading, N+1 behavior, and keeping
+business logic outside resolver methods.
+
 ### 5. Examples
 
 Examples remain a separate collection of runnable applications. The examples page should explain when to use an example and link back to the concept or guide that explains the code.
@@ -134,6 +174,10 @@ Runtime execution and subscription implementation details remain available for m
 - Rewrite guide introductions and cross-links where the current order is unclear.
 - Update examples and code snippets to use the current `Schema` constructor API.
 - Remove stale roadmap links, sidebar entries, and roadmap landing content.
+- Add a clear "What grx owns" or "Runtime boundaries" explanation with a
+  responsibility table.
+- Add concept and guide coverage for custom pub/sub, deployment, scaling, and
+  the application and platform concerns around the runtime.
 - Preserve technical behavior and existing stable page URLs unless a link target is clearly obsolete.
 
 ## Validation
