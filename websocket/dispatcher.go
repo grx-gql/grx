@@ -170,6 +170,10 @@ func (d *dispatcher) currentConnCtx() context.Context {
 }
 
 func (d *dispatcher) refreshReadDeadline() {
+	// Only initialization may replace the original connection-init deadline.
+	if !d.isInited() {
+		return
+	}
 	if d.cfg.ReadIdleTimeout <= 0 {
 		_ = d.conn.SetReadDeadline(time.Time{})
 		return
