@@ -679,6 +679,14 @@ func lexNormalizedSource(input string) ([]token, error) {
 		if c == '#' {
 			j := i + 1
 			for j < n && input[j] != '\n' && input[j] != '\r' {
+				if input[j] >= utf8.RuneSelf {
+					_, size := utf8.DecodeRuneInString(input[j:])
+					if size == 1 {
+						return nil, newParseError(input, j, "invalid UTF-8 source character")
+					}
+					j += size
+					continue
+				}
 				j++
 			}
 			i = j
@@ -885,6 +893,14 @@ func locationForOffset(source string, offset int) core.Location {
 func readString(input string, start int) (string, int, error) {
 	n := len(input)
 	for j := start + 1; j < n; j++ {
+		if input[j] >= utf8.RuneSelf {
+			_, size := utf8.DecodeRuneInString(input[j:])
+			if size == 1 {
+				return "", 0, fmt.Errorf("invalid UTF-8 source character")
+			}
+			j += size - 1
+			continue
+		}
 		switch input[j] {
 		case '"':
 			return input[start+1 : j], j + 1, nil
@@ -965,6 +981,15 @@ func readStringSlow(input string, contentStart, escapeAt int) (string, int, erro
 				return "", 0, fmt.Errorf("invalid string escape %q", input[j:j+2])
 			}
 		default:
+			if c >= utf8.RuneSelf {
+				_, size := utf8.DecodeRuneInString(input[j:])
+				if size == 1 {
+					return "", 0, fmt.Errorf("invalid UTF-8 source character")
+				}
+				b.WriteString(input[j : j+size])
+				j += size
+				continue
+			}
 			b.WriteByte(c)
 			j++
 		}
@@ -1032,6 +1057,15 @@ func readBlockString(input string, start int) (string, int, error) {
 			raw.WriteByte('"')
 			raw.WriteByte('"')
 			j += 2
+			continue
+		}
+		if input[j] >= utf8.RuneSelf {
+			_, size := utf8.DecodeRuneInString(input[j:])
+			if size == 1 {
+				return "", 0, fmt.Errorf("invalid UTF-8 source character")
+			}
+			raw.WriteString(input[j : j+size])
+			j += size
 			continue
 		}
 		raw.WriteByte(input[j])
