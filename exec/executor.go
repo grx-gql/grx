@@ -286,10 +286,9 @@ func (e *Executor) Subscribe(ctx context.Context, req core.Request) (responses <
 		return nil, err
 	}
 
-	source, err := field.Resolver(ctx, schema.ResolveParams{Args: rootField.Arguments})
+	source, err := e.resolveSubscriptionSource(ctx, root, field, rootField)
 	if err != nil {
-		e.notifyError(ctx, err)
-		return nil, e.maskError(err, true)
+		return nil, err
 	}
 	sourceValue := reflect.ValueOf(source)
 	if sourceValue.Kind() != reflect.Chan {
