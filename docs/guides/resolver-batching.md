@@ -1,6 +1,6 @@
 ---
 title: Resolver batching & N+1
-description: Nested field execution and datastore round-trips - mitigations before a built-in loader lands in grx.
+description: Batch resolver lookups to reduce datastore round-trips.
 outline: deep
 ---
 
@@ -10,9 +10,18 @@ GraphQL invokes resolvers independently. A query like **`users { posts { title }
 
 ## What grx provides today
 
-**No first-class batch loader hook** sits inside **`exec`** yet. Until it ships:
+For an `exec.Executor`, register lookup adapters with `loader.New` and
+`exec.WithLoaders`. Runtime field resolvers return `loader.Load` pending values;
+the executor groups ready sibling lookups, including fields across list items,
+and dispatches bounded batches before completing the response. See the
+executable `ExampleWithLoaders` example and the API comments for setup and
+cache lifetime rules. Code-first methods keep their declared return types; the
+example replaces the compiled field's runtime resolver to return a pending value.
 
-- Implement **repository batch APIs** keyed per HTTP request (**`context`‑scoped** maps, OSS Go DataLoader-style helpers).
+Batching is opt-in and adds scheduling overhead. Use it for datastore lookups
+where reducing round-trips outweighs that cost. Applications can also:
+
+- Implement **repository batch APIs** scoped to each request.
 - Prefer **`IN`/`JOIN`** preloads where query shapes repeat.
 - **Instrument** resolver timing + DB statements (`plugin` hooks **or** APM wrappers).
 

@@ -1274,7 +1274,7 @@ func TestCompletionAndIncrementalWorkBranches(t *testing.T) {
 	}
 
 	collector := &incrementalCollector{}
-	collector.addDefer(&schema.Object{TypeName: "Obj", Fields: map[string]*schema.Field{
+	collector.addDefer(context.Background(), &schema.Object{TypeName: "Obj", Fields: map[string]*schema.Field{
 		"name": {Name: "name", Type: stringType, Resolver: func(context.Context, schema.ResolveParams) (any, error) { return "Ada", nil }},
 	}}, nil, []selection{{Name: "name"}}, nil, []any{"user"}, "profile")
 	if len(collector.work) != 1 {

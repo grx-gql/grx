@@ -1,6 +1,9 @@
 package exec
 
-import "strings"
+import (
+	"github.com/grx-gql/grx/loader"
+	"strings"
+)
 
 // ExecutorOption configures an [Executor] created by [New].
 type ExecutorOption func(*Executor)
@@ -166,9 +169,23 @@ func WithAbstractTypeResolver(resolver AbstractTypeResolver) ExecutorOption {
 }
 
 // WithQueryConcurrency bounds concurrent root fields of Execute query operations.
-// Values at most one retain serial execution. Mutations, subscriptions, nested
-// selections and incremental delivery remain serial. Resolvers and field hooks
-// used with this option must permit concurrent calls and shared source reads.
+// Values at most one retain serial execution. Mutations, subscriptions and
+// nested selections remain serial. With WithLoaders, the bound also applies to
+// query root preparation in incremental payloads; otherwise incremental delivery
+// stays serial. Resolvers and field hooks used with this option must permit
+// concurrent calls and shared source reads.
 func WithQueryConcurrency(limit int) ExecutorOption {
 	return func(e *Executor) { e.queryConcurrency = limit }
+}
+
+// WithLoaders registers immutable lookup adapters and enables breadth-first
+// resolver batching. Return loader.Load's pending value from schema.Resolver.
+// Queries share a loader cache across incremental patches. Mutation root fields
+// and subscription events each receive a fresh cache. Ordinary thunks retain
+// their immediate evaluation semantics. Registration order determines dispatch
+// order. Batch callbacks run serially; WithQueryConcurrency still bounds root
+// resolver calls. Nested query resolvers must not depend on sibling call order.
+func WithLoaders(registrations []*loader.Loader) ExecutorOption {
+	copied := append([]*loader.Loader(nil), registrations...)
+	return func(e *Executor) { e.loaders = copied }
 }

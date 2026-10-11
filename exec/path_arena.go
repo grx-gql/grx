@@ -12,6 +12,7 @@ import (
 type pathArenaCtxKey struct{}
 
 type pathArena struct {
+	batch          *batchExecution
 	buf            []any
 	selectionPlans selectionPlanCache
 	// collector is non-nil only while an incremental-delivery request is in
@@ -39,6 +40,7 @@ func withPathArena(ctx context.Context) context.Context {
 	a := pathArenaPool.Get().(*pathArena)
 	a.buf = a.buf[:0]
 	a.collector = nil
+	a.batch = nil
 	a.resolverCache = nil
 	a.parallelCache = nil
 	a.apollo = nil
@@ -52,6 +54,7 @@ func recyclePathArena(ctx context.Context) {
 	}
 	// Do not retain parsed documents or request variables in the pool.
 	a.selectionPlans = selectionPlanCache{}
+	a.batch = nil
 	a.parallelCache = nil
 	pathArenaPool.Put(a)
 }
