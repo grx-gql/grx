@@ -319,7 +319,7 @@ func main() {
 	defer bus.Close()
 
 	srv, err := grx.NewServer(
-		grx.WithSchema(graph.New(graph.WithPubSub(bus))),
+		grx.WithSchema(graph.New(bus)),
 		grx.WithPlugins(loggerPlugin),
 		grx.WithPlaygroundPath(playgroundPath),
 		grx.WithTransports(
@@ -345,25 +345,9 @@ func main() {
 package graph
 
 import (
-	"github.com/grx-gql/grx/pubsub/memory"
+	"github.com/grx-gql/grx/pubsub"
 	"github.com/grx-gql/grx/schema"
 )
-
-// SchemaOption configures [New].
-type SchemaOption func(*schemaOptions)
-
-type schemaOptions struct {
-	bus pubsub.PubSub
-}
-
-// WithPubSub wires the typed pub/sub bridge used by mutation and subscription
-// resolvers. Required for this example schema, which publishes across
-// resolvers via the Memory backend described in [pubsub](/concepts/pubsub).
-func WithPubSub(bus pubsub.PubSub) SchemaOption {
-	return func(o *schemaOptions) {
-		o.bus = bus
-	}
-}
 
 // Query is the schema's root query type. Each entity contributes its own
 // resolver struct (e.g. UserQuery, PostQuery) which is embedded here so its
@@ -393,18 +377,16 @@ type Subscription struct {
 	MessageSubscription
 }
 
-// New composes schema.Config using functional options such as [WithPubSub].
+// New composes schema.Config. With no bus, it returns the query and
+// non-event mutation schema. Passing one bus adds event mutations and
+// subscriptions.
 // Which URL path listens for subscriptions (WebSocket/SSE vs POST JSON) is
 // configured on the HTTP server ([server.Config.SubscriptionPath]), not here.
-func New(opts ...SchemaOption) schema.Config {
-	var o schemaOptions
-	for _, apply := range opts {
-		apply(&o)
+func New(buses ...pubsub.PubSub) schema.Config {
+	if len(buses) == 0 || buses[0] == nil {
+		return schema.Config{Query: Query{}, Mutation: Mutation{PostMutation: PostMutation{}}}
 	}
-	if o.bus == nil {
-		panic("graph: WithPubSub is required for this schema (mutations/subscriptions publish through pubsub)")
-	}
-	return wiredSchema(o.bus)
+	return wiredSchema(buses[0])
 }
 
 func wiredSchema(bus pubsub.PubSub) schema.Config {
@@ -424,10 +406,6 @@ func wiredSchema(bus pubsub.PubSub) schema.Config {
 	}
 }
 
-// NewSchema is equivalent to New(WithPubSub(bus)).
-func NewSchema(bus pubsub.PubSub) schema.Config {
-	return New(WithPubSub(bus))
-}
 ```
 
 #### `examples/subscriptions/graph/user.go`

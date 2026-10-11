@@ -9,6 +9,19 @@ import (
 	"github.com/grx-gql/grx/pubsub/memory"
 )
 
+func TestNewWithoutBusOmitsEventResolvers(t *testing.T) {
+	config := graph.New()
+	if config.Query == nil {
+		t.Fatal("expected query resolver")
+	}
+	if config.Mutation == nil {
+		t.Fatal("expected non-event mutation resolver")
+	}
+	if config.Subscription != nil {
+		t.Fatal("expected subscriptions to be omitted without a bus")
+	}
+}
+
 func TestUserCreatedPublishSubscribe(t *testing.T) {
 	bus := memory.New()
 	t.Cleanup(func() { _ = bus.Close() })
