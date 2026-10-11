@@ -260,11 +260,12 @@ func responseStatus(mediaType string, response core.Response) int {
 
 // negotiateEncoding selects the highest accepted quality, preferring Brotli on
 // ties. An explicit coding overrides the wildcard even when its quality is zero.
-func (t *Transport) negotiateEncoding(r *nethttp.Request) string {
-	if !t.config.EnableGzip && !t.config.EnableBrotli {
-		return ""
+// The second result reports whether an uncompressed response is acceptable.
+func (t *Transport) negotiateEncoding(r *nethttp.Request) (string, bool) {
+	if len(r.Header.Values("Accept-Encoding")) == 0 {
+		return "", true
 	}
-	gzipQuality, brotliQuality, wildcard := -1.0, -1.0, 0.0
+	gzipQuality, brotliQuality, wildcard, identity := -1.0, -1.0, -1.0, -1.0
 	for _, value := range r.Header.Values("Accept-Encoding") {
 		for _, part := range strings.Split(value, ",") {
 			coding, params, err := mime.ParseMediaType(strings.TrimSpace(part))
@@ -287,6 +288,8 @@ func (t *Transport) negotiateEncoding(r *nethttp.Request) string {
 				brotliQuality = quality
 			case "*":
 				wildcard = quality
+			case "identity":
+				identity = quality
 			}
 		}
 	}
@@ -296,13 +299,18 @@ func (t *Transport) negotiateEncoding(r *nethttp.Request) string {
 	if brotliQuality < 0 {
 		brotliQuality = wildcard
 	}
-	if t.config.EnableBrotli && brotliQuality > 0 && (!t.config.EnableGzip || brotliQuality >= gzipQuality) {
-		return "br"
+	identityAllowed := identity > 0 || identity < 0 && wildcard != 0
+	encoding, quality := "", 0.0
+	if t.config.EnableBrotli && brotliQuality > 0 {
+		encoding, quality = "br", brotliQuality
 	}
-	if t.config.EnableGzip && gzipQuality > 0 {
-		return "gzip"
+	if t.config.EnableGzip && gzipQuality > quality {
+		encoding, quality = "gzip", gzipQuality
 	}
-	return ""
+	if identity > quality {
+		return "", true
+	}
+	return encoding, identityAllowed
 }
 
 func (t *Transport) writeGraphQLPayload(w nethttp.ResponseWriter, r *nethttp.Request, status int, mediaType string, payload any) {
@@ -327,7 +335,12 @@ func (t *Transport) writeGraphQLPayload(w nethttp.ResponseWriter, r *nethttp.Req
 	if t.config.EnableGzip || t.config.EnableBrotli {
 		w.Header().Add("Vary", "Accept-Encoding")
 	}
-	if encoding := t.negotiateEncoding(r); encoding != "" && len(encoded) >= 64 {
+	encoding, identityAllowed := t.negotiateEncoding(r)
+	if encoding == "" && !identityAllowed {
+		writeRequestError(r.Context(), w, mediaType, nethttp.StatusNotAcceptable, fmt.Errorf("no acceptable response content encoding"))
+		return
+	}
+	if encoding != "" && (len(encoded) >= 64 || !identityAllowed) {
 		w.Header().Set("Content-Encoding", encoding)
 		w.WriteHeader(status)
 		cw := newCompressWriter(w, encoding)
