@@ -303,7 +303,7 @@ This file is the source of truth for feature parity tracking and roadmap sync in
 - [x] Connection authentication hook (`Config.OnConnect`)
 - [x] Pub/Sub primitive for cross-resolver fan-out (`pubsub.PubSub`)
 - [x] In-process pub/sub backend (`pubsub.Memory`)
-- [x] Redis pub/sub backend (`redis-pubsub`, separate Go module)
+- [x] Redis pub/sub backend (`redis`, separate Go module)
 - [x] Type-safe generic wrapper with pluggable codec (`pubsub.Typed`)
 - [x] Server-side filters / typed predicates on subscribe
 - [x] Configurable maximum concurrent SSE streams per transport (`sse.Config.MaxActiveSubscriptions`)

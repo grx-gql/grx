@@ -10,7 +10,7 @@
 // subscriptions, WebSocket, and SSE transports:
 //
 //	srv, err := grx.NewServer(
-//	    grx.WithSchema(graph.New(graph.WithPubSub(bus))),
+//	    grx.WithSchema(graph.New(graph.WithEvents(graph.Events{Bus: bus}))),
 //	    grx.WithPlugins(loggerPlugin),
 //	    grx.WithPlaygroundPath("/"),
 //	    grx.WithSubscriptionPath("/graphql/ws"),
