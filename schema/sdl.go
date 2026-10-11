@@ -17,6 +17,9 @@ func PrintSDL(s *Schema) string {
 
 	names := make([]string, 0, len(s.Types))
 	for n := range s.Types {
+		if isBuiltInScalarName(n) || strings.HasPrefix(n, "__") {
+			continue
+		}
 		names = append(names, n)
 	}
 	sort.Strings(names)

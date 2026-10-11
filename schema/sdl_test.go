@@ -26,8 +26,8 @@ func TestPrintSDLIncludesExpectedDefinitions(t *testing.T) {
 	}
 
 	sdl := PrintSDL(schemaValue)
-	if !strings.Contains(sdl, "scalar String") {
-		t.Fatalf("expected built-in scalar, got:\n%s", sdl)
+	if strings.Contains(sdl, "scalar String") {
+		t.Fatalf("implicit built-in scalar must not be redeclared, got:\n%s", sdl)
 	}
 	if !strings.Contains(sdl, "enum Episode") {
 		t.Fatalf("expected enum, got:\n%s", sdl)
