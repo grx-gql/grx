@@ -281,10 +281,27 @@ func (t *Transport) negotiateEncoding(r *nethttp.Request) (string, bool) {
 	}
 	gzipQuality, brotliQuality, wildcard, identity := -1.0, -1.0, -1.0, -1.0
 	for _, value := range r.Header.Values("Accept-Encoding") {
-		for _, part := range strings.Split(value, ",") {
-			coding, params, err := mime.ParseMediaType(strings.TrimSpace(part))
-			if err != nil {
-				continue
+		for part := range strings.SplitSeq(value, ",") {
+			coding := strings.TrimSpace(part)
+			var params map[string]string
+			if strings.ContainsRune(coding, ';') {
+				parsed, parameters, err := mime.ParseMediaType(coding)
+				if err != nil {
+					continue
+				}
+				coding, params = parsed, parameters
+			} else {
+				switch {
+				case len(coding) == len("gzip") && strings.EqualFold(coding, "gzip"):
+					coding = "gzip"
+				case len(coding) == len("br") && strings.EqualFold(coding, "br"):
+					coding = "br"
+				case len(coding) == len("identity") && strings.EqualFold(coding, "identity"):
+					coding = "identity"
+				case coding == "*":
+				default:
+					continue
+				}
 			}
 			quality := 1.0
 			if raw, exists := params["q"]; exists {
@@ -385,7 +402,12 @@ const incrementalBoundary = "-"
 
 func acceptsMultipartMixed(r *nethttp.Request) bool {
 	for _, raw := range r.Header.Values("Accept") {
-		for _, part := range strings.Split(raw, ",") {
+		for part := range strings.SplitSeq(raw, ",") {
+			mediaType, _, _ := strings.Cut(part, ";")
+			mediaType = strings.TrimSpace(mediaType)
+			if len(mediaType) != len("multipart/mixed") || !strings.EqualFold(mediaType, "multipart/mixed") {
+				continue
+			}
 			mediaType, params, err := mime.ParseMediaType(strings.TrimSpace(part))
 			if err != nil || mediaType != "multipart/mixed" {
 				continue
