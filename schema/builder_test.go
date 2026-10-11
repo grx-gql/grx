@@ -676,7 +676,7 @@ type namedUnionIface interface {
 	unionMarkerNamed()
 }
 
-type namedUnionImpl struct{}
+type namedUnionImpl struct{ Value string }
 
 func (namedUnionImpl) unionMarkerNamed() {}
 

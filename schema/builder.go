@@ -140,7 +140,20 @@ func Build(config Config) (*Schema, error) {
 		return nil, errors.New("schema requires a query root")
 	}
 
+	if validationErrors := ValidateSchema(result); len(validationErrors) > 0 {
+		errs := make([]error, len(validationErrors))
+		for index, validationError := range validationErrors {
+			errs[index] = validationError
+		}
+		return nil, errors.Join(errs...)
+	}
 	registerIntrospectionTypes(builder.types)
+	result.introspectionTypes = make(map[string]Type, 8)
+	for name, typ := range builder.types {
+		if isBuiltinReservedType(name) {
+			result.introspectionTypes[name] = typ
+		}
+	}
 	return result, nil
 }
 
