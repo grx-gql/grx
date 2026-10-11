@@ -145,3 +145,45 @@ func TestRoadmapScalarCompletionErrorLocation(t *testing.T) {
 		t.Fatalf("scalar completion error must identify selected field source location; got %+v", r.Errors)
 	}
 }
+func TestRoadmapResolverCacheDoesNotCollideArguments(t *testing.T) {
+	s := roadmapAuditSchema(t)
+	s.Query.Fields["join"] = &schema.Field{Name: "join", Type: s.Types["String"], Args: []schema.InputValue{{Name: "a", Type: s.Types["String"]}, {Name: "b", Type: s.Types["String"]}}, Resolver: func(_ context.Context, p schema.ResolveParams) (any, error) {
+		return p.Args["a"].(string) + "|" + p.Args["b"].(string), nil
+	}}
+	r := New(s, nil, WithResolverCache()).Execute(context.Background(), core.Request{Query: `{ first: join(a: "x b:y", b: "z") second: join(a: "x", b: "y b:z") }`})
+	if len(r.Errors) != 0 {
+		t.Fatal(r.Errors)
+	}
+	if got := roadmapAuditJSON(t, r.Data); got != `{"first":"x b:y|z","second":"x|y b:z"}` {
+		t.Fatalf("different argument tuples must not share cached result; got %s", got)
+	}
+}
+
+func TestRoadmapResolverCacheSeparatesSameNamedFields(t *testing.T) {
+	s := roadmapAuditSchema(t)
+	for _, name := range []string{"A", "B"} {
+		object := &schema.Object{TypeName: name, Fields: map[string]*schema.Field{"value": {Name: "value", Type: s.Types["String"], Resolver: func(context.Context, schema.ResolveParams) (any, error) { return name, nil }}}}
+		s.Types[name] = object
+		s.Query.Fields[name] = &schema.Field{Name: name, Type: object, Resolver: func(context.Context, schema.ResolveParams) (any, error) { return "same-source", nil }}
+	}
+	r := New(s, nil, WithResolverCache()).Execute(context.Background(), core.Request{Query: `{ A { value } B { value } }`})
+	if got := roadmapAuditJSON(t, r.Data); got != `{"A":{"value":"A"},"B":{"value":"B"}}` || len(r.Errors) != 0 {
+		t.Fatalf("data=%s errors=%+v", got, r.Errors)
+	}
+}
+
+type roadmapCacheCustomValue struct{ Secret string }
+
+func (roadmapCacheCustomValue) MarshalJSON() ([]byte, error) { return []byte(`"same"`), nil }
+
+func TestRoadmapResolverCacheDoesNotUseApplicationJSON(t *testing.T) {
+	field := &schema.Field{Name: "custom"}
+	if _, ok := resolverCacheKey(field, nil, map[string]any{"value": roadmapCacheCustomValue{Secret: "a"}}); ok {
+		t.Fatal("custom runtime value must not use potentially lossy application JSON as a cache key")
+	}
+	first, firstOK := resolverCacheKey(field, nil, map[string]any{"value": int(1)})
+	second, secondOK := resolverCacheKey(field, nil, map[string]any{"value": float64(1)})
+	if !firstOK || !secondOK || first == second {
+		t.Fatal("numeric Go type distinctions must be preserved")
+	}
+}

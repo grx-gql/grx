@@ -580,7 +580,7 @@ func (e *Executor) resolveSelectedField(ctx context.Context, object *schema.Obje
 		return key, nil, []core.Error{newFieldError(e.maskError(err, false).Error(), fieldPath, selected.Location)}, true
 	}
 
-	value, resolverErr := e.invokeResolver(ctx, arena, field, selected, source, args)
+	value, resolverErr := e.invokeResolver(ctx, arena, field, source, args)
 	var resolverMsgs []core.Error
 	if resolverErr != nil {
 		e.notifyError(ctx, resolverErr)
@@ -642,9 +642,9 @@ func (e *Executor) resolveAbstractType(abstractName string, value any, fallback 
 
 // invokeResolver runs a field resolver, applying request-scoped memoization
 // when enabled and unwrapping any returned [schema.Thunk] (deferred value).
-func (e *Executor) invokeResolver(ctx context.Context, arena *pathArena, field *schema.Field, selected selection, source any, args map[string]any) (any, error) {
+func (e *Executor) invokeResolver(ctx context.Context, arena *pathArena, field *schema.Field, source any, args map[string]any) (any, error) {
 	if arena != nil && arena.resolverCache != nil {
-		if key, ok := resolverCacheKey(field, source, selected.Arguments); ok {
+		if key, ok := resolverCacheKey(field, source, args); ok {
 			if entry, hit := arena.resolverCache[key]; hit {
 				return entry.value, entry.err
 			}
@@ -682,17 +682,6 @@ func resolveThunk(value any) (any, error) {
 	default:
 		return value, nil
 	}
-}
-
-// resolverCacheKey builds a memoization key from the field, source identity, and
-// arguments. It returns ok=false when the source has no stable identity (so the
-// call must not be cached).
-func resolverCacheKey(field *schema.Field, source any, args map[string]any) (string, bool) {
-	sourceKey, ok := sourceIdentity(source)
-	if !ok {
-		return "", false
-	}
-	return field.Name + "\x00" + sourceKey + "\x00" + fmt.Sprint(args), true
 }
 
 func sourceIdentity(source any) (string, bool) {
