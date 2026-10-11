@@ -602,7 +602,7 @@ func (e *Executor) resolveSelectedField(ctx context.Context, object *schema.Obje
 	if !streamed && resolverErr == nil {
 		resolved, nestedErrors = e.completeValue(ctx, field.Type, value, selected.Selections, fragments, fieldPath)
 	}
-	errs := append(resolverMsgs, nestedErrors...)
+	errs := append(resolverMsgs, completionErrorLocations(nestedErrors, selected.Location)...)
 
 	if traceFields {
 		for _, ender := range e.fieldEnders {

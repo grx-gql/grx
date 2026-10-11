@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"reflect"
 	"testing"
 
 	"github.com/grx-gql/grx/core"
@@ -134,5 +135,13 @@ func TestRoadmapIncrementalResolverPanicRecovered(t *testing.T) {
 	initial, patches := New(s, nil).ExecuteIncremental(context.Background(), core.Request{Query: `{ ok ... on Query @defer { broken } }`})
 	if len(patches) != 1 || len(patches[0].Errors) != 1 {
 		t.Fatalf("expected deferred field error; got initial=%+v patches=%+v", initial, patches)
+	}
+}
+func TestRoadmapScalarCompletionErrorLocation(t *testing.T) {
+	s := roadmapAuditSchema(t)
+	s.Query.Fields["broken"] = &schema.Field{Name: "broken", Type: s.Types["Int"], Resolver: func(context.Context, schema.ResolveParams) (any, error) { return "invalid", nil }}
+	r := New(s, nil).Execute(context.Background(), core.Request{Query: "{\n alias: broken\n}"})
+	if len(r.Errors) != 1 || !reflect.DeepEqual(r.Errors[0].Locations, []core.Location{{Line: 2, Column: 2}}) {
+		t.Fatalf("scalar completion error must identify selected field source location; got %+v", r.Errors)
 	}
 }
