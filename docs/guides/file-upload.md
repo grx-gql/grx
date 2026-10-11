@@ -6,6 +6,10 @@ outline: deep
 
 # File uploads
 
+Use this guide when clients must send files with a GraphQL mutation. The HTTP
+transport decodes the multipart request, while your schema registers the
+`Upload` scalar and your resolver decides where to store the file.
+
 grx accepts file uploads via the [**GraphQL multipart request specification**](https://github.com/jaydenseric/graphql-multipart-request-spec):
 
 - **`Content-Type: multipart/form-data`** on `POST`.

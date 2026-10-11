@@ -6,6 +6,10 @@ outline: deep
 
 # Limits
 
+Use this guide to set the outer request budget before resolver work starts.
+Combine HTTP body limits, execution timeouts, document-shape limits, and
+trusted documents according to the traffic your service accepts.
+
 Even well‑formed GraphQL documents can overwhelm memory or CPU (**alias bombs**, multi‑megabyte JSON bodies). Separate these controls from masking/auth (**[Security](/guides/production-security)**) and schema discovery knobs (**[Introspection](/guides/introspection)**).
 
 ---

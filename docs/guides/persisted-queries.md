@@ -6,6 +6,10 @@ outline: deep
 
 # Persisted queries (Automatic Persisted Queries, APQ)
 
+Use persisted queries when you want a known query corpus, smaller repeat
+requests, or tighter control over public GraphQL operations. They reduce
+payload variance but do not replace authorization or rate limiting.
+
 Clients send **`extensions.persistedQuery`** carrying a **`sha256Hash`** digest; servers look up **`hash → GraphQL query text`** and execute as if the full document shipped.
 
 ## Quick wiring with **`grx.NewServer`**

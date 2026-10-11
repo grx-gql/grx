@@ -6,6 +6,10 @@ outline: deep
 
 # Query & document limits
 
+Use these limits when public clients can submit arbitrary documents. They
+protect the parser and executor from large shapes, but they do not replace
+authentication, rate limiting, or an operation allowlist.
+
 GraphQL’s flexibility means a single **`POST`** may reference thousands of selections or fan out combinatorially (**alias bombs**, extremely deep fragments). grx rejects abusive shapes **during parse/validation** via executor options usually driven from **`server.New(server.Config{…})`**:
 
 | Field | What it limits |
