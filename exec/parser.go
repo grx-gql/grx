@@ -946,15 +946,18 @@ func readStringSlow(input string, contentStart, escapeAt int) (string, int, erro
 					return "", 0, err
 				}
 				// Combine UTF-16 surrogate pair `\uD83D\uDE00` if present.
-				if utf16.IsSurrogate(r) && j+consumed+1 < n && input[j+consumed] == '\\' && input[j+consumed+1] == 'u' {
+				if consumed == 6 && utf16.IsSurrogate(r) && j+consumed+1 < n && input[j+consumed] == '\\' && input[j+consumed+1] == 'u' {
 					r2, consumed2, err2 := readUnicodeEscape(input, j+consumed)
-					if err2 == nil && utf16.IsSurrogate(r2) {
+					if err2 == nil && consumed2 == 6 && utf16.IsSurrogate(r2) {
 						if combined := utf16.DecodeRune(r, r2); combined != utf8.RuneError {
 							b.WriteRune(combined)
 							j += consumed + consumed2
 							continue
 						}
 					}
+				}
+				if utf16.IsSurrogate(r) {
+					return "", 0, fmt.Errorf("invalid unicode escape: unpaired surrogate")
 				}
 				b.WriteRune(r)
 				j += consumed
@@ -990,7 +993,7 @@ func readUnicodeEscape(input string, start int) (rune, int, error) {
 			return 0, 0, fmt.Errorf("invalid unicode escape %q", input[start:end+1])
 		}
 		code, err := strconv.ParseUint(hex, 16, 32)
-		if err != nil {
+		if err != nil || code > utf8.MaxRune || utf16.IsSurrogate(rune(code)) {
 			return 0, 0, fmt.Errorf("invalid unicode escape %q", input[start:end+1])
 		}
 		return rune(code), (end + 1) - start, nil
