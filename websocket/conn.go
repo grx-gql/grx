@@ -27,6 +27,8 @@ import (
 
 const websocketGUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
 
+var errInvalidPayloadLength = errors.New("invalid websocket payload length")
+
 // Frame opcodes from RFC 6455 §5.2. Exported so callers can inspect the
 // frames produced by the transport.
 const (
@@ -274,6 +276,9 @@ func (c *Conn) ReadMessage() (opcode byte, payload []byte, err error) {
 
 		length, err := readPayloadLength(c.reader, header[1]&0x7F)
 		if err != nil {
+			if errors.Is(err, errInvalidPayloadLength) {
+				c.SendClose(closeProtocol, "invalid payload length")
+			}
 			return 0, nil, err
 		}
 
@@ -302,12 +307,16 @@ func (c *Conn) ReadMessage() (opcode byte, payload []byte, err error) {
 				messageCompressed = rsv1
 			}
 			if c.maxMessageSize > 0 {
-				totalSize += int64(length)
-				if totalSize > c.maxMessageSize {
+				if length > uint64(c.maxMessageSize-totalSize) {
 					c.SendClose(closeMessageTooBig, "message too large")
 					return 0, nil, errors.New("websocket message exceeds configured limit")
 				}
+				totalSize += int64(length)
 			}
+		}
+		if length > uint64(^uint(0)>>1) {
+			c.SendClose(closeMessageTooBig, "message too large")
+			return 0, nil, errors.New("websocket frame exceeds addressable memory")
 		}
 
 		mask := make([]byte, 4)
@@ -370,13 +379,21 @@ func readPayloadLength(reader *bufio.Reader, indicator byte) (uint64, error) {
 		if _, err := io.ReadFull(reader, header); err != nil {
 			return 0, err
 		}
-		return uint64(binary.BigEndian.Uint16(header)), nil
+		length := uint64(binary.BigEndian.Uint16(header))
+		if length < 126 {
+			return 0, fmt.Errorf("%w: nonminimal 16-bit encoding", errInvalidPayloadLength)
+		}
+		return length, nil
 	case indicator == 127:
 		header := make([]byte, 8)
 		if _, err := io.ReadFull(reader, header); err != nil {
 			return 0, err
 		}
-		return binary.BigEndian.Uint64(header), nil
+		length := binary.BigEndian.Uint64(header)
+		if length>>63 != 0 || length < 65536 {
+			return 0, fmt.Errorf("%w: invalid 64-bit encoding", errInvalidPayloadLength)
+		}
+		return length, nil
 	}
 	return 0, fmt.Errorf("invalid payload indicator %d", indicator)
 }
