@@ -1,6 +1,7 @@
 package websocket
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -26,6 +27,13 @@ type message struct {
 	ID      string          `json:"id,omitempty"`
 	Type    string          `json:"type"`
 	Payload json.RawMessage `json:"payload,omitempty"`
+}
+
+type subscribePayload struct {
+	Query         *string        `json:"query"`
+	OperationName string         `json:"operationName"`
+	Variables     map[string]any `json:"variables"`
+	Extensions    map[string]any `json:"extensions"`
 }
 
 type ackMessage struct {
@@ -106,6 +114,11 @@ func (d *dispatcher) run(ctx context.Context) {
 
 		switch msg.Type {
 		case "connection_init":
+			payload := bytes.TrimSpace(msg.Payload)
+			if len(payload) > 0 && payload[0] != '{' && !bytes.Equal(payload, []byte("null")) {
+				d.conn.SendClose(wsCloseInvalidMessage, "connection_init payload must be an object or null")
+				return
+			}
 			if !d.markInited() {
 				d.conn.SendClose(wsCloseTooManyInits, "too many initialisation requests")
 				return
@@ -202,13 +215,12 @@ func (d *dispatcher) startSubscription(msg message) {
 		return
 	}
 
-	var body core.GraphQLBody
-	if len(msg.Payload) > 0 {
-		if err := json.Unmarshal(msg.Payload, &body); err != nil {
-			_ = d.sendError(msg.ID, fmt.Errorf("invalid subscribe payload: %s", err.Error()))
-			return
-		}
+	var payload subscribePayload
+	if err := json.Unmarshal(msg.Payload, &payload); err != nil || payload.Query == nil {
+		d.conn.SendClose(wsCloseInvalidMessage, "subscribe payload must be an object containing a query string")
+		return
 	}
+	body := core.GraphQLBody{Query: *payload.Query, OperationName: payload.OperationName, Variables: payload.Variables, Extensions: payload.Extensions}
 	if strings.TrimSpace(body.Query) == "" {
 		_ = d.sendError(msg.ID, errors.New("subscribe payload must include a query"))
 		return
