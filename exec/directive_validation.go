@@ -26,3 +26,11 @@ func validateDefinedDirectiveArguments(loc core.Location, d directive, definitio
 	}
 	return errs
 }
+
+func directiveArgumentValue(args map[string]any, name string) (any, bool) {
+	value, exists := args[name]
+	if ref, ok := value.(variableRef); ok {
+		return ref.Value, ref.HasValue
+	}
+	return value, exists
+}

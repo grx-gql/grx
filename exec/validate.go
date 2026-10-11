@@ -509,28 +509,28 @@ func validateDirectiveArguments(loc core.Location, d directive) []validationErro
 			return []validationError{newValidationError(loc, `Argument "if" on directive "@%s" must be Boolean.`, d.Name)}
 		}
 	case "defer":
-		if raw, ok := d.Args["if"]; ok {
+		if raw, ok := directiveArgumentValue(d.Args, "if"); ok {
 			if _, ok := raw.(bool); !ok {
 				return []validationError{newValidationError(loc, `Argument "if" on directive "@defer" must be Boolean.`)}
 			}
 		}
-		if raw, ok := d.Args["label"]; ok {
+		if raw, ok := directiveArgumentValue(d.Args, "label"); ok {
 			if _, ok := raw.(string); !ok {
 				return []validationError{newValidationError(loc, `Argument "label" on directive "@defer" must be String.`)}
 			}
 		}
 	case "stream":
-		if raw, ok := d.Args["if"]; ok {
+		if raw, ok := directiveArgumentValue(d.Args, "if"); ok {
 			if _, ok := raw.(bool); !ok {
 				return []validationError{newValidationError(loc, `Argument "if" on directive "@stream" must be Boolean.`)}
 			}
 		}
-		if raw, ok := d.Args["label"]; ok {
+		if raw, ok := directiveArgumentValue(d.Args, "label"); ok {
 			if _, ok := raw.(string); !ok {
 				return []validationError{newValidationError(loc, `Argument "label" on directive "@stream" must be String.`)}
 			}
 		}
-		if raw, ok := d.Args["initialCount"]; ok {
+		if raw, ok := directiveArgumentValue(d.Args, "initialCount"); ok {
 			if _, ok := raw.(int); !ok {
 				return []validationError{newValidationError(loc, `Argument "initialCount" on directive "@stream" must be Int.`)}
 			}
