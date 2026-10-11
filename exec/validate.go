@@ -36,7 +36,7 @@ func ValidateDocument(s *schema.Schema, bundle documentBundle, op document) []va
 	}
 
 	usedFragments := make(map[string]bool)
-	errs = append(errs, validateSelections(s, root, op.Selections, op.Fragments, usedFragments, nil, root.Name(), op.VariableTypes)...)
+	errs = append(errs, validateSelections(s, root, op.Selections, op.Fragments, usedFragments, nil, root.Name(), variableScope{Types: op.VariableTypes, Definitions: op.VariableDefinitions})...)
 
 	for name := range op.Fragments {
 		if !usedFragments[name] {
@@ -131,7 +131,7 @@ func validateSelections(
 	usedFragments map[string]bool,
 	spreadStack []string,
 	parentTypeName string,
-	variableTypes map[string]string,
+	variables variableScope,
 ) []validationError {
 	var errs []validationError
 	errs = append(errs, validateFieldMergeConflicts(selections)...)
@@ -139,11 +139,11 @@ func validateSelections(
 	for _, sel := range selections {
 		switch {
 		case sel.isFragmentSpread():
-			errs = append(errs, validateFragmentSpread(s, parent, sel, fragments, usedFragments, spreadStack, parentTypeName, variableTypes)...)
+			errs = append(errs, validateFragmentSpread(s, parent, sel, fragments, usedFragments, spreadStack, parentTypeName, variables)...)
 		case sel.isInlineFragment():
-			errs = append(errs, validateInlineFragment(s, parent, sel, fragments, usedFragments, spreadStack, variableTypes)...)
+			errs = append(errs, validateInlineFragment(s, parent, sel, fragments, usedFragments, spreadStack, variables)...)
 		case sel.isField():
-			errs = append(errs, validateField(s, parent, sel, fragments, usedFragments, spreadStack, variableTypes)...)
+			errs = append(errs, validateField(s, parent, sel, fragments, usedFragments, spreadStack, variables)...)
 		default:
 			errs = append(errs, newValidationError(sel.Location, "Invalid selection."))
 		}
@@ -160,7 +160,7 @@ func validateFragmentSpread(
 	usedFragments map[string]bool,
 	spreadStack []string,
 	parentTypeName string,
-	variableTypes map[string]string,
+	variables variableScope,
 ) []validationError {
 	name := sel.FragmentSpread
 	fd, ok := fragments[name]
@@ -177,7 +177,7 @@ func validateFragmentSpread(
 	}
 
 	var errs []validationError
-	errs = append(errs, validateDirectives(s, sel, "FRAGMENT_SPREAD")...)
+	errs = append(errs, validateDirectives(s, sel, "FRAGMENT_SPREAD", variables)...)
 
 	if parent != nil && !fragmentTypeMatches(parent, fd.TypeCondition) {
 		errs = append(errs, newValidationError(sel.Location,
@@ -195,7 +195,7 @@ func validateFragmentSpread(
 	}
 
 	nextStack := append(append([]string{}, spreadStack...), name)
-	errs = append(errs, validateSelections(s, objectParent, fd.Selections, fragments, usedFragments, nextStack, fd.TypeCondition, variableTypes)...)
+	errs = append(errs, validateSelections(s, objectParent, fd.Selections, fragments, usedFragments, nextStack, fd.TypeCondition, variables)...)
 	return errs
 }
 
@@ -206,17 +206,17 @@ func validateInlineFragment(
 	fragments map[string]*fragmentDef,
 	usedFragments map[string]bool,
 	spreadStack []string,
-	variableTypes map[string]string,
+	variables variableScope,
 ) []validationError {
 	var errs []validationError
-	errs = append(errs, validateDirectives(s, sel, "INLINE_FRAGMENT")...)
+	errs = append(errs, validateDirectives(s, sel, "INLINE_FRAGMENT", variables)...)
 
 	cond := sel.InlineFragmentOn
 	if cond == "" {
 		if parent == nil {
 			return errs
 		}
-		return append(errs, validateSelections(s, parent, sel.Selections, fragments, usedFragments, spreadStack, parent.Name(), variableTypes)...)
+		return append(errs, validateSelections(s, parent, sel.Selections, fragments, usedFragments, spreadStack, parent.Name(), variables)...)
 	}
 
 	typeValue, ok := s.Types[cond]
@@ -237,7 +237,7 @@ func validateInlineFragment(
 	if objectParent == nil {
 		return errs
 	}
-	return append(errs, validateSelections(s, objectParent, sel.Selections, fragments, usedFragments, spreadStack, cond, variableTypes)...)
+	return append(errs, validateSelections(s, objectParent, sel.Selections, fragments, usedFragments, spreadStack, cond, variables)...)
 }
 
 func validateField(
@@ -247,18 +247,18 @@ func validateField(
 	fragments map[string]*fragmentDef,
 	usedFragments map[string]bool,
 	spreadStack []string,
-	variableTypes map[string]string,
+	variables variableScope,
 ) []validationError {
 	if parent == nil {
 		return []validationError{newValidationError(sel.Location, "Cannot select field on abstract parent without type condition.")}
 	}
 
 	var errs []validationError
-	errs = append(errs, validateDirectives(s, sel, "FIELD")...)
+	errs = append(errs, validateDirectives(s, sel, "FIELD", variables)...)
 
 	fieldName := sel.Name
 	if fieldName == "__typename" {
-		errs = append(errs, validateArguments(sel, &schema.Field{}, parent.Name(), variableTypes)...)
+		errs = append(errs, validateArguments(sel, &schema.Field{}, parent.Name(), variables)...)
 		if len(sel.Selections) > 0 {
 			errs = append(errs, newValidationError(sel.Location,
 				`Field "%s" must not have a selection since type "String" has no subfields.`, sel.responseKey()))
@@ -272,7 +272,7 @@ func validateField(
 			`Cannot query field "%s" on type "%s".`, fieldName, parent.Name()))
 	}
 
-	errs = append(errs, validateArguments(sel, field, parent.Name(), variableTypes)...)
+	errs = append(errs, validateArguments(sel, field, parent.Name(), variables)...)
 
 	fieldType := field.Type
 	if isLeafType(fieldType) {
@@ -299,9 +299,9 @@ func validateField(
 			}
 			if child.isInlineFragment() || child.isFragmentSpread() {
 				if child.isFragmentSpread() {
-					errs = append(errs, validateFragmentSpread(s, nil, child, fragments, usedFragments, spreadStack, typeString(fieldType), variableTypes)...)
+					errs = append(errs, validateFragmentSpread(s, nil, child, fragments, usedFragments, spreadStack, typeString(fieldType), variables)...)
 				} else {
-					errs = append(errs, validateInlineFragment(s, nil, child, fragments, usedFragments, spreadStack, variableTypes)...)
+					errs = append(errs, validateInlineFragment(s, nil, child, fragments, usedFragments, spreadStack, variables)...)
 				}
 				continue
 			}
@@ -311,11 +311,11 @@ func validateField(
 		}
 		return errs
 	}
-	errs = append(errs, validateSelections(s, childParent, sel.Selections, fragments, usedFragments, spreadStack, typeString(fieldType), variableTypes)...)
+	errs = append(errs, validateSelections(s, childParent, sel.Selections, fragments, usedFragments, spreadStack, typeString(fieldType), variables)...)
 	return errs
 }
 
-func validateArguments(sel selection, field *schema.Field, parentType string, variableTypes map[string]string) []validationError {
+func validateArguments(sel selection, field *schema.Field, parentType string, variables variableScope) []validationError {
 	var errs []validationError
 	seenArgs := make(map[string]bool)
 
@@ -333,15 +333,7 @@ func validateArguments(sel selection, field *schema.Field, parentType string, va
 				`Unknown argument "%s" on field "%s" of type "%s".`, argName, sel.Name, parentType))
 			continue
 		}
-		if ref, ok := sel.Arguments[argName].(variableRef); ok {
-			declaredType := variableTypes[ref.Name]
-			if declaredType != "" && !variableTypeAllowed(declaredType, arg.Type.Name()) {
-				errs = append(errs, newValidationError(sel.Location,
-					`Variable "$%s" of type "%s" used in position expecting type "%s".`,
-					ref.Name, declaredType, arg.Type.Name()))
-			}
-			continue
-		}
+		errs = append(errs, validateVariablePositions(arg.Type, sel.Arguments[argName], arg.DefaultValue, sel.Location, variables)...)
 		errs = append(errs, validateInputValue(arg.Type, sel.Arguments[argName], sel.Location, argName)...)
 	}
 
@@ -445,7 +437,7 @@ var executableDirectiveLocations = map[string]map[string]bool{
 	"stream":  {"FIELD": true},
 }
 
-func validateDirectives(s *schema.Schema, sel selection, location string) []validationError {
+func validateDirectives(s *schema.Schema, sel selection, location string, variables variableScope) []validationError {
 	var errs []validationError
 	seen := make(map[string]bool)
 	for _, d := range sel.Directives {
@@ -473,24 +465,29 @@ func validateDirectives(s *schema.Schema, sel selection, location string) []vali
 				`Directive "@%s" may not be used on %s.`, d.Name, location))
 		}
 		if definition != nil {
-			errs = append(errs, validateDefinedDirectiveArguments(sel.Location, d, definition)...)
+			errs = append(errs, validateDefinedDirectiveArguments(sel.Location, d, definition, variables)...)
 		} else {
 			errs = append(errs, validateDirectiveArguments(sel.Location, d)...)
+			for name, value := range d.Args {
+				if inputType := builtinDirectiveArgumentTypes[d.Name][name]; inputType != nil {
+					errs = append(errs, validateVariablePositions(inputType, value, nil, sel.Location, variables)...)
+				}
+			}
 		}
 	}
 	return errs
 }
 
-var executableDirectiveArguments = map[string]map[string]bool{
-	"skip":    {"if": true},
-	"include": {"if": true},
-	"defer":   {"if": true, "label": true},
-	"stream":  {"if": true, "label": true, "initialCount": true},
+var builtinDirectiveArgumentTypes = map[string]map[string]schema.Type{
+	"skip":    {"if": &schema.NonNull{OfType: &schema.Scalar{TypeName: "Boolean"}}},
+	"include": {"if": &schema.NonNull{OfType: &schema.Scalar{TypeName: "Boolean"}}},
+	"defer":   {"if": &schema.Scalar{TypeName: "Boolean"}, "label": &schema.Scalar{TypeName: "String"}},
+	"stream":  {"if": &schema.Scalar{TypeName: "Boolean"}, "label": &schema.Scalar{TypeName: "String"}, "initialCount": &schema.Scalar{TypeName: "Int"}},
 }
 
 func validateDirectiveArguments(loc core.Location, d directive) []validationError {
 	for name := range d.Args {
-		if !executableDirectiveArguments[d.Name][name] {
+		if builtinDirectiveArgumentTypes[d.Name][name] == nil {
 			return []validationError{newValidationError(loc, `Unknown argument "%s" on directive "@%s".`, name, d.Name)}
 		}
 	}
@@ -500,11 +497,8 @@ func validateDirectiveArguments(loc core.Location, d directive) []validationErro
 		if !ok {
 			return []validationError{newValidationError(loc, `Directive "@%s" argument "if" of type "Boolean!" is required, but it was not provided.`, d.Name)}
 		}
-		if ref, ok := raw.(variableRef); ok {
-			if !ref.HasValue {
-				return []validationError{newValidationError(loc, `Argument "if" on directive "@%s" variable "$%s" is missing.`, d.Name, ref.Name)}
-			}
-			raw = ref.Value
+		if _, ok := raw.(variableRef); ok {
+			return nil
 		}
 		if _, ok := raw.(bool); !ok {
 			return []validationError{newValidationError(loc, `Argument "if" on directive "@%s" must be Boolean.`, d.Name)}
@@ -564,9 +558,7 @@ func validateVariableDefinitions(s *schema.Schema, op document) []validationErro
 		}
 		t, ok := s.Types[base]
 		if !ok {
-			// The schema builder permits loose type-name references (suffix
-			// matching), so an unregistered name is not necessarily unknown.
-			// Only types we can resolve are checked for input-type validity.
+			errs = append(errs, newValidationError(core.Location{Line: 1, Column: 1}, `Unknown type "%s".`, base))
 			continue
 		}
 		if !isInputType(t) {
@@ -779,20 +771,18 @@ func variableTypeAllowed(declared string, expected string) bool {
 	if declared == expected {
 		return true
 	}
-	if strings.HasSuffix(declared, "!") && strings.TrimSuffix(declared, "!") == expected {
-		return true
+	if strings.HasSuffix(expected, "!") {
+		return strings.HasSuffix(declared, "!") && variableTypeAllowed(strings.TrimSuffix(declared, "!"), strings.TrimSuffix(expected, "!"))
 	}
-	declaredName := looseTypeName(declared)
-	expectedName := looseTypeName(expected)
-	if declaredName != "" && strings.HasSuffix(expectedName, declaredName) {
-		return true
+	if strings.HasSuffix(declared, "!") {
+		return variableTypeAllowed(strings.TrimSuffix(declared, "!"), expected)
+	}
+	if strings.HasPrefix(expected, "[") {
+		return strings.HasPrefix(declared, "[") && strings.HasSuffix(declared, "]") && strings.HasSuffix(expected, "]") && variableTypeAllowed(declared[1:len(declared)-1], expected[1:len(expected)-1])
 	}
 	return false
 }
 
-// looseTypeNameReplacer strips list/non-null wrappers from a type reference.
-// It is built once: strings.NewReplacer is safe for concurrent use and
-// rebuilding it per call dominated validation allocations.
 var looseTypeNameReplacer = strings.NewReplacer("[", "", "]", "", "!", "")
 
 func looseTypeName(typeName string) string {

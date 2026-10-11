@@ -1,12 +1,13 @@
 package exec
 
 import (
+	"strings"
+
 	"github.com/grx-gql/grx/core"
 	"github.com/grx-gql/grx/schema"
-	"strings"
 )
 
-func validateDefinedDirectiveArguments(loc core.Location, d directive, definition *schema.DirectiveDefinition) []validationError {
+func validateDefinedDirectiveArguments(loc core.Location, d directive, definition *schema.DirectiveDefinition, variables variableScope) []validationError {
 	var errs []validationError
 	field := schema.Field{Args: definition.Args}
 	for name, value := range d.Args {
@@ -16,6 +17,7 @@ func validateDefinedDirectiveArguments(loc core.Location, d directive, definitio
 			continue
 		}
 		errs = append(errs, validateInputValue(arg.Type, value, loc, name)...)
+		errs = append(errs, validateVariablePositions(arg.Type, value, arg.DefaultValue, loc, variables)...)
 	}
 	for _, arg := range definition.Args {
 		if _, present := d.Args[arg.Name]; present || arg.DefaultValue != nil {
@@ -30,19 +32,19 @@ func validateDefinedDirectiveArguments(loc core.Location, d directive, definitio
 
 func directiveArgumentValue(args map[string]any, name string) (any, bool) {
 	value, exists := args[name]
-	if ref, ok := value.(variableRef); ok {
-		return ref.Value, ref.HasValue
+	if _, ok := value.(variableRef); ok {
+		return nil, false
 	}
 	return value, exists
 }
 
 func validateDefinitionDirectives(s *schema.Schema, bundle documentBundle, op document) []validationError {
-	errs := validateDirectives(s, selection{Directives: op.Directives, Location: op.Location}, strings.ToUpper(string(op.Kind)))
+	errs := validateDirectives(s, selection{Directives: op.Directives, Location: op.Location}, strings.ToUpper(string(op.Kind)), variableScope{Types: op.VariableTypes, Definitions: op.VariableDefinitions})
 	for _, definition := range op.VariableDefinitions {
-		errs = append(errs, validateDirectives(s, selection{Directives: definition.Directives, Location: definition.Location}, "VARIABLE_DEFINITION")...)
+		errs = append(errs, validateDirectives(s, selection{Directives: definition.Directives, Location: definition.Location}, "VARIABLE_DEFINITION", variableScope{Types: op.VariableTypes, Definitions: op.VariableDefinitions})...)
 	}
 	for _, fragment := range bundle.fragments {
-		errs = append(errs, validateDirectives(s, selection{Directives: fragment.Directives, Location: locationForOffset(bundle.source, fragment.NameOffset)}, "FRAGMENT_DEFINITION")...)
+		errs = append(errs, validateDirectives(s, selection{Directives: fragment.Directives, Location: locationForOffset(bundle.source, fragment.NameOffset)}, "FRAGMENT_DEFINITION", variableScope{Types: op.VariableTypes, Definitions: op.VariableDefinitions})...)
 	}
 	return errs
 }
