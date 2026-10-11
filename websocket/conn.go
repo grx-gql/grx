@@ -333,6 +333,21 @@ func (c *Conn) ReadMessage() (opcode byte, payload []byte, err error) {
 		case OpcodePong:
 			continue
 		case OpcodeClose:
+			if len(framePayload) == 1 {
+				c.SendClose(closeProtocol, "close payload must include a complete status code")
+				return 0, nil, errors.New("websocket close payload has one byte")
+			}
+			if len(framePayload) >= 2 {
+				code := binary.BigEndian.Uint16(framePayload[:2])
+				if !validCloseCode(code) {
+					c.SendClose(closeProtocol, "invalid close status code")
+					return 0, nil, fmt.Errorf("invalid websocket close code %d", code)
+				}
+				if !utf8.Valid(framePayload[2:]) {
+					c.SendClose(closeInvalidPayload, "invalid UTF-8 close reason")
+					return 0, nil, errors.New("invalid UTF-8 websocket close reason")
+				}
+			}
 			c.SendClose(closeNormal, "")
 			return 0, nil, io.EOF
 		case OpcodeContinuation, OpcodeText, OpcodeBinary:
@@ -359,6 +374,11 @@ func (c *Conn) ReadMessage() (opcode byte, payload []byte, err error) {
 			return result, assembled, nil
 		}
 	}
+}
+
+func validCloseCode(code uint16) bool {
+	return (code >= 1000 && code <= 1014 && code != 1004 && code != 1005 && code != 1006) ||
+		(code >= 3000 && code <= 4999)
 }
 
 func readPayloadLength(reader *bufio.Reader, indicator byte) (uint64, error) {
