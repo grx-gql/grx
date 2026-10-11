@@ -18,9 +18,9 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/grx-gql/grx/core"
+	"github.com/grx-gql/grx/loader"
 	"github.com/grx-gql/grx/plugins"
 	"github.com/grx-gql/grx/schema"
 )
@@ -50,6 +50,7 @@ type Executor struct {
 	rejectUnknownVars    bool
 	resolverCacheEnabled bool
 	queryConcurrency     int
+	loaders              []*loader.Loader
 	abstractTypeResolver AbstractTypeResolver
 	apolloTracing        bool
 	fieldEnders          []plugins.FieldResolveEnder
@@ -111,7 +112,9 @@ func (e *Executor) Execute(ctx context.Context, req core.Request) (response core
 
 	var data *core.OrderedObject
 	var fieldErrors []core.Error
-	if doc.Kind == operationQuery && e.queryConcurrency > 1 {
+	if len(e.loaders) > 0 {
+		data, fieldErrors = e.executeWithLoaders(ctx, root, doc)
+	} else if doc.Kind == operationQuery && e.queryConcurrency > 1 {
 		data, fieldErrors = e.executeParallelQuery(ctx, root, doc)
 	} else {
 		data, fieldErrors = e.executeSelectionSet(ctx, root, nil, doc.Selections, doc.Fragments, nil)
@@ -333,7 +336,13 @@ func (e *Executor) Subscribe(ctx context.Context, req core.Request) (responses <
 				return
 			}
 
-			data, fieldErrors := e.completeValue(ctx, field.Type, value.Interface(), rootField.Selections, doc.Fragments, []any{outKey})
+			var data any
+			var fieldErrors []core.Error
+			if len(e.loaders) > 0 {
+				data, fieldErrors = e.completeLoaderEvent(ctx, field.Type, value.Interface(), rootField.Selections, doc.Fragments, []any{outKey})
+			} else {
+				data, fieldErrors = e.completeValue(ctx, field.Type, value.Interface(), rootField.Selections, doc.Fragments, []any{outKey})
+			}
 			payload := core.NewOrderedObject(1)
 			payload.Set(outKey, data)
 			res := core.Response{Data: payload}
@@ -484,11 +493,12 @@ func (e *Executor) executeSelectionSet(ctx context.Context, object *schema.Objec
 
 	if collector != nil {
 		for _, d := range defers {
-			collector.addDefer(object, source, d.selections, fragments, clonePath(path), d.label)
+			collector.addDefer(ctx, object, source, d.selections, fragments, clonePath(path), d.label)
 		}
 	}
 
 	data := core.NewOrderedObject(len(flat))
+	nullRoot := false
 	for _, selected := range flat {
 		key, value, fieldErrors, wire := e.resolveSelectedField(ctx, object, source, selected, fragments, path, arena)
 		if len(fieldErrors) > 0 {
@@ -496,7 +506,11 @@ func (e *Executor) executeSelectionSet(ctx context.Context, object *schema.Objec
 		}
 		if len(fieldErrors) > 0 && value == nil {
 			if field := object.Fields[selected.Name]; field != nil && !isNullableGraphQLType(field.Type) {
-				return nil, errors
+				if arena != nil && arena.batch != nil && e.queryConcurrency > 1 && len(path) == 0 {
+					nullRoot = true
+				} else {
+					return nil, errors
+				}
 			}
 		}
 		if !wire {
@@ -504,111 +518,27 @@ func (e *Executor) executeSelectionSet(ctx context.Context, object *schema.Objec
 		}
 		data.Set(key, value)
 	}
+	if nullRoot {
+		return nil, errors
+	}
 	return finalizeSelectionObject(data, errors)
 }
 
 func (e *Executor) resolveSelectedField(ctx context.Context, object *schema.Object, source any, selected selection, fragments map[string]*fragmentDef, path []any, arena *pathArena) (string, any, []core.Error, bool) {
-	if err := ctx.Err(); err != nil {
-		return "", nil, []core.Error{newFieldError(err.Error(), path, core.Location{})}, false
-	}
-
-	key := selected.responseKey()
-	if selected.Name == "__typename" {
-		return key, object.Name(), nil, true
-	}
-
-	field, ok := object.Fields[selected.Name]
-	if !ok {
-		return key, nil, []core.Error{newFieldError(
-			fmt.Sprintf(`Cannot query field "%s" on type "%s".`, selected.Name, object.Name()),
-			extendAppendedPath(arena, path, key), selected.Location)}, false
-	}
-
-	fieldPath := extendAppendedPath(arena, path, key)
-
-	traceFields := len(e.fieldEnders) > 0 || e.apolloTracing
-	needFieldContext := len(e.Plugins) > 0 || traceFields
-	needPathStrings := e.fieldAuthorizer != nil || needFieldContext
-	var pathParts []string
-	if needPathStrings {
-		pathParts = pathStrings(fieldPath)
-	}
-
-	if e.fieldAuthorizer != nil {
-		err := e.fieldAuthorizer(ctx, FieldAuthorizationContext{
-			ParentType: object.Name(),
-			FieldName:  selected.Name,
-			Path:       pathParts,
-		})
-		if err != nil {
+	if arena != nil && arena.batch != nil {
+		key := batchFieldKey(path, selected.responseKey())
+		result, ok := arena.batch.fields[key]
+		if !ok {
+			err := fmt.Errorf("missing prepared field %s.%s at response path %v", object.Name(), selected.Name, path)
 			e.notifyError(ctx, err)
-			return key, nil, []core.Error{newFieldError(e.maskError(err, false).Error(), fieldPath, selected.Location)}, true
+			return selected.responseKey(), nil, []core.Error{newFieldError(e.maskError(err, true).Error(), appendPath(path, selected.responseKey()), selected.Location)}, true
 		}
+		delete(arena.batch.fields, key)
+		return e.completeResolvedField(ctx, selected, fragments, arena, result)
 	}
 
-	// fieldCtx (notably field.Type.Name(), which allocates for wrapped types)
-	// is built only when an observer needs it, keeping the hot path allocation-free.
-	var fieldCtx plugins.FieldContext
-	if needFieldContext {
-		fieldCtx = plugins.FieldContext{
-			Path:       pathParts,
-			FieldName:  selected.Name,
-			ParentType: object.Name(),
-			ReturnType: field.Type.Name(),
-		}
-	}
-	for _, hook := range e.Plugins {
-		if err := hook.FieldResolveStart(ctx, fieldCtx); err != nil {
-			e.notifyError(ctx, err)
-			return key, nil, []core.Error{newFieldError(e.maskError(err, true).Error(), fieldPath, selected.Location)}, true
-		}
-	}
-
-	var fieldStart time.Time
-	if traceFields {
-		fieldStart = time.Now()
-	}
-
-	args, err := coerceArguments(field.Args, selected.Arguments)
-	if err != nil {
-		e.notifyError(ctx, err)
-		return key, nil, []core.Error{newFieldError(e.maskError(err, false).Error(), fieldPath, selected.Location)}, true
-	}
-
-	value, resolverErr := e.invokeResolver(ctx, arena, field, source, args)
-	var resolverMsgs []core.Error
-	if resolverErr != nil {
-		e.notifyError(ctx, resolverErr)
-		resolverMsgs = []core.Error{newFieldError(e.maskError(resolverErr, true).Error(), fieldPath, selected.Location)}
-		value = nil
-	}
-
-	var resolved any
-	var nestedErrors []core.Error
-	streamed := false
-	if collector := arenaCollector(arena); collector != nil && resolverErr == nil && value != nil {
-		if active, initialCount, label := streamDirective(selected.Directives); active {
-			if itemType, ok := listItemType(field.Type); ok {
-				resolved, nestedErrors = e.completeListStreamed(ctx, itemType, value, selected.Selections, fragments, fieldPath, initialCount, label, collector)
-				streamed = true
-			}
-		}
-	}
-	if !streamed && resolverErr == nil {
-		resolved, nestedErrors = e.completeValue(ctx, field.Type, value, selected.Selections, fragments, fieldPath)
-	}
-	errs := append(resolverMsgs, completionErrorLocations(nestedErrors, selected.Location)...)
-
-	if traceFields {
-		for _, ender := range e.fieldEnders {
-			ender.FieldResolveEnd(ctx, fieldCtx, resolverErr)
-		}
-		if e.apolloTracing {
-			recordApolloFieldTrace(arena, fieldCtx, fieldStart, time.Now())
-		}
-	}
-
-	return key, resolved, errs, true
+	result := e.prepareSelectedField(ctx, object, source, selected, path, arena)
+	return e.completeResolvedField(ctx, selected, fragments, arena, &result)
 }
 
 // invokeResolver runs a field resolver, applying request-scoped memoization
@@ -708,14 +638,14 @@ func (e *Executor) completeValue(ctx context.Context, fieldType schema.Type, val
 	case *schema.Object:
 		return e.completeObjectValue(ctx, typed, value, selections, fragments, path)
 	case *schema.Interface:
-		objectType, err := e.resolveAbstractType(typed.Name(), value, typed.Resolve)
+		objectType, err := e.resolveCompletionObject(ctx, typed.Name(), value, typed.Resolve, path)
 		if err != nil {
 			e.notifyError(ctx, err)
 			return nil, []core.Error{newFieldError(e.maskError(err, true).Error(), path, core.Location{})}
 		}
 		return e.completeObjectValue(ctx, objectType, value, selections, fragments, path)
 	case *schema.Union:
-		objectType, err := e.resolveAbstractType(typed.Name(), value, typed.Resolve)
+		objectType, err := e.resolveCompletionObject(ctx, typed.Name(), value, typed.Resolve, path)
 		if err != nil {
 			e.notifyError(ctx, err)
 			return nil, []core.Error{newFieldError(e.maskError(err, true).Error(), path, core.Location{})}

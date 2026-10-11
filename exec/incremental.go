@@ -59,12 +59,13 @@ type incrementalCollector struct {
 }
 
 type incrementalWork struct {
-	object     *schema.Object
-	source     any
-	selections []selection
-	fragments  map[string]*fragmentDef
-	path       []any
-	label      string
+	loaderContext context.Context
+	object        *schema.Object
+	source        any
+	selections    []selection
+	fragments     map[string]*fragmentDef
+	path          []any
+	label         string
 
 	// stream item work
 	stream   bool
@@ -72,26 +73,28 @@ type incrementalWork struct {
 	itemVal  any
 }
 
-func (c *incrementalCollector) addDefer(object *schema.Object, source any, selections []selection, fragments map[string]*fragmentDef, path []any, label string) {
+func (c *incrementalCollector) addDefer(ctx context.Context, object *schema.Object, source any, selections []selection, fragments map[string]*fragmentDef, path []any, label string) {
 	c.work = append(c.work, incrementalWork{
-		object:     object,
-		source:     source,
-		selections: selections,
-		fragments:  fragments,
-		path:       path,
-		label:      label,
+		loaderContext: ctx,
+		object:        object,
+		source:        source,
+		selections:    selections,
+		fragments:     fragments,
+		path:          path,
+		label:         label,
 	})
 }
 
-func (c *incrementalCollector) addStreamItem(itemType schema.Type, item any, selections []selection, fragments map[string]*fragmentDef, path []any, label string) {
+func (c *incrementalCollector) addStreamItem(ctx context.Context, itemType schema.Type, item any, selections []selection, fragments map[string]*fragmentDef, path []any, label string) {
 	c.work = append(c.work, incrementalWork{
-		selections: selections,
-		fragments:  fragments,
-		path:       path,
-		label:      label,
-		stream:     true,
-		itemType:   itemType,
-		itemVal:    item,
+		loaderContext: ctx,
+		selections:    selections,
+		fragments:     fragments,
+		path:          path,
+		label:         label,
+		stream:        true,
+		itemType:      itemType,
+		itemVal:       item,
 	})
 }
 
@@ -157,7 +160,7 @@ func (e *Executor) completeListStreamed(ctx context.Context, itemType schema.Typ
 	}
 
 	for index := initialCount; index < n; index++ {
-		collector.addStreamItem(itemType, raw.Index(index).Interface(), selections, fragments, clonePath(extendAppendedPath(arena, path, index)), label)
+		collector.addStreamItem(ctx, itemType, raw.Index(index).Interface(), selections, fragments, clonePath(extendAppendedPath(arena, path, index)), label)
 	}
 	return items, errs
 }
@@ -205,7 +208,13 @@ func (e *Executor) ExecuteIncrementalStream(ctx context.Context, req core.Reques
 	}
 	e.enableResolverCache(ctx, doc.Kind)
 
-	data, fieldErrors := e.executeSelectionSet(ctx, root, nil, doc.Selections, doc.Fragments, nil)
+	var data *core.OrderedObject
+	var fieldErrors []core.Error
+	if len(e.loaders) > 0 {
+		data, fieldErrors = e.executeWithLoaders(ctx, root, doc)
+	} else {
+		data, fieldErrors = e.executeSelectionSet(ctx, root, nil, doc.Selections, doc.Fragments, nil)
+	}
 	initial := core.Response{Errors: fieldErrors}
 	if data == nil && len(fieldErrors) > 0 {
 		initial.DataNull = true
@@ -249,8 +258,17 @@ func (e *Executor) ExecuteIncrementalStream(ctx context.Context, req core.Reques
 
 func (e *Executor) runIncrementalWork(ctx context.Context, item incrementalWork) core.IncrementalPayload {
 	payload := core.IncrementalPayload{Label: item.label, Path: item.path}
+	if len(e.loaders) > 0 {
+		ctx = item.loaderContext
+	}
 	if item.stream {
-		value, errs := e.completeValue(ctx, item.itemType, item.itemVal, item.selections, item.fragments, item.path)
+		var value any
+		var errs []core.Error
+		if len(e.loaders) > 0 {
+			value, errs = e.completeBatchValue(ctx, item.itemType, item.itemVal, item.selections, item.fragments, item.path)
+		} else {
+			value, errs = e.completeValue(ctx, item.itemType, item.itemVal, item.selections, item.fragments, item.path)
+		}
 		payload.Items = []any{value}
 		if value == nil {
 			nullPath := item.path
@@ -268,7 +286,13 @@ func (e *Executor) runIncrementalWork(ctx context.Context, item incrementalWork)
 		}
 		return payload
 	}
-	data, errs := e.executeSelectionSet(ctx, item.object, item.source, item.selections, item.fragments, item.path)
+	var data *core.OrderedObject
+	var errs []core.Error
+	if len(e.loaders) > 0 {
+		data, errs = e.executeBatchSelection(ctx, item.object, item.source, item.selections, item.fragments, item.path)
+	} else {
+		data, errs = e.executeSelectionSet(ctx, item.object, item.source, item.selections, item.fragments, item.path)
+	}
 	payload.Data = data
 	if data == nil {
 		if collector := arenaCollector(lookupPathArena(ctx)); collector != nil {

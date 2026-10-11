@@ -382,11 +382,11 @@ This file is the source of truth for feature parity tracking and roadmap sync in
 
 ### Data Loading
 
-- [ ] Batch loader primitive (DataLoader-style)
-- [ ] Per-request resolver cache
-- [ ] Request-scoped deduplication of identical lookups
-- [ ] Batch dispatch tied to execution tick boundaries
-- [ ] Typed loader registration keyed to resolver context
+- [x] Batch loader primitive (DataLoader-style)
+- [x] Per-request resolver cache
+- [x] Request-scoped deduplication of identical lookups
+- [x] Batch dispatch tied to execution tick boundaries
+- [x] Typed loader registration keyed to resolver context
 
 ### Federation
 
