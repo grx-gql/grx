@@ -72,6 +72,7 @@ func TestSDLExtensionDirectivesAndMetadata(t *testing.T) {
 
 func TestSDLInvalidExtensionsReturnErrors(t *testing.T) {
 	for _, source := range []string{
+		`input Filter { id: ID } extend input Filter @oneOf`,
 		`extend scalar Missing @specifiedBy(url: "url")`,
 		`scalar Date extend scalar Date`,
 		`type Query { ok: String } extend enum Query { VALUE }`,

@@ -665,7 +665,7 @@ func buildSchemaFromDefs(defs []sdlDef) (*schema.Schema, error) {
 		}
 		switch def.kind {
 		case "scalar":
-			s := &schema.Scalar{TypeName: def.name, Description: def.description}
+			s := &schema.Scalar{TypeName: def.name, Description: def.description, Directives: appliedSDLDirectives(def.directives)}
 			for _, d := range def.directives {
 				if d.Name == "specifiedBy" {
 					if url, ok := stringArg(d.Args, "url"); ok {
@@ -679,10 +679,10 @@ func buildSchemaFromDefs(defs []sdlDef) (*schema.Schema, error) {
 		case "interface":
 			types[def.name] = &schema.Interface{TypeName: def.name, Description: def.description, Fields: map[string]*schema.Field{}}
 		case "union":
-			types[def.name] = &schema.Union{TypeName: def.name, Description: def.description}
+			types[def.name] = &schema.Union{TypeName: def.name, Description: def.description, Directives: appliedSDLDirectives(def.directives)}
 		case "enum":
 			ev := buildEnumValues(def.enumValues)
-			e := &schema.Enum{TypeName: def.name, Description: def.description, Values: ev}
+			e := &schema.Enum{TypeName: def.name, Description: def.description, Values: ev, Directives: appliedSDLDirectives(def.directives)}
 			types[def.name] = e
 		case "input":
 			types[def.name] = &schema.InputObject{TypeName: def.name, Description: def.description, Fields: map[string]*schema.Field{}}
@@ -705,6 +705,7 @@ func buildSchemaFromDefs(defs []sdlDef) (*schema.Schema, error) {
 			}
 		case "interface":
 			iface := types[def.name].(*schema.Interface)
+			iface.Directives = appliedSDLDirectives(def.directives)
 			if err := populateInterfaceFields(iface, def, types); err != nil {
 				return nil, err
 			}
@@ -767,6 +768,7 @@ func buildSchemaFromDefs(defs []sdlDef) (*schema.Schema, error) {
 	// First check for explicit schema definition.
 	for _, def := range defs {
 		if def.kind == "schema" {
+			s.Directives = append(s.Directives, appliedSDLDirectives(def.directives)...)
 			if def.schemaQuery != "" {
 				t, ok := types[def.schemaQuery]
 				if !ok {
@@ -920,7 +922,7 @@ func populateInterfaceFields(iface *schema.Interface, def sdlDef, types map[stri
 		if err != nil {
 			return err
 		}
-		iface.Fields[f.name] = &schema.Field{Name: f.name, Description: f.description, Type: fieldType, Args: args}
+		iface.Fields[f.name] = &schema.Field{Name: f.name, Description: f.description, Type: fieldType, Args: args, Directives: appliedSDLDirectives(f.directives)}
 	}
 	// Wire up interface implements interface.
 	for _, ifaceName := range def.interfaces {
@@ -943,7 +945,7 @@ func populateInputFields(inputObj *schema.InputObject, def sdlDef, types map[str
 		if err != nil {
 			return err
 		}
-		schemaField := &schema.Field{Name: f.name, Description: f.description, Type: fieldType}
+		schemaField := &schema.Field{Name: f.name, Description: f.description, Type: fieldType, Directives: appliedSDLDirectives(f.directives)}
 		// Default value stored in args[0] for input fields (see parseInputFieldDefs).
 		if len(f.args) > 0 && f.args[0].hasDefault {
 			schemaField.DefaultValue = f.args[0].defaultValue
@@ -991,7 +993,7 @@ func buildFieldArgs(args []sdlArgDef, types map[string]schema.Type) ([]schema.In
 func buildEnumValues(defs []sdlEnumValueDef) []schema.EnumValue {
 	values := make([]schema.EnumValue, 0, len(defs))
 	for _, d := range defs {
-		ev := schema.EnumValue{Name: d.name, Description: d.description}
+		ev := schema.EnumValue{Name: d.name, Description: d.description, Directives: appliedSDLDirectives(d.directives)}
 		for _, dir := range d.directives {
 			if dir.Name == "deprecated" {
 				ev.IsDeprecated = true
