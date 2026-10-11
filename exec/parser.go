@@ -798,7 +798,11 @@ func lexNormalizedSource(input string) ([]token, error) {
 
 		// Non-ASCII byte: decode and report a precise rune in the error.
 		if c >= 0x80 {
-			r, _ := utf8.DecodeRuneInString(input[i:])
+			r, size := utf8.DecodeRuneInString(input[i:])
+			if r == '\uFEFF' {
+				i += size
+				continue
+			}
 			return nil, newParseError(input, i, "unexpected character %q", r)
 		}
 		return nil, newParseError(input, i, "unexpected character %q", rune(c))
