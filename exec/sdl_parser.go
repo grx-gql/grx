@@ -640,7 +640,7 @@ func (p *sdlParser) parseSDLDirectives() ([]directive, error) {
 				return nil, err
 			}
 			p.index = ep.index
-			d.Args = args
+			d.Args = resolveValueVariableRef(args).(map[string]any)
 		}
 		out = append(out, d)
 	}
