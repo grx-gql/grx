@@ -71,7 +71,7 @@ func TestWriteResponseAndHeaderHelpers(t *testing.T) {
 	if got, ok := NegotiateResponseContentType([]string{"application/json;q=0.5, application/graphql-response+json;q=0.5"}); !ok || got != MediaTypeGraphQLResponse {
 		t.Fatalf("negotiated = %q %v", got, ok)
 	}
-	if got, ok := NegotiateResponseContentType([]string{"multipart/mixed"}); !ok || got != MediaTypeJSON {
+	if got, ok := NegotiateResponseContentType([]string{"multipart/mixed"}); ok {
 		t.Fatalf("multipart negotiated = %q %v", got, ok)
 	}
 	if _, ok := NegotiateResponseContentType([]string{"text/plain"}); ok {

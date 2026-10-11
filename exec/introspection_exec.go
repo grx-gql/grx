@@ -100,7 +100,7 @@ func (e *Executor) introspectionFieldHooks(ctx context.Context, parentType, fiel
 	for _, hook := range e.Plugins {
 		if err := hook.FieldResolveStart(ctx, plugins.FieldContext{Path: pathParts, FieldName: fieldName}); err != nil {
 			e.notifyError(ctx, err)
-			fe := newFieldError(e.maskError(err, false).Error(), path, core.Location{})
+			fe := newFieldError(e.maskError(err, true).Error(), path, core.Location{})
 			return &fe
 		}
 	}

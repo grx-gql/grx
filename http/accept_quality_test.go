@@ -18,3 +18,15 @@ func TestRoadmapRejectsUnacceptableResponseMediaType(t *testing.T) {
 		t.Fatalf("excluded media type accepted: status=%d content-type=%q", rec.Code, rec.Header().Get("Content-Type"))
 	}
 }
+
+func TestMultipartAcceptDoesNotAuthorizeJSON(t *testing.T) {
+	for _, body := range []string{`{"query":"{ hello }"}`, `[{"query":"{ hello }"}]`} {
+		req := postGraphQLRequest("/graphql", body)
+		req.Header.Set("Accept", "application/json;q=0,application/graphql-response+json;q=0,multipart/mixed;q=1")
+		rec := httptest.NewRecorder()
+		grxhttp.New().Serve(rec, req, &stubExecutor{})
+		if rec.Code != 406 {
+			t.Errorf("excluded JSON returned: %d %s", rec.Code, rec.Body.String())
+		}
+	}
+}

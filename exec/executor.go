@@ -434,7 +434,7 @@ func (e *Executor) sendResponse(ctx context.Context, res core.Response) core.Res
 	for _, hook := range e.Plugins {
 		if err := hook.ResponseSend(ctx, res); err != nil {
 			e.notifyError(ctx, err)
-			return e.failResponse(ctx, e.maskError(err, false))
+			return e.failResponse(ctx, e.maskError(err, true))
 		}
 	}
 	return res
@@ -565,7 +565,7 @@ func (e *Executor) resolveSelectedField(ctx context.Context, object *schema.Obje
 	for _, hook := range e.Plugins {
 		if err := hook.FieldResolveStart(ctx, fieldCtx); err != nil {
 			e.notifyError(ctx, err)
-			return key, nil, []core.Error{newFieldError(e.maskError(err, false).Error(), fieldPath, selected.Location)}, true
+			return key, nil, []core.Error{newFieldError(e.maskError(err, true).Error(), fieldPath, selected.Location)}, true
 		}
 	}
 
@@ -828,7 +828,7 @@ func (e *Executor) startRequest(ctx context.Context, req core.Request) (context.
 		ctx, err = hook.RequestStart(ctx, req)
 		if err != nil {
 			e.notifyError(ctx, err)
-			return ctx, err
+			return ctx, e.maskError(err, true)
 		}
 	}
 	return ctx, nil
@@ -838,7 +838,7 @@ func (e *Executor) notifyParsing(ctx context.Context, req core.Request) error {
 	for _, hook := range e.Plugins {
 		if err := hook.ParsingStart(ctx, req); err != nil {
 			e.notifyError(ctx, err)
-			return err
+			return e.maskError(err, true)
 		}
 	}
 	return nil
@@ -848,7 +848,7 @@ func (e *Executor) notifyValidation(ctx context.Context, req core.Request) error
 	for _, hook := range e.Plugins {
 		if err := hook.ValidationStart(ctx, req); err != nil {
 			e.notifyError(ctx, err)
-			return err
+			return e.maskError(err, true)
 		}
 	}
 	return nil
@@ -858,7 +858,7 @@ func (e *Executor) notifyExecution(ctx context.Context, req core.Request) error 
 	for _, hook := range e.Plugins {
 		if err := hook.ExecutionStart(ctx, req); err != nil {
 			e.notifyError(ctx, err)
-			return err
+			return e.maskError(err, true)
 		}
 	}
 	return nil

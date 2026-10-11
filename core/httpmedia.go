@@ -48,8 +48,8 @@ func NegotiateResponseContentType(accept []string) (string, bool) {
 	if len(accept) == 0 {
 		return MediaTypeJSON, true
 	}
-	types := [3]string{MediaTypeGraphQLResponse, MediaTypeJSON, "multipart/mixed"}
-	preferences := [3]mediaPreference{{specificity: -1}, {specificity: -1}, {specificity: -1}}
+	types := [2]string{MediaTypeGraphQLResponse, MediaTypeJSON}
+	preferences := [2]mediaPreference{{specificity: -1}, {specificity: -1}}
 	for _, raw := range accept {
 		for _, part := range strings.Split(raw, ",") {
 			candidate, ok := parseAcceptCandidate(part)
@@ -57,9 +57,6 @@ func NegotiateResponseContentType(accept []string) (string, bool) {
 				continue
 			}
 			for index, mediaType := range types {
-				if mediaType == "multipart/mixed" && candidate.mediaType != mediaType {
-					continue
-				}
 				specificity := -1
 				switch {
 				case candidate.mediaType == mediaType:
@@ -81,11 +78,6 @@ func NegotiateResponseContentType(accept []string) (string, bool) {
 		if preference.specificity >= 0 && preference.quality > quality {
 			best, quality = types[index], preference.quality
 		}
-	}
-	// Preserve multipart-only negotiation for incremental transports, which
-	// select multipart framing after inspecting the operation.
-	if best == "multipart/mixed" {
-		return MediaTypeJSON, true
 	}
 	return best, best != ""
 }
