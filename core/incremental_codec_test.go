@@ -81,3 +81,107 @@ type nilIncrementalMarshaler struct{}
 func (*nilIncrementalMarshaler) MarshalJSON() ([]byte, error) {
 	panic("nil marshaler must not be called")
 }
+
+func TestIncrementalResponseDirectCodec(t *testing.T) {
+	hasMore := true
+	for _, hasNext := range []*bool{nil, new(bool), &hasMore} {
+		patches := []IncrementalPayload{
+			{Label: "deferred", Path: []any{"user"}, Data: map[string]any{"id": 1}},
+			{ItemsNull: true, Errors: []Error{{Message: "null item"}}, Extensions: map[string]any{"code": "NULL"}},
+			{Items: []any{nil, []any(nil), (*nilIncrementalMarshaler)(nil)}},
+		}
+		response := Response{Incremental: patches, HasNext: hasNext}
+		encoded, err := response.MarshalJSON()
+		if err != nil {
+			t.Fatal(err)
+		}
+		// The ordinary struct encoder is the reference for field presence and order.
+		reference, err := json.Marshal(struct {
+			Incremental []IncrementalPayload `json:"incremental,omitempty"`
+			HasNext     *bool                `json:"hasNext,omitempty"`
+		}{patches, hasNext})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if string(encoded) != string(reference) {
+			t.Fatalf("got %s want %s", encoded, reference)
+		}
+		_, err = (Response{Incremental: []IncrementalPayload{{Label: "overwrite pooled buffer", Items: []any{1}}}}).MarshalJSON()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if string(encoded) != string(reference) {
+			t.Fatal("returned JSON aliases pooled memory")
+		}
+	}
+	for _, patch := range []IncrementalPayload{{Items: []any{math.NaN()}}, {Extensions: map[string]any{"bad": func() {}}}} {
+		if _, err := (Response{Incremental: []IncrementalPayload{patch}}).MarshalJSON(); err == nil {
+			t.Fatal("unsupported patch accepted")
+		}
+	}
+}
+
+func TestIncrementalResponsePreservesEnvelopeFields(t *testing.T) {
+	ordered := NewOrderedObject(1)
+	ordered.Set("id", "1")
+	for _, response := range []Response{
+		{Data: ordered}, {Data: (*OrderedObject)(nil)}, {DataNull: true},
+		{Data: "invalid UTF8: \xff <>& \u2028"}, {Data: []any(nil)},
+		{Data: map[string]any{"ok": true}, Errors: []Error{{Message: "partial"}}, Extensions: map[string]any{"tracing": true}},
+	} {
+		response.Incremental = []IncrementalPayload{{ItemsNull: true}}
+		type wireResponse struct {
+			Data        any                  `json:"data,omitempty"`
+			Errors      []Error              `json:"errors,omitempty"`
+			Incremental []IncrementalPayload `json:"incremental"`
+			Extensions  map[string]any       `json:"extensions,omitempty"`
+		}
+		data := response.Data
+		if response.DataNull {
+			data = json.RawMessage("null")
+		}
+		want, err := json.Marshal(wireResponse{data, response.Errors, response.Incremental, response.Extensions})
+		if err != nil {
+			t.Fatal(err)
+		}
+		got, err := response.MarshalJSON()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if string(got) != string(want) {
+			t.Fatalf("got %s want %s", got, want)
+		}
+	}
+	for _, response := range []Response{
+		{Data: math.NaN()}, {Errors: []Error{{Extensions: map[string]any{"bad": func() {}}}}},
+		{Extensions: map[string]any{"bad": func() {}}},
+	} {
+		response.Incremental = []IncrementalPayload{{ItemsNull: true}}
+		if _, err := response.MarshalJSON(); err == nil {
+			t.Fatal("unsupported envelope accepted")
+		}
+	}
+}
+
+func TestIncrementalDirectCodecCustomValues(t *testing.T) {
+	object := NewOrderedObject(3)
+	object.Set("separators", "\u2028\u2029")
+	object.Set("custom", json.RawMessage(` {"html":"<>&","space":"\u2028"} `))
+	object.Set("nil", (*nilIncrementalMarshaler)(nil))
+	response := Response{Incremental: []IncrementalPayload{{Label: "\u2028\u2029", Items: []any{object}}}}
+	got, err := response.MarshalJSON()
+	if err != nil {
+		t.Fatal(err)
+	}
+	want, err := json.Marshal(response)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != string(want) {
+		t.Fatalf("direct=%s standard=%s", got, want)
+	}
+	object.Set("custom", json.RawMessage(`invalid`))
+	if _, err := response.MarshalJSON(); err == nil {
+		t.Fatal("invalid custom JSON accepted")
+	}
+}

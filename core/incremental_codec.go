@@ -9,39 +9,59 @@ type incrementalPayloadJSON IncrementalPayload
 
 // MarshalJSON preserves explicit items:null for a failed incremental stream.
 func (p IncrementalPayload) MarshalJSON() ([]byte, error) {
-	if len(p.Errors) == 0 && len(p.Extensions) == 0 {
-		buf := responseDataBufPool.Get().(*bytes.Buffer)
-		buf.Reset()
-		defer responseDataBufPool.Put(buf)
-		buf.WriteByte('{')
-		if p.Label != "" {
-			writeIncrementalFieldPrefix(buf, "label")
-			writeEscapedJSONString(buf, p.Label)
-		}
-		if len(p.Path) > 0 {
-			writeIncrementalFieldPrefix(buf, "path")
-			if err := writeIncrementalJSONArray(buf, p.Path); err != nil {
-				return nil, err
-			}
-		}
-		if p.Data != nil {
-			writeIncrementalFieldPrefix(buf, "data")
-			if err := writeIncrementalJSON(buf, p.Data); err != nil {
-				return nil, err
-			}
-		}
-		if p.ItemsNull {
-			writeIncrementalFieldPrefix(buf, "items")
-			buf.WriteString("null")
-		} else if len(p.Items) > 0 {
-			writeIncrementalFieldPrefix(buf, "items")
-			if err := writeIncrementalJSONArray(buf, p.Items); err != nil {
-				return nil, err
-			}
-		}
-		buf.WriteByte('}')
-		return append([]byte(nil), buf.Bytes()...), nil
+	if len(p.Errors) > 0 || len(p.Extensions) > 0 {
+		return marshalIncrementalPayloadMetadata(p)
 	}
+	buf := responseDataBufPool.Get().(*bytes.Buffer)
+	buf.Reset()
+	defer responseDataBufPool.Put(buf)
+	if err := writeIncrementalPayload(buf, p); err != nil {
+		return nil, err
+	}
+	return append([]byte(nil), buf.Bytes()...), nil
+}
+
+func writeIncrementalPayload(buf *bytes.Buffer, p IncrementalPayload) error {
+	if len(p.Errors) > 0 || len(p.Extensions) > 0 {
+		encoded, err := marshalIncrementalPayloadMetadata(p)
+		if err != nil {
+			return err
+		}
+		buf.Write(encoded)
+		return nil
+	}
+	start := buf.Len()
+	buf.WriteByte('{')
+	if p.Label != "" {
+		writeIncrementalFieldPrefix(buf, start, `"label":`)
+		writeEscapedJSONString(buf, p.Label)
+	}
+	if len(p.Path) > 0 {
+		writeIncrementalFieldPrefix(buf, start, `"path":`)
+		if err := writeIncrementalJSONArray(buf, p.Path); err != nil {
+			return err
+		}
+	}
+	if p.Data != nil {
+		writeIncrementalFieldPrefix(buf, start, `"data":`)
+		if err := writeIncrementalJSON(buf, p.Data); err != nil {
+			return err
+		}
+	}
+	if p.ItemsNull {
+		writeIncrementalFieldPrefix(buf, start, `"items":`)
+		buf.WriteString("null")
+	} else if len(p.Items) > 0 {
+		writeIncrementalFieldPrefix(buf, start, `"items":`)
+		if err := writeIncrementalJSONArray(buf, p.Items); err != nil {
+			return err
+		}
+	}
+	buf.WriteByte('}')
+	return nil
+}
+
+func marshalIncrementalPayloadMetadata(p IncrementalPayload) ([]byte, error) {
 	if !p.ItemsNull {
 		return json.Marshal(incrementalPayloadJSON(p))
 	}
@@ -49,6 +69,66 @@ func (p IncrementalPayload) MarshalJSON() ([]byte, error) {
 		incrementalPayloadJSON
 		Items any `json:"items"`
 	}{incrementalPayloadJSON: incrementalPayloadJSON(p)})
+}
+
+// marshalIncrementalResponse writes patches into one owned envelope buffer so
+// nested MarshalJSON methods do not repeatedly allocate and validate JSON.
+func marshalIncrementalResponse(response Response) ([]byte, error) {
+	buf := responseDataBufPool.Get().(*bytes.Buffer)
+	buf.Reset()
+	defer responseDataBufPool.Put(buf)
+	buf.WriteByte('{')
+	if response.Data != nil {
+		buf.WriteString(`"data":`)
+		if err := writeIncrementalResponseData(buf, response.Data); err != nil {
+			return nil, err
+		}
+	} else if response.DataNull {
+		buf.WriteString(`"data":null`)
+	}
+	if len(response.Errors) > 0 {
+		writeIncrementalFieldPrefix(buf, 0, `"errors":`)
+		if err := writeIncrementalJSON(buf, response.Errors); err != nil {
+			return nil, err
+		}
+	}
+	writeIncrementalFieldPrefix(buf, 0, `"incremental":[`)
+	for index, patch := range response.Incremental {
+		if index > 0 {
+			buf.WriteByte(',')
+		}
+		if err := writeIncrementalPayload(buf, patch); err != nil {
+			return nil, err
+		}
+	}
+	buf.WriteByte(']')
+	if response.HasNext != nil {
+		if *response.HasNext {
+			buf.WriteString(`,"hasNext":true`)
+		} else {
+			buf.WriteString(`,"hasNext":false`)
+		}
+	}
+	if len(response.Extensions) > 0 {
+		writeIncrementalFieldPrefix(buf, 0, `"extensions":`)
+		if err := writeIncrementalJSON(buf, response.Extensions); err != nil {
+			return nil, err
+		}
+	}
+	buf.WriteByte('}')
+	return append([]byte(nil), buf.Bytes()...), nil
+}
+
+func writeIncrementalResponseData(buf *bytes.Buffer, data any) error {
+	if ordered, ok := data.(*OrderedObject); ok {
+		return writeGraphQLJSON(buf, ordered)
+	}
+	encoded, err := json.Marshal(data)
+	if err != nil {
+		return err
+	}
+	buf.Write(encoded)
+	return nil
 }
 
 // UnmarshalJSON distinguishes a failed stream from a deferred data patch.
@@ -73,13 +153,11 @@ func (p *IncrementalPayload) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-func writeIncrementalFieldPrefix(buf *bytes.Buffer, name string) {
-	if buf.Len() > 1 {
+func writeIncrementalFieldPrefix(buf *bytes.Buffer, start int, prefix string) {
+	if buf.Len() > start+1 {
 		buf.WriteByte(',')
 	}
-	buf.WriteByte('"')
-	buf.WriteString(name)
-	buf.WriteString(`":`)
+	buf.WriteString(prefix)
 }
 
 // Incremental envelopes retain encoding/json's rejection of non-finite values;

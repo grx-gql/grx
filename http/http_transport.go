@@ -402,12 +402,6 @@ func acceptsMultipartMixed(r *nethttp.Request) bool {
 	return false
 }
 
-// incrementalChunk is the JSON body of a subsequent multipart/mixed part.
-type incrementalChunk struct {
-	Incremental []core.IncrementalPayload `json:"incremental,omitempty"`
-	HasNext     bool                      `json:"hasNext"`
-}
-
 // writeIncremental streams a GraphQL incremental-delivery response as
 // multipart/mixed per https://github.com/graphql/graphql-over-http. The initial
 // payload is sent first, followed by one part per deferred/streamed payload, and
@@ -433,7 +427,7 @@ func (t *Transport) writeIncremental(w nethttp.ResponseWriter, r *nethttp.Reques
 		return writeMultipartPart(w, initialJSON)
 	}
 	emitPatch := func(payload core.IncrementalPayload, hasNext bool) error {
-		body, err := json.Marshal(incrementalChunk{Incremental: []core.IncrementalPayload{payload}, HasNext: hasNext})
+		body, err := (core.Response{Incremental: []core.IncrementalPayload{payload}, HasNext: &hasNext}).MarshalJSON()
 		if err != nil {
 			return err
 		}
