@@ -28,9 +28,15 @@ jobs:
         working-directory: pubsub/redis
         run: go test -race -coverprofile=/tmp/grx-redis-coverage.out ./...
 
+      - name: Coverage
+        run: env COVER_MIN=90 ./scripts/cover-lib.sh
+
+      - name: Set up Go for CORS integrations
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        with:
+          go-version-file: integration/cors/go.mod
+          cache-dependency-path: integration/cors/go.sum
+
       - name: Test external CORS integrations
         working-directory: integration/cors
         run: go test -race ./...
-
-      - name: Coverage
-        run: env COVER_MIN=90 ./scripts/cover-lib.sh
