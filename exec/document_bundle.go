@@ -76,10 +76,19 @@ func parseDocumentBundleWithLexer(e *Executor, query string, variables map[strin
 }
 
 func selectOperation(bundle documentBundle, operationName string) (document, error) {
+	doc, err := selectOperationDefinition(bundle, operationName)
+	if err != nil {
+		return document{}, err
+	}
+	return bindSelectedOperation(bundle, doc), nil
+}
+
+func selectOperationDefinition(bundle documentBundle, operationName string) (document, error) {
 	if operationName != "" {
 		for _, op := range bundle.operations {
 			if op.Name == operationName {
-				return bindSelectedOperation(bundle, op), nil
+				op.Fragments = bundle.fragments
+				return op, nil
 			}
 		}
 		return document{}, newParseError(bundle.source, 0,
@@ -91,7 +100,9 @@ func selectOperation(bundle documentBundle, operationName string) (document, err
 			"Must provide operation name if query contains multiple operations.")
 	}
 
-	return bindSelectedOperation(bundle, bundle.operations[0]), nil
+	doc := bundle.operations[0]
+	doc.Fragments = bundle.fragments
+	return doc, nil
 }
 
 func resolveDocumentVariableRefs(doc document) document {

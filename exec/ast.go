@@ -55,6 +55,7 @@ type variableUse struct {
 }
 
 type variableRef struct {
+	Coerced  bool
 	Name     string
 	Value    any
 	HasValue bool

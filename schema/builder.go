@@ -196,6 +196,8 @@ func (b *Builder) registerScalars(configs []ScalarConfig) error {
 			TypeName:       config.Name,
 			SpecifiedByURL: config.SpecifiedByURL,
 			serializeFn:    config.Serialize,
+			parseFn:        config.Parse,
+			inputGoType:    goType,
 		}
 		b.types[config.Name] = scalar
 		b.scalars[goType] = customScalar{scalar: scalar, parse: config.Parse}
@@ -965,7 +967,7 @@ func (b *Builder) parseDefaultValue(goType reflect.Type, raw string) (any, error
 		return enumType.Parse(raw)
 	}
 	if scalar, ok := b.scalars[baseType]; ok {
-		return scalar.parse(raw)
+		return scalar.scalar.Parse(raw)
 	}
 
 	switch baseType.Kind() {

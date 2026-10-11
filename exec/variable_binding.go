@@ -1,5 +1,7 @@
 package exec
 
+import "reflect"
+
 // bindSelectedOperation creates request-local selections and fragments only
 // when a document contains variable references. Cached syntax and caller input
 // remain unchanged; defaults are read solely from the selected operation.
@@ -83,6 +85,10 @@ func bindVariableValue(value any, scope operationVariableValues) (any, bool) {
 		if !present {
 			return nil, false
 		}
+		if ref, ok := raw.(variableRef); ok {
+			ref.Value = cloneVariableInput(ref.Value)
+			return ref, true
+		}
 		return variableRef{Name: typed.Name, Value: cloneVariableInput(raw), HasValue: true}, true
 	case map[string]any:
 		return bindVariableMap(typed, scope), true
@@ -117,6 +123,44 @@ func cloneVariableInput(value any) any {
 		out := make([]any, len(typed))
 		for index, item := range typed {
 			out[index] = cloneVariableInput(item)
+		}
+		return out
+	default:
+		raw := reflect.ValueOf(value)
+		if raw.IsValid() && (raw.Kind() == reflect.Map || raw.Kind() == reflect.Slice) {
+			return cloneTypedVariableContainer(raw).Interface()
+		}
+		return value
+	}
+}
+
+// cloneTypedVariableContainer preserves named custom-scalar container types.
+func cloneTypedVariableContainer(value reflect.Value) reflect.Value {
+	switch value.Kind() {
+	case reflect.Interface:
+		if value.IsNil() {
+			return value
+		}
+		out := reflect.New(value.Type()).Elem()
+		out.Set(cloneTypedVariableContainer(value.Elem()))
+		return out
+	case reflect.Map:
+		if value.IsNil() {
+			return value
+		}
+		out := reflect.MakeMapWithSize(value.Type(), value.Len())
+		iterator := value.MapRange()
+		for iterator.Next() {
+			out.SetMapIndex(iterator.Key(), cloneTypedVariableContainer(iterator.Value()))
+		}
+		return out
+	case reflect.Slice:
+		if value.IsNil() {
+			return value
+		}
+		out := reflect.MakeSlice(value.Type(), value.Len(), value.Len())
+		for index := 0; index < value.Len(); index++ {
+			out.Index(index).Set(cloneTypedVariableContainer(value.Index(index)))
 		}
 		return out
 	default:
