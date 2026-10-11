@@ -323,7 +323,7 @@ The ticker pattern above is fine for demos but not for real workloads.
 Most subscriptions stream events that **mutation resolvers** publish
 elsewhere  -  e.g. a `messagePosted` subscription that fans out values
 produced by a `postMessage` mutation. grx ships
-[`memory-pubsub`](/concepts/pubsub) (`package pubsub`) for exactly this  -  use **in-memory** for single-process setups and **`redis-pubsub`** once you scale horizontally; **[Choosing a backend](/concepts/pubsub#choosing-a-backend)** explains the trade-offs.
+[`pubsub.PubSub`](/concepts/pubsub) for exactly this - use **Memory** for single-process setups and **`pubsub/redis`** once you scale horizontally; **[Choosing a backend](/concepts/pubsub#choosing-a-backend)** explains the trade-offs.
 
 ### Wire a typed bus
 
@@ -337,7 +337,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/grx-gql/grx/memory-pubsub"
+	"github.com/grx-gql/grx/pubsub/memory"
 )
 
 const messagePostedTopic = "message.posted"
@@ -401,7 +401,7 @@ func (s MessageSubscription) MessagePosted(ctx context.Context, args MessagePost
 package graph
 
 import (
-	"github.com/grx-gql/grx/memory-pubsub"
+	"github.com/grx-gql/grx/pubsub/memory"
 	"github.com/grx-gql/grx/schema"
 )
 
@@ -431,7 +431,7 @@ import (
 	"example.com/hello-grx/graph"
 
 	"github.com/grx-gql/grx"
-	"github.com/grx-gql/grx/memory-pubsub"
+	"github.com/grx-gql/grx/pubsub/memory"
 	"github.com/grx-gql/grx/sse"
 	"github.com/grx-gql/grx/websocket"
 )
@@ -442,7 +442,7 @@ func allowOrigin(r *http.Request) bool {
 }
 
 func main() {
-	bus := pubsub.NewMemory()
+	bus := memory.New()
 	defer bus.Close()
 
 	srv, err := grx.NewServer(
@@ -486,8 +486,8 @@ publish path.
 
 ### Going multi-replica
 
-When you outgrow a single process, swap `pubsub.NewMemory()` for the
-Redis-backed bus  -  resolver code and `Typed[T]` wiring stay the same
+When you outgrow a single process, swap `memory.New()` for the
+Redis-backed bus - resolver code and payload encoding stay the same
 ([**memory vs Redis**](/concepts/pubsub#choosing-a-backend)):
 
 ```go
@@ -496,7 +496,7 @@ package main
 import (
 	"log"
 
-	redisps "github.com/grx-gql/grx/redis-pubsub"
+	redisps "github.com/grx-gql/grx/pubsub/redis"
 
 	rd "github.com/redis/go-redis/v9"
 )

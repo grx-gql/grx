@@ -26,7 +26,7 @@ make dev-setup      # go mod tidy in each module, then installs the git hooks
 
 ```bash
 make build
-make test           # root module and the redis-pubsub submodule
+make test           # root module and the pubsub/redis submodule
 make test-race      # required for anything touching the executor, plugins or transports
 make vet
 make fmt            # gofmt -w the tree
@@ -51,9 +51,10 @@ Every pull request must pass `make test`, `make vet` and `gofmt`. Run `make test
 | `http/`, `sse/`, `websocket/` | `core.Transport` implementations: GraphQL over HTTP+JSON, Server-Sent Events, and `graphql-transport-ws`. |
 | `client/` | A GraphQL-over-HTTP client, useful in services and tests. |
 | `plugins/` | The plugin lifecycle interface and built-in plugins. |
-| `middlewares/`, `cors/` | HTTP middleware helpers. |
-| `memory-pubsub/` | The `PubSub` interface and an in-memory backend for subscriptions. |
-| `redis-pubsub/` | A Redis `PubSub`, in its own Go module so Redis never enters the root `go.mod`. |
+| `middlewares/` | HTTP middleware helpers. |
+| `pubsub/` | The backend-neutral `PubSub` interface and message contract. |
+| `pubsub/memory/` | The process-local `PubSub` backend for subscriptions. |
+| `pubsub/redis/` | A Redis `PubSub`, in its own Go module so Redis never enters the root `go.mod`. |
 | `examples/` | Runnable examples. `examples/basic` is the reference shape for resolvers and wiring. |
 | `docs/` | The VitePress documentation site published at https://grx-gql.github.io/grx/. |
 
@@ -102,7 +103,7 @@ When a change makes a roadmap item fully supported, tested and reachable from th
 
 Releases are tagged Go modules; there are no binaries. [release-please](https://github.com/googleapis/release-please) runs on `main` (`.github/workflows/release.yml`) and keeps a release pull request open that updates [CHANGELOG.md](./CHANGELOG.md) and the version. Merging it tags `v*` and publishes the module.
 
-The `redis-pubsub` module is not managed by release-please. Tag it by hand as `redis-pubsub/vX.Y.Z`; the same workflow warms `proxy.golang.org` for those tags.
+The `pubsub/redis` module is not managed by release-please. Tag it by hand as `pubsub/redis/vX.Y.Z`; the same workflow warms `proxy.golang.org` for those tags.
 
 ## License
 

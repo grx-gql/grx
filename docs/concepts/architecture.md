@@ -46,7 +46,7 @@ Roughly everything in **HTTP / WebSocket framing** touches **TCP**, **headers**,
 
 [**`server`**](/reference/server/) is the **`http.Handler`**: multiplexes playground, transports, timeouts, masking, persisted queries  -  then hands work to transports + executor.
 
-**[Companion packages](/reference/)** such as **`http`**, **`websocket`**, **`sse`**, and **`memory-pubsub`** implement the official **`core.Transport`** surfaces.
+**[Companion packages](/reference/)** such as **`http`**, **`websocket`**, **`sse`**, and **`pubsub`** provide the official extension surfaces.
 
 Import edges (`→` reads “imports”):
 

@@ -88,8 +88,8 @@ The current pub/sub API is byte-oriented and backend-neutral. Import
 `github.com/grx-gql/grx/pubsub` for the `PubSub` contract,
 `github.com/grx-gql/grx/pubsub/memory` for the in-process backend, or
 `github.com/grx-gql/grx/pubsub/redis` for the separate Redis module. The former
-`memory-pubsub` and `redis-pubsub` packages, typed wrapper, codecs, and
-filters are no longer part of the public API; encode domain values in
+the former legacy pub/sub package paths, typed wrapper, codecs, and filters
+are no longer part of the public API; encode domain values in
 resolvers before publishing and decode them after subscribing.
 
 There are also examples for directives, enums, interfaces and unions, custom scalars and file uploads.

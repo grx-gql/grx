@@ -12,9 +12,9 @@ other application code. grx keeps this boundary backend-neutral with the
 
 ## Choosing a backend {#choosing-a-backend}
 
-| | In-memory | Redis |
+| | Memory | Redis |
 | --- | --- | --- |
-| Import | `github.com/grx-gql/grx/in-memory` | `github.com/grx-gql/grx/redis` |
+| Import | `github.com/grx-gql/grx/pubsub/memory` | `github.com/grx-gql/grx/pubsub/redis` |
 | Use when | One process owns the publishers and subscribers | Multiple replicas need fan-out |
 | Delivery | Direct channel hand-off | Redis `PUBLISH` / `SUBSCRIBE` |
 | Durability | Best-effort and non-durable | Best-effort and non-durable |
@@ -48,16 +48,16 @@ Payloads are opaque to the bus. The publisher owns the payload until
 Subscribers must treat received payloads as read-only; copy them when they
 need to retain or modify the bytes.
 
-## In-memory backend
+## Memory backend
 
 ```go
-import memory "github.com/grx-gql/grx/in-memory"
+import "github.com/grx-gql/grx/pubsub/memory"
 
 bus := memory.New()
 defer bus.Close()
 ```
 
-The in-memory implementation avoids serialization and is suitable for tests,
+The Memory implementation avoids serialization and is suitable for tests,
 development, and single-replica deployments.
 
 ## Redis backend

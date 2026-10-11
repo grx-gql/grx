@@ -281,7 +281,7 @@ Then query:
 
 ### Subscriptions (WebSocket + SSE) {#examples-subscriptions}
 
-Memory pub/sub feeds [**`graphql-transport-ws`**](https://github.com/graphql/graphql-ws) - plus bundled SSE - with CORS guarded for **`localhost`** below.
+Memory pub/sub feeds [**`graphql-transport-ws`**](https://github.com/graphql/graphql-ws) - plus bundled SSE. Configure browser CORS at the host HTTP layer as shown in [**CORS & browsers**](/guides/cors-browsers).
 
 #### `examples/subscriptions/main.go`
 
@@ -297,8 +297,7 @@ import (
 
 	"github.com/grx-gql/grx"
 	"github.com/grx-gql/grx/examples/subscriptions/graph"
-	"github.com/grx-gql/grx/cors"
-	"github.com/grx-gql/grx/memory-pubsub"
+	"github.com/grx-gql/grx/pubsub/memory"
 	"github.com/grx-gql/grx/sse"
 	"github.com/grx-gql/grx/websocket"
 	"github.com/grx-gql/grx/plugins/logger"
@@ -317,22 +316,13 @@ func main() {
 		log.Fatal(err)
 	}
 
-	bus := pubsub.NewMemory()
+	bus := memory.New()
 	defer bus.Close()
 
 	srv, err := grx.NewServer(
 		grx.WithSchema(graph.New(graph.WithPubSub(bus))),
 		grx.WithPlugins(loggerPlugin),
 		grx.WithPlaygroundPath(playgroundPath),
-		grx.WithMiddleware(cors.New(cors.Config{
-			AllowedOrigins: []string{
-				"http://localhost:" + port,
-				"http://127.0.0.1:" + port,
-			},
-			AllowedMethods: []string{http.MethodGet, http.MethodPost, http.MethodOptions},
-			AllowedHeaders: []string{"Content-Type", "Authorization"},
-			MaxAge:         10 * time.Minute,
-		})),
 		grx.WithTransports(
 			websocket.New(),
 			sse.New(),
@@ -356,7 +346,7 @@ func main() {
 package graph
 
 import (
-	"github.com/grx-gql/grx/memory-pubsub"
+	"github.com/grx-gql/grx/pubsub/memory"
 	"github.com/grx-gql/grx/schema"
 )
 
@@ -369,7 +359,7 @@ type schemaOptions struct {
 
 // WithPubSub wires the typed pub/sub bridge used by mutation and subscription
 // resolvers. Required for this example schema, which publishes across
-// resolvers via [memory-pubsub](/concepts/pubsub).
+// resolvers via the Memory backend described in [pubsub](/concepts/pubsub).
 func WithPubSub(bus pubsub.PubSub) SchemaOption {
 	return func(o *schemaOptions) {
 		o.bus = bus
@@ -451,7 +441,7 @@ import (
 	"fmt"
 	"sync/atomic"
 
-	"github.com/grx-gql/grx/memory-pubsub"
+	"github.com/grx-gql/grx/pubsub/memory"
 )
 
 // userCreatedTopic is the bus topic on which User events are published.
@@ -599,7 +589,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/grx-gql/grx/memory-pubsub"
+	"github.com/grx-gql/grx/pubsub/memory"
 )
 
 const messagePostedTopic = "message.posted"

@@ -27,7 +27,7 @@ in the source tree and regenerate.
 | [`sse`](/reference/sse/)                           | GraphQL over Server-Sent Events transport.                                                                  |
 | [`websocket`](/reference/websocket/)               | RFC 6455 WebSockets implementing the `graphql-transport-ws` subprotocol.                                  |
 | [`pubsub`](/reference/pubsub/)                     | Backend-neutral byte-oriented pub/sub contract.                                                            |
-| [`in-memory`](/reference/in-memory/)               | In-process `PubSub` implementation.                                                                        |
+| [`memory`](/reference/memory/)                     | Process-local `PubSub` implementation.                                                                     |
 | [`redis`](/reference/redis/)                       | Redis-backed `PubSub` implementation in a separate Go submodule.                                           |
 
 ## Hosted Go documentation

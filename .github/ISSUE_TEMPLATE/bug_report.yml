@@ -53,7 +53,7 @@ body:
         - "server (HTTP / GraphiQL)"
         - "transport: WebSocket (websocket)"
         - "transport: SSE (sse)"
-        - "pubsub (in-memory / package pubsub)"
+        - "pubsub (Memory / package pubsub)"
         - "pubsub: Redis backend (redis)"
         - "plugins (plugin.*)"
         - "introspection"

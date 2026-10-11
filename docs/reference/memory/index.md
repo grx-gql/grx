@@ -1,15 +1,15 @@
 ---
-title: in-memory
-description: In-process pub/sub backend.
+title: memory
+description: Process-local pub/sub backend.
 ---
 
 # Package memory
 
 ```go
-import memory "github.com/grx-gql/grx/in-memory"
+import "github.com/grx-gql/grx/pubsub/memory"
 ```
 
-`memory.New()` creates an in-process implementation of
+`memory.New()` creates a process-local implementation of
 `github.com/grx-gql/grx/pubsub.PubSub`.
 
 See the [pub/sub concept guide](/concepts/pubsub) for usage and backend

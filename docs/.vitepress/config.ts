@@ -217,7 +217,7 @@ const docsSidebar: DefaultTheme.SidebarItem[] = [
       { text: "sse", link: "/reference/sse/" },
       { text: "websocket", link: "/reference/websocket/" },
       { text: "pubsub", link: "/reference/pubsub/" },
-      { text: "in-memory", link: "/reference/in-memory/" },
+      { text: "memory", link: "/reference/memory/" },
       { text: "redis", link: "/reference/redis/" },
     ],
   },
