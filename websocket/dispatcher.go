@@ -202,13 +202,11 @@ func (d *dispatcher) startSubscription(msg message) {
 	if len(msg.Payload) > 0 {
 		if err := json.Unmarshal(msg.Payload, &body); err != nil {
 			_ = d.sendError(msg.ID, fmt.Errorf("invalid subscribe payload: %s", err.Error()))
-			_ = d.send(message{ID: msg.ID, Type: "complete"})
 			return
 		}
 	}
 	if strings.TrimSpace(body.Query) == "" {
 		_ = d.sendError(msg.ID, errors.New("subscribe payload must include a query"))
-		_ = d.send(message{ID: msg.ID, Type: "complete"})
 		return
 	}
 
@@ -221,7 +219,6 @@ func (d *dispatcher) startSubscription(msg message) {
 	if d.cfg.MaxSubscriptions > 0 && len(d.subscriptions) >= d.cfg.MaxSubscriptions {
 		d.mu.Unlock()
 		_ = d.sendError(msg.ID, fmt.Errorf("active subscription limit %d exceeded", d.cfg.MaxSubscriptions))
-		_ = d.send(message{ID: msg.ID, Type: "complete"})
 		return
 	}
 	subCtx, cancel := context.WithCancel(d.currentConnCtx())
@@ -241,7 +238,6 @@ func (d *dispatcher) startSubscription(msg message) {
 		kind, err := d.executor.OperationKind(req)
 		if err != nil {
 			_ = d.sendError(msg.ID, err)
-			_ = d.send(message{ID: msg.ID, Type: "complete"})
 			return
 		}
 
@@ -264,7 +260,6 @@ func (d *dispatcher) runStream(ctx context.Context, id string, body core.GraphQL
 	})
 	if err != nil {
 		_ = d.sendError(id, err)
-		_ = d.send(message{ID: id, Type: "complete"})
 		return
 	}
 

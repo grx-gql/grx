@@ -1529,9 +1529,10 @@ func TestWebSocketRejectsSubscribeWithEmptyQuery(t *testing.T) {
 	if first["type"] != "error" {
 		t.Fatalf("expected error message, got %#v", first)
 	}
+	writeClientText(t, conn, `{"type":"ping"}`)
 	second := readServerJSON(t, conn)
-	if second["type"] != "complete" {
-		t.Fatalf("expected complete, got %#v", second)
+	if second["type"] != "pong" {
+		t.Fatalf("expected pong after terminal error, got %#v", second)
 	}
 }
 

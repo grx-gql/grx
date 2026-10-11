@@ -490,10 +490,11 @@ func TestWebSocketTransportSubscribePropagatesSubscribeError(t *testing.T) {
 	if got := em.Payload[0].Message; !strings.Contains(got, "subscribe refused") {
 		t.Fatalf("error message %q missing subscribe error", got)
 	}
+	writeMaskedFrame(t, conn, OpcodeText, []byte(`{"type":"ping"}`))
 	var completeMsg message
 	_, cp, _, err := readFrame(t, conn)
-	if err != nil || json.Unmarshal(cp, &completeMsg) != nil || completeMsg.Type != "complete" || completeMsg.ID != "sub" {
-		t.Fatalf("expected complete for sub, payload=%s err=%v", cp, err)
+	if err != nil || json.Unmarshal(cp, &completeMsg) != nil || completeMsg.Type != "pong" {
+		t.Fatalf("expected pong after terminal error, payload=%s err=%v", cp, err)
 	}
 	close(stream)
 }
@@ -531,11 +532,12 @@ func TestWebSocketTransportRejectSubscriptionPastMaxActive(t *testing.T) {
 		len(limErr.Payload) == 0 || !strings.Contains(limErr.Payload[0].Message, "subscription limit") {
 		t.Fatalf("unexpected limit payload: %+v raw=%s", limErr, emRaw)
 	}
+	writeMaskedFrame(t, conn, OpcodeText, []byte(`{"type":"ping"}`))
 	var compl message
 	if _, complRaw, _, err := readFrame(t, conn); err != nil {
 		t.Fatalf("read complete: %v", err)
-	} else if json.Unmarshal(complRaw, &compl) != nil || compl.Type != "complete" || compl.ID != "three" {
-		t.Fatalf("expected complete three, got %+v (%s)", compl, complRaw)
+	} else if json.Unmarshal(complRaw, &compl) != nil || compl.Type != "pong" {
+		t.Fatalf("expected pong after terminal error, got %+v (%s)", compl, complRaw)
 	}
 	if err := conn.Close(); err != nil {
 		t.Fatalf("conn close: %v", err)
