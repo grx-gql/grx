@@ -53,6 +53,10 @@ type nextMessage struct {
 	Payload core.Response `json:"payload"`
 }
 
+type activeSubscription struct {
+	cancel context.CancelFunc
+}
+
 // dispatcher coordinates a single graphql-transport-ws session: it tracks
 // open subscriptions by id, fans incoming messages out to the executor, and
 // forwards emitted responses back to the peer.
@@ -63,7 +67,7 @@ type dispatcher struct {
 
 	mu            sync.Mutex
 	connInited    bool
-	subscriptions map[string]context.CancelFunc
+	subscriptions map[string]*activeSubscription
 
 	// connCtx is the context passed to executor calls. It starts as the
 	// per-request context and may be replaced by OnConnect.
@@ -76,7 +80,7 @@ func newDispatcher(conn *Conn, executor core.Executor, cfg Config) *dispatcher {
 		conn:          conn,
 		executor:      executor,
 		cfg:           cfg,
-		subscriptions: map[string]context.CancelFunc{},
+		subscriptions: map[string]*activeSubscription{},
 	}
 }
 
@@ -236,11 +240,12 @@ func (d *dispatcher) startSubscription(msg message) {
 		return
 	}
 	subCtx, cancel := context.WithCancel(d.currentConnCtx())
-	d.subscriptions[msg.ID] = cancel
+	active := &activeSubscription{cancel: cancel}
+	d.subscriptions[msg.ID] = active
 	d.mu.Unlock()
 
 	go func() {
-		defer d.removeSubscription(msg.ID)
+		defer d.removeSubscription(msg.ID, active)
 		defer cancel()
 
 		req := core.Request{
@@ -250,6 +255,9 @@ func (d *dispatcher) startSubscription(msg message) {
 		}
 
 		kind, err := d.executor.OperationKind(req)
+		if subCtx.Err() != nil {
+			return
+		}
 		if err != nil {
 			_ = d.sendError(msg.ID, err)
 			_ = d.send(message{ID: msg.ID, Type: "complete"})
@@ -262,6 +270,9 @@ func (d *dispatcher) startSubscription(msg message) {
 		}
 
 		response := d.executor.Execute(subCtx, req)
+		if subCtx.Err() != nil {
+			return
+		}
 		_ = d.sendNext(msg.ID, response)
 		_ = d.send(message{ID: msg.ID, Type: "complete"})
 	}()
@@ -273,6 +284,9 @@ func (d *dispatcher) runStream(ctx context.Context, id string, body core.GraphQL
 		OperationName: body.OperationName,
 		Variables:     body.Variables,
 	})
+	if ctx.Err() != nil {
+		return
+	}
 	if err != nil {
 		_ = d.sendError(id, err)
 		_ = d.send(message{ID: id, Type: "complete"})
@@ -284,6 +298,9 @@ func (d *dispatcher) runStream(ctx context.Context, id string, body core.GraphQL
 		case <-ctx.Done():
 			return
 		case res, open := <-stream:
+			if ctx.Err() != nil {
+				return
+			}
 			if !open {
 				_ = d.send(message{ID: id, Type: "complete"})
 				return
@@ -297,32 +314,34 @@ func (d *dispatcher) runStream(ctx context.Context, id string, body core.GraphQL
 
 func (d *dispatcher) cancelSubscription(id string) {
 	d.mu.Lock()
-	cancel, exists := d.subscriptions[id]
+	active, exists := d.subscriptions[id]
 	if exists {
 		delete(d.subscriptions, id)
 	}
 	d.mu.Unlock()
-	if cancel != nil {
-		cancel()
+	if active != nil {
+		active.cancel()
 	}
 }
 
 func (d *dispatcher) cancelAll() {
 	d.mu.Lock()
 	cancels := make([]context.CancelFunc, 0, len(d.subscriptions))
-	for _, cancel := range d.subscriptions {
-		cancels = append(cancels, cancel)
+	for _, active := range d.subscriptions {
+		cancels = append(cancels, active.cancel)
 	}
-	d.subscriptions = map[string]context.CancelFunc{}
+	d.subscriptions = map[string]*activeSubscription{}
 	d.mu.Unlock()
 	for _, cancel := range cancels {
 		cancel()
 	}
 }
 
-func (d *dispatcher) removeSubscription(id string) {
+func (d *dispatcher) removeSubscription(id string, active *activeSubscription) {
 	d.mu.Lock()
-	delete(d.subscriptions, id)
+	if d.subscriptions[id] == active {
+		delete(d.subscriptions, id)
+	}
 	d.mu.Unlock()
 }
 
