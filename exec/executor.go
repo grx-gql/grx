@@ -720,7 +720,7 @@ func (e *Executor) completeValue(ctx context.Context, fieldType schema.Type, val
 	if err := ctx.Err(); err != nil {
 		return nil, []core.Error{newFieldError(err.Error(), path, core.Location{})}
 	}
-	if value == nil {
+	if value == nil || isNilPointer(value) {
 		if fieldType.Kind() == schema.NonNullKind {
 			return nil, []core.Error{newFieldError("non-null field resolved to null", path, core.Location{})}
 		}
