@@ -2,6 +2,7 @@ package exec
 
 import (
 	"fmt"
+	"math"
 	"reflect"
 	"sort"
 	"strconv"
@@ -48,10 +49,13 @@ func appendResolverCacheValue(dst []byte, value any) ([]byte, bool) {
 		dst = append(dst, byte(raw.Kind()))
 		dst = strconv.AppendUint(dst, raw.Uint(), 10)
 		return append(dst, ';'), true
-	case float32, float64:
-		raw := reflect.ValueOf(typed)
-		dst = append(dst, byte(raw.Kind()))
-		dst = strconv.AppendFloat(dst, raw.Float(), 'g', -1, raw.Type().Bits())
+	case float32:
+		dst = append(dst, byte(reflect.Float32))
+		dst = strconv.AppendUint(dst, uint64(math.Float32bits(typed)), 16)
+		return append(dst, ';'), true
+	case float64:
+		dst = append(dst, byte(reflect.Float64))
+		dst = strconv.AppendUint(dst, math.Float64bits(typed), 16)
 		return append(dst, ';'), true
 	case []any:
 		if typed == nil {
