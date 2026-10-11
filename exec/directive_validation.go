@@ -44,10 +44,13 @@ func validateDefinitionDirectives(s *schema.Schema, bundle documentBundle, op do
 		errs = validateDirectives(s, selection{Directives: op.Directives, Location: op.Location}, strings.ToUpper(string(op.Kind)), variableScope{Types: op.VariableTypes, Definitions: op.VariableDefinitions})
 	}
 	for _, definition := range op.VariableDefinitions {
+		if len(definition.Directives) == 0 {
+			continue
+		}
 		errs = append(errs, validateDirectives(s, selection{Directives: definition.Directives, Location: definition.Location}, "VARIABLE_DEFINITION", variableScope{Types: op.VariableTypes, Definitions: op.VariableDefinitions})...)
 	}
 	for name, fragment := range bundle.fragments {
-		if !reachable[name] {
+		if len(fragment.Directives) == 0 || !reachable[name] {
 			continue
 		}
 		errs = append(errs, validateDirectives(s, selection{Directives: fragment.Directives, Location: locationForOffset(bundle.source, fragment.NameOffset)}, "FRAGMENT_DEFINITION", variableScope{Types: op.VariableTypes, Definitions: op.VariableDefinitions})...)

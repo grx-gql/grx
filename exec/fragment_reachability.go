@@ -6,7 +6,8 @@ func collectReachableFragments(selections []selection, fragments map[string]*fra
 	}
 	var visit func([]selection)
 	visit = func(selections []selection) {
-		for _, sel := range selections {
+		for index := range selections {
+			sel := &selections[index]
 			if sel.isFragmentSpread() && !reachable[sel.FragmentSpread] {
 				if fragment := fragments[sel.FragmentSpread]; fragment != nil {
 					reachable[sel.FragmentSpread] = true
