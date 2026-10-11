@@ -14,12 +14,15 @@ integration.
 ## Create the handler
 
 ```go
-server, err := grx.NewServer(
+func newHandler() (http.Handler, error) {
+	server, err := grx.NewServer(
 	grx.WithSchema(graph.Schema()),
 	grx.WithPlaygroundPath("/"),
-)
-if err != nil {
-	return err
+	)
+	if err != nil {
+		return nil, err
+	}
+	return server, nil
 }
 ```
 
@@ -29,6 +32,10 @@ GraphQL JSON requests on `/graphql`.
 ## Serve it
 
 ```go
+server, err := newHandler()
+if err != nil {
+	log.Fatal(err)
+}
 log.Fatal(http.ListenAndServe(":4000", server))
 ```
 
