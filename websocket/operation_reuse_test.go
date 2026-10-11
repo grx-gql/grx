@@ -58,9 +58,10 @@ func TestCanceledQueryDoesNotSendResult(t *testing.T) {
 	if err := client.SetReadDeadline(time.Now().Add(100 * time.Millisecond)); err != nil {
 		t.Fatal(err)
 	}
-	op, body, _, err := readFrame(t, client)
-	if err == nil || !IsTimeout(err) {
-		t.Fatalf("canceled query sent frame op=%d body=%s err=%v", op, body, err)
+	header := make([]byte, 2)
+	count, err := client.Read(header)
+	if count != 0 || !IsTimeout(err) {
+		t.Fatalf("canceled query sent frame header=%v count=%d err=%v", header, count, err)
 	}
 }
 
