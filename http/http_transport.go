@@ -19,6 +19,7 @@ import (
 	"compress/gzip"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	nethttp "net/http"
@@ -69,6 +70,11 @@ type Config struct {
 	// GraphQL query strings for automatic persisted query (APQ) requests that
 	// send an empty "query" and a hash under extensions.persistedQuery.
 	PersistedQueries map[string]string
+	// APQCacheSize enables automatic registration and bounds cached query count.
+	// Zero disables registration. Entries are evicted in insertion order; each
+	// query is limited to 64 KiB. Static PersistedQueries remain independent.
+	APQCacheSize int
+	apq          *persistedQueryCache
 	// RequirePersistedQuery rejects requests that do not include
 	// extensions.persistedQuery.sha256Hash.
 	RequirePersistedQuery bool
@@ -103,6 +109,9 @@ func New(cfg ...Config) *Transport {
 	t := &Transport{}
 	if len(cfg) > 0 {
 		t.config = cfg[0]
+		if t.config.APQCacheSize > 0 {
+			t.config.apq = newPersistedQueryCache(t.config.APQCacheSize)
+		}
 		if t.config.PersistedQueries != nil {
 			norm := make(map[string]string, len(t.config.PersistedQueries))
 			for k, v := range t.config.PersistedQueries {
@@ -416,7 +425,12 @@ func requestBodyTooLarge(err error) bool {
 }
 
 func writeRequestError(ctx context.Context, w nethttp.ResponseWriter, mediaType string, status int, err error) {
-	res := core.Response{Errors: []core.Error{core.NewRequestError(err)}}
+	requestError := core.NewRequestError(err)
+	var persistedError *persistedQueryError
+	if errors.As(err, &persistedError) {
+		requestError.Extensions["code"] = persistedError.code
+	}
+	res := core.Response{Errors: []core.Error{requestError}}
 	res = core.AttachRequestIDExtension(res, core.RequestIDFromContext(ctx))
 	core.WriteGraphQLResponse(w, status, mediaType, res)
 }

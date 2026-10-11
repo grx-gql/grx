@@ -172,6 +172,12 @@ func WithPersistedQueries(queries map[string]string) Option {
 	}
 }
 
+// WithAPQCacheSize enables automatic persisted-query registration with at most
+// size entries. Zero disables the cache; each cached query is limited to 64 KiB.
+func WithAPQCacheSize(size int) Option {
+	return func(c *server.Config) { c.APQCacheSize = size }
+}
+
 // WithOperationAuthorizer registers a hook invoked while validating the parsed
 // document (before any field resolves). Return a non-nil error to reject the request.
 func WithOperationAuthorizer(auth OperationAuthorizer) Option {

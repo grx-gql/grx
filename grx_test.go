@@ -46,6 +46,7 @@ func TestAllForwardingOptionsSmoke(t *testing.T) {
 		WithMaxSelectionDepth(8),
 		WithResponseGzip(),
 		WithPersistedQueries(map[string]string{}),
+		WithAPQCacheSize(2),
 		WithOperationAuthorizer(func(ctx context.Context, op OperationContext) error { return nil }),
 		WithFieldAuthorizer(func(ctx context.Context, fc FieldAuthorizationContext) error { return nil }),
 		WithSchemaSDLPath("/schema.graphql"),

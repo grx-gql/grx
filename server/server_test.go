@@ -765,6 +765,7 @@ func TestNewCoversOptionalConfigBranches(t *testing.T) {
 		MaxHTTPRequestBytes:    1024,
 		EnableResponseGzip:     true,
 		PersistedQueries:       map[string]string{"hash": "{ hi }"},
+		APQCacheSize:           2,
 		RequirePersistedQuery:  true,
 		StrictPersistedQueries: true,
 		MaxVariableBytes:       128,

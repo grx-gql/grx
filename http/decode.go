@@ -319,15 +319,24 @@ func resolvePersistedQuery(body *core.GraphQLBody, config Config) error {
 
 	query := strings.TrimSpace(body.Query)
 	if query != "" {
-		if config.StrictPersistedQueries {
+		if config.StrictPersistedQueries || config.apq != nil {
 			sum := sha256.Sum256([]byte(body.Query))
 			if hash != fmt.Sprintf("%x", sum[:]) {
 				return fmt.Errorf("persisted query sha256Hash does not match GraphQL query")
 			}
 		}
+		if config.apq != nil {
+			return config.apq.store(hash, body.Query)
+		}
 		return nil
 	}
 	query, ok := persisted[hash]
+	if !ok && config.apq != nil {
+		query, ok = config.apq.lookup(hash)
+		if !ok {
+			return &persistedQueryError{message: "PersistedQueryNotFound", code: "PERSISTED_QUERY_NOT_FOUND"}
+		}
+	}
 	if !ok {
 		return fmt.Errorf("unknown persisted query sha256Hash %q", rawHash)
 	}

@@ -86,6 +86,10 @@ type Config struct {
 	// HTTP transport.
 	PersistedQueries map[string]string
 
+	// APQCacheSize enables bounded automatic persisted-query registration on HTTP.
+	// Zero disables it. Each cached query is limited to 64 KiB.
+	APQCacheSize int
+
 	// RequirePersistedQuery rejects HTTP requests that do not include an APQ
 	// sha256Hash under extensions.persistedQuery.
 	RequirePersistedQuery bool
@@ -279,7 +283,7 @@ func New(config Config) (*Server, error) {
 		main = append(main, config.Transports...)
 	}
 
-	httpTransportCfg := grxhttp.Config{Path: graphqlPath}
+	httpTransportCfg := grxhttp.Config{Path: graphqlPath, APQCacheSize: config.APQCacheSize}
 	if config.MaxHTTPRequestBytes != 0 {
 		httpTransportCfg.MaxRequestBytes = config.MaxHTTPRequestBytes
 	}
