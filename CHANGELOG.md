@@ -10,6 +10,35 @@ Published versions use section titles that match
 headings such as **`### ✨ Added`**, **`### 🐛 Fixed`**, **`### 📚 Documentation`**, … —
 see **`release-please-config.json`**). This file **`CHANGELOG.md`** is the changelog; browse it **[on GitHub](https://github.com/grx-gql/grx/blob/main/CHANGELOG.md)** (the docs site no longer duplicates it).
 
+## [0.7.0](https://github.com/grx-gql/grx/compare/v0.6.0...v0.7.0) (2026-10-11)
+
+
+### ⚠ BREAKING CHANGES
+
+* rename graph.NewSchema and graph.New constructors to graph.Schema and require an explicit pubsub bus for the subscription schema.
+* rename graph.NewSchema and graph.New constructors to graph.Schema and require an explicit pubsub bus for the subscription schema.
+* rename graph.NewSchema and graph.New constructors to graph.Schema and require an explicit pubsub bus for the subscription schema.
+
+### refactor
+
+* standardize graph schema constructors ([#6](https://github.com/grx-gql/grx/issues/6)) ([96b57ca](https://github.com/grx-gql/grx/commit/96b57ca5d78b24a37bf49cc5f9392fc1955d58f6))
+
+
+### 🐛 Fixed
+
+* **exec:** treat typed nil pointers as null in completeValue ([#2](https://github.com/grx-gql/grx/issues/2)) ([d538835](https://github.com/grx-gql/grx/commit/d538835e98bddce72928a5646d08c0839a25e8cc))
+
+
+### 📚 Documentation
+
+* add contributing guide and MIT license, drop AI assistant files ([#3](https://github.com/grx-gql/grx/issues/3)) ([c5410bf](https://github.com/grx-gql/grx/commit/c5410bfa0613b08ef561ed73bf6a165223a1f3a6))
+* rewrite documentation structure and guides ([#7](https://github.com/grx-gql/grx/issues/7)) ([3860e62](https://github.com/grx-gql/grx/commit/3860e62e0f7102ee5d87061e32ce4418f7818128))
+
+
+### 🧹 Chores
+
+* pin GitHub Actions to commit hashes ([#8](https://github.com/grx-gql/grx/issues/8)) ([b3f71ed](https://github.com/grx-gql/grx/commit/b3f71ed516ba69e09d306964ab1323a49690a2aa))
+
 ## [0.6.0](https://github.com/grx-gql/grx/compare/v0.5.0...v0.6.0) (2026-05-24)
 
 
