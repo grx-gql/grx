@@ -121,7 +121,7 @@ func validateSubscriptionRoot(op document) []validationError {
 
 func validateSelections(
 	s *schema.Schema,
-	parent *schema.Object,
+	parent schema.Type,
 	selections []selection,
 	fragments map[string]*fragmentDef,
 	usedFragments map[string]bool,
@@ -150,7 +150,7 @@ func validateSelections(
 
 func validateFragmentSpread(
 	s *schema.Schema,
-	parent *schema.Object,
+	parent schema.Type,
 	sel selection,
 	fragments map[string]*fragmentDef,
 	usedFragments map[string]bool,
@@ -175,29 +175,22 @@ func validateFragmentSpread(
 	var errs []validationError
 	errs = append(errs, validateDirectives(s, sel, "FRAGMENT_SPREAD", variables)...)
 
-	if parent != nil && !fragmentTypeMatches(parent, fd.TypeCondition) {
-		errs = append(errs, newValidationError(sel.Location,
-			`Fragment cannot be spread here as objects of type "%s" can never be of type "%s".`,
-			parentTypeName, fd.TypeCondition))
-	}
-
 	condType, ok := s.Types[fd.TypeCondition]
-	if !ok {
+	if !ok || !isCompositeType(condType) {
 		return errs
 	}
-	objectParent := objectTypeForSelection(condType)
-	if objectParent == nil {
-		return errs
+	if parent != nil && !compositeTypesOverlap(parent, condType) {
+		return append(errs, newValidationError(sel.Location, `Fragment cannot be spread here as objects of type "%s" can never be of type "%s".`, parentTypeName, fd.TypeCondition))
 	}
 
 	nextStack := append(append([]string{}, spreadStack...), name)
-	errs = append(errs, validateSelections(s, objectParent, fd.Selections, fragments, usedFragments, nextStack, fd.TypeCondition, variables)...)
+	errs = append(errs, validateSelections(s, condType, fd.Selections, fragments, usedFragments, nextStack, fd.TypeCondition, variables)...)
 	return errs
 }
 
 func validateInlineFragment(
 	s *schema.Schema,
-	parent *schema.Object,
+	parent schema.Type,
 	sel selection,
 	fragments map[string]*fragmentDef,
 	usedFragments map[string]bool,
@@ -223,22 +216,18 @@ func validateInlineFragment(
 		return append(errs, newValidationError(sel.Location,
 			`Fragment cannot condition on non composite type "%s".`, cond))
 	}
-	if parent != nil && !fragmentTypeMatches(parent, cond) {
+	if parent != nil && !compositeTypesOverlap(parent, typeValue) {
 		return append(errs, newValidationError(sel.Location,
 			`Fragment cannot be spread here as objects of type "%s" can never be of type "%s".`,
 			parent.Name(), cond))
 	}
 
-	objectParent := objectTypeForSelection(typeValue)
-	if objectParent == nil {
-		return errs
-	}
-	return append(errs, validateSelections(s, objectParent, sel.Selections, fragments, usedFragments, spreadStack, cond, variables)...)
+	return append(errs, validateSelections(s, typeValue, sel.Selections, fragments, usedFragments, spreadStack, cond, variables)...)
 }
 
 func validateField(
 	s *schema.Schema,
-	parent *schema.Object,
+	parent schema.Type,
 	sel selection,
 	fragments map[string]*fragmentDef,
 	usedFragments map[string]bool,
@@ -262,7 +251,7 @@ func validateField(
 		return errs
 	}
 
-	field, ok := parent.Fields[fieldName]
+	field, ok := selectionField(parent, fieldName)
 	if !ok {
 		return append(errs, newValidationError(sel.Location,
 			`Cannot query field "%s" on type "%s".`, fieldName, parent.Name()))
@@ -287,26 +276,7 @@ func validateField(
 		return errs
 	}
 
-	childParent := objectTypeForFieldType(s, fieldType)
-	if childParent == nil {
-		for _, child := range sel.Selections {
-			if child.isField() && child.Name == "__typename" && len(child.Selections) == 0 {
-				continue
-			}
-			if child.isInlineFragment() || child.isFragmentSpread() {
-				if child.isFragmentSpread() {
-					errs = append(errs, validateFragmentSpread(s, nil, child, fragments, usedFragments, spreadStack, typeString(fieldType), variables)...)
-				} else {
-					errs = append(errs, validateInlineFragment(s, nil, child, fragments, usedFragments, spreadStack, variables)...)
-				}
-				continue
-			}
-			errs = append(errs, newValidationError(child.Location,
-				`Field "%s" of type "%s" must have a sub selection of subfields. Did you mean "%s { ... }"?`,
-				sel.responseKey(), typeString(fieldType), sel.responseKey()))
-		}
-		return errs
-	}
+	childParent := innerNamedType(fieldType)
 	errs = append(errs, validateSelections(s, childParent, sel.Selections, fragments, usedFragments, spreadStack, typeString(fieldType), variables)...)
 	return errs
 }
