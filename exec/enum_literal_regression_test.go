@@ -2,8 +2,10 @@ package exec
 
 import (
 	"context"
-	"github.com/grx-gql/grx/core"
+	"reflect"
 	"testing"
+
+	"github.com/grx-gql/grx/core"
 )
 
 func TestRejectStringEnumLiteralKindMismatch(t *testing.T) {
@@ -32,5 +34,17 @@ func TestEnumVariableAndDefaultLiteralKinds(t *testing.T) {
 		if (len(response.Errors) > 0) != tc.invalid {
 			t.Errorf("%s: errors=%v", tc.query, response.Errors)
 		}
+	}
+}
+
+func TestSDLDirectiveEnumArgumentsUsePublicValues(t *testing.T) {
+	s, err := ParseSDL(`type Query @meta(value: ADMIN, nested: {roles: [ADMIN, USER]}) { name: String }`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := s.Query.Directives[0].Args
+	want := map[string]any{"value": "ADMIN", "nested": map[string]any{"roles": []any{"ADMIN", "USER"}}}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("directive values = %#v; want public string values %#v", got, want)
 	}
 }
