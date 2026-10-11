@@ -969,8 +969,12 @@ func TestServeHTTPReturnsExampleFieldErrorFromBasicSchema(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected data key with null value, got %#v", body)
 	}
-	if dataRaw != nil {
-		t.Fatalf("expected top-level data null, got %#v", dataRaw)
+	data, ok := dataRaw.(map[string]any)
+	if !ok {
+		t.Fatalf("expected partial data object, got %#v", dataRaw)
+	}
+	if value, exists := data["errorExample"]; !exists || value != nil {
+		t.Fatalf("expected nullable errorExample field to be null, got %#v", data)
 	}
 
 	errors := graphQLErrors(t, body)
