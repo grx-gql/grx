@@ -51,7 +51,7 @@ func parseDocumentBundleWithLexer(e *Executor, query string, variables map[strin
 			continue
 		}
 
-		kind, name, variables, variableTypes, err := p.parseOperationHeader()
+		op, err := p.parseOperationHeader()
 		if err != nil {
 			return documentBundle{}, err
 		}
@@ -59,14 +59,9 @@ func parseDocumentBundleWithLexer(e *Executor, query string, variables map[strin
 		if err != nil {
 			return documentBundle{}, err
 		}
-		operations = append(operations, document{
-			Kind:          kind,
-			Name:          name,
-			Variables:     variables,
-			VariableTypes: variableTypes,
-			Selections:    selections,
-			Fragments:     fragments,
-		})
+		op.Selections = selections
+		op.Fragments = fragments
+		operations = append(operations, op)
 	}
 
 	if len(operations) == 0 {

@@ -122,43 +122,35 @@ func parseDocumentNamed(query string, variables map[string]any, operationName st
 // definitions, and operation directives, leaving the parser positioned at the
 // top-level selection set. It returns the operation kind, operation name, and
 // declared variable names.
-func (p *parser) parseOperationHeader() (operationKind, string, []string, map[string]string, error) {
-	kind := operationQuery
+func (p *parser) parseOperationHeader() (document, error) {
+	op := document{Kind: operationQuery, Location: locationForOffset(p.source, p.peek().offset)}
 	if p.peek().kind != tokenName {
-		return kind, "", nil, nil, nil
+		return op, nil
 	}
-
 	switch p.peek().value {
 	case "query":
 		p.next()
 	case "mutation":
 		p.next()
-		kind = operationMutation
+		op.Kind = operationMutation
 	case "subscription":
 		p.next()
-		kind = operationSubscription
+		op.Kind = operationSubscription
 	default:
-		return kind, "", nil, nil, newParseError(p.source, p.peek().offset, "unexpected token %q at top of operation", p.peek().value)
+		return document{}, newParseError(p.source, p.peek().offset, "unexpected token %q at top of operation", p.peek().value)
 	}
-
-	var name string
 	if p.peek().kind == tokenName {
-		name = p.next().value
+		op.Name = p.next().value
 	}
-	var variables []string
-	var variableTypes map[string]string
+	var err error
 	if p.peek().kind == tokenParenOpen {
-		parsed, parsedTypes, err := p.parseVariableDefinitions()
+		op.Variables, op.VariableTypes, op.VariableDefinitions, err = p.parseVariableDefinitions()
 		if err != nil {
-			return kind, name, nil, nil, err
+			return document{}, err
 		}
-		variables = parsed
-		variableTypes = parsedTypes
 	}
-	if _, err := p.parseDirectives(); err != nil {
-		return kind, name, nil, nil, err
-	}
-	return kind, name, variables, variableTypes, nil
+	op.Directives, err = p.parseDirectives()
+	return op, err
 }
 
 func (p *parser) parseSelectionSet(depth int) ([]selection, error) {
@@ -313,8 +305,8 @@ func (p *parser) parseFragmentDefinition() (*fragmentDef, error) {
 	if typeTok.kind != tokenName {
 		return nil, newParseError(p.source, typeTok.offset, "expected type condition name, got %q", typeTok.value)
 	}
-	// Directives on fragment definitions are parsed and discarded.
-	if _, err := p.parseDirectives(); err != nil {
+	dirs, err := p.parseDirectives()
+	if err != nil {
 		return nil, err
 	}
 	sel, err := p.parseSelectionSet(1)
@@ -323,6 +315,7 @@ func (p *parser) parseFragmentDefinition() (*fragmentDef, error) {
 	}
 	return &fragmentDef{
 		Name:          nameTok.value,
+		Directives:    dirs,
 		TypeCondition: typeTok.value,
 		Selections:    sel,
 		NameOffset:    nameTok.offset,
@@ -481,63 +474,62 @@ func (p *parser) parseListLiteral() ([]any, error) {
 // parseVariableDefinitions parses a parenthesised variable definition list,
 // captures default values, and injects them into p.vars for any variable that
 // is not already present. It returns the list of declared variable names.
-func (p *parser) parseVariableDefinitions() ([]string, map[string]string, error) {
+func (p *parser) parseVariableDefinitions() ([]string, map[string]string, map[string]variableDefinition, error) {
 	if err := p.expect(tokenParenOpen); err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	if p.peek().kind == tokenParenClose {
-		return nil, nil, newParseError(p.source, p.peek().offset, "variable definitions must contain at least one variable")
+		return nil, nil, nil, newParseError(p.source, p.peek().offset, "variable definitions must contain at least one variable")
 	}
 	variables := make([]string, 0, 4)
 	variableTypes := make(map[string]string)
+	definitions := make(map[string]variableDefinition)
 	for p.peek().kind != tokenParenClose {
 		if p.peek().kind == tokenEOF {
-			return nil, nil, newParseError(p.source, p.peek().offset, "unexpected end of query inside operation variables")
+			return nil, nil, nil, newParseError(p.source, p.peek().offset, "unexpected end of query inside operation variables")
 		}
-		// $varName
 		if p.peek().kind != tokenDollar {
-			return nil, nil, newParseError(p.source, p.peek().offset, "expected variable definition, got %q", p.peek().value)
+			return nil, nil, nil, newParseError(p.source, p.peek().offset, "expected variable definition, got %q", p.peek().value)
 		}
-		p.next() // consume $
+		p.next()
 		name := p.next()
 		if name.kind != tokenName {
-			return nil, nil, newParseError(p.source, name.offset, "expected variable name after $")
+			return nil, nil, nil, newParseError(p.source, name.offset, "expected variable name after $")
 		}
-		// : TypeRef
 		if err := p.expect(tokenColon); err != nil {
-			return nil, nil, err
+			return nil, nil, nil, err
 		}
 		typeRef, err := p.parseTypeRef()
 		if err != nil {
-			return nil, nil, err
+			return nil, nil, nil, err
 		}
-		// optional = DefaultValue (constant, no variable references allowed)
+		definition := variableDefinition{Location: locationForOffset(p.source, name.offset)}
 		if p.peek().kind == tokenEquals {
-			p.next() // consume =
-			defaultVal, err := p.parseConstValue()
+			p.next()
+			definition.HasDefault = true
+			definition.DefaultValue, err = p.parseConstValue()
 			if err != nil {
-				return nil, nil, err
+				return nil, nil, nil, err
 			}
-			// Only use the default when the caller did not supply the variable.
 			if _, exists := p.vars[name.value]; !exists {
 				if p.vars == nil {
 					p.vars = make(map[string]any)
 				}
-				p.vars[name.value] = defaultVal
+				p.vars[name.value] = definition.DefaultValue
 			}
 		}
-		// optional directives on the variable definition (parse and discard)
-		if _, err := p.parseDirectives(); err != nil {
-			return nil, nil, err
+		definition.Directives, err = p.parseDirectives()
+		if err != nil {
+			return nil, nil, nil, err
 		}
 		variables = append(variables, name.value)
 		variableTypes[name.value] = typeRef
+		definitions[name.value] = definition
 	}
-	p.next() // consume )
-	return variables, variableTypes, nil
+	p.next()
+	return variables, variableTypes, definitions, nil
 }
 
-// parseTypeRef parses a GraphQL type reference such as ID!, [String!]!, or Boolean.
 func (p *parser) parseTypeRef() (string, error) {
 	var out string
 	switch p.peek().kind {

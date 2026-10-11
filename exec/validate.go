@@ -19,6 +19,7 @@ func ValidateDocument(s *schema.Schema, bundle documentBundle, op document) []va
 	var errs []validationError
 	errs = append(errs, validateUniqueOperationNames(bundle)...)
 	errs = append(errs, validateLoneAnonymousOperation(bundle)...)
+	errs = append(errs, validateDefinitionDirectives(s, bundle, op)...)
 	errs = append(errs, validateVariables(bundle, op)...)
 	errs = append(errs, validateVariableDefinitions(s, op)...)
 	errs = append(errs, validateFragmentDefinitions(s, bundle.fragments)...)
