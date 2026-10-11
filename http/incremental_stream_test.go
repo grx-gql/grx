@@ -152,3 +152,20 @@ func TestIncrementalHTTPBufferedExecutorStopsAfterFailedWrite(t *testing.T) {
 		t.Fatalf("writes=%d; want 2", writer.calls)
 	}
 }
+
+type invalidInitialStreamExecutor struct{ incStubExecutor }
+
+func (e *invalidInitialStreamExecutor) ExecuteIncrementalStream(_ context.Context, _ core.Request, initial func(core.Response) error, _ func(core.IncrementalPayload, bool) error) error {
+	return initial(core.Response{Data: func() {}})
+}
+
+func TestIncrementalHTTPInitialEncodingFailure(t *testing.T) {
+	executor := &invalidInitialStreamExecutor{incStubExecutor: incStubExecutor{hasInc: true}}
+	req := postGraphQLRequest("/graphql", `{"query":"{ ok }"}`)
+	req.Header.Set("Accept", "multipart/mixed")
+	recorder := httptest.NewRecorder()
+	grxhttp.New().Serve(recorder, req, executor)
+	if recorder.Code != http.StatusInternalServerError {
+		t.Fatalf("status=%d body=%s", recorder.Code, recorder.Body)
+	}
+}

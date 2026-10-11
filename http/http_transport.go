@@ -417,6 +417,7 @@ func (t *Transport) writeIncremental(w nethttp.ResponseWriter, r *nethttp.Reques
 	emitInitial := func(initial core.Response) error {
 		initialJSON, err := json.Marshal(initial)
 		if err != nil {
+			nethttp.Error(w, "failed to encode incremental response", nethttp.StatusInternalServerError)
 			return err
 		}
 		status := responseStatus(core.MediaTypeGraphQLResponse, initial)
