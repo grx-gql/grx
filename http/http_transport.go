@@ -359,13 +359,17 @@ const incrementalBoundary = "-"
 func acceptsMultipartMixed(r *nethttp.Request) bool {
 	for _, raw := range r.Header.Values("Accept") {
 		for _, part := range strings.Split(raw, ",") {
-			mediaType := strings.TrimSpace(part)
-			if semi := strings.Index(mediaType, ";"); semi >= 0 {
-				mediaType = strings.TrimSpace(mediaType[:semi])
+			mediaType, params, err := mime.ParseMediaType(strings.TrimSpace(part))
+			if err != nil || mediaType != "multipart/mixed" {
+				continue
 			}
-			if strings.EqualFold(mediaType, "multipart/mixed") {
-				return true
+			if raw, exists := params["q"]; exists {
+				quality, err := strconv.ParseFloat(raw, 64)
+				if err != nil || !(quality > 0 && quality <= 1) {
+					continue
+				}
 			}
+			return true
 		}
 	}
 	return false
