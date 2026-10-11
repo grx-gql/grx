@@ -30,7 +30,7 @@ func ValidateDocument(s *schema.Schema, bundle documentBundle, op document) []va
 	}
 
 	if op.Kind == operationSubscription {
-		errs = append(errs, validateSubscriptionRoot(op)...)
+		errs = append(errs, validateSubscriptionRoot(op, root)...)
 	}
 
 	usedFragments := make(map[string]bool)
@@ -99,26 +99,6 @@ func validateFragmentDefinitions(s *schema.Schema, fragments map[string]*fragmen
 		}
 	}
 	return errs
-}
-
-func validateSubscriptionRoot(op document) []validationError {
-	count := 0
-	for _, sel := range op.Selections {
-		if sel.isField() {
-			count++
-		}
-	}
-	if count != 1 {
-		name := op.Name
-		if name == "" {
-			name = "anonymous"
-		}
-		return []validationError{
-			newValidationError(op.Selections[0].Location,
-				`Subscription "%s" must select only one top level field.`, name),
-		}
-	}
-	return nil
 }
 
 func validateSelections(

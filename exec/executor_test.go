@@ -1836,7 +1836,7 @@ func TestExecutorSubscribeWithVariablesParsesBypassingDocumentCache(t *testing.T
 
 	stream, err := executor.Subscribe(context.Background(), core.Request{
 		Query: `subscription Sub($skip: Boolean!) {
-			userCreated @skip(if: $skip) { id name }
+			userCreated { id name @skip(if: $skip) }
 		}`,
 		Variables: map[string]any{"skip": false},
 	})
