@@ -616,30 +616,6 @@ func (e *Executor) resolveSelectedField(ctx context.Context, object *schema.Obje
 	return key, resolved, errs, true
 }
 
-// resolveAbstractType resolves the concrete object type for an interface or
-// union value, consulting the configured AbstractTypeResolver first and falling
-// back to the schema's default reflection-based resolver.
-func (e *Executor) resolveAbstractType(abstractName string, value any, fallback func(any) (*schema.Object, error)) (*schema.Object, error) {
-	if e.abstractTypeResolver != nil {
-		name, err := e.abstractTypeResolver(value)
-		if err != nil {
-			return nil, err
-		}
-		if name != "" {
-			typ, ok := e.Schema.Types[name]
-			if !ok {
-				return nil, fmt.Errorf("abstract type resolver returned unknown type %q for %s", name, abstractName)
-			}
-			object, ok := typ.(*schema.Object)
-			if !ok {
-				return nil, fmt.Errorf("abstract type resolver returned non-object type %q for %s", name, abstractName)
-			}
-			return object, nil
-		}
-	}
-	return fallback(value)
-}
-
 // invokeResolver runs a field resolver, applying request-scoped memoization
 // when enabled and unwrapping any returned [schema.Thunk] (deferred value).
 func (e *Executor) invokeResolver(ctx context.Context, arena *pathArena, field *schema.Field, source any, args map[string]any) (any, error) {

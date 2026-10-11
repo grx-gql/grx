@@ -187,3 +187,18 @@ func TestRoadmapResolverCacheDoesNotUseApplicationJSON(t *testing.T) {
 		t.Fatal("numeric Go type distinctions must be preserved")
 	}
 }
+func TestRoadmapAbstractResolverRejectsNonMemberObject(t *testing.T) {
+	s := buildAnimalSchema(t)
+	r := New(s, nil, WithAbstractTypeResolver(func(any) (string, error) { return "Query", nil })).Execute(context.Background(), core.Request{Query: `{ pet(kind: "cat") { __typename } }`})
+	if len(r.Errors) == 0 {
+		t.Fatalf("union resolver must reject concrete type outside union members; got %s", roadmapAuditJSON(t, r))
+	}
+}
+
+func TestRoadmapUnionTypeConditionMatchesConcreteMember(t *testing.T) {
+	s := buildAnimalSchema(t)
+	r := New(s, nil).Execute(context.Background(), core.Request{Query: `{ pet(kind: "cat") { ... on Pet { __typename } } }`})
+	if len(r.Errors) != 0 || roadmapAuditJSON(t, r.Data) != `{"pet":{"__typename":"Cat"}}` {
+		t.Fatalf("fragment on union must match its concrete member; got %s", roadmapAuditJSON(t, r))
+	}
+}
