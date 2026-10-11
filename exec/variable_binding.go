@@ -83,7 +83,7 @@ func bindVariableValue(value any, scope operationVariableValues) (any, bool) {
 		if !present {
 			return nil, false
 		}
-		return variableRef{Name: typed.Name, Value: raw, HasValue: true}, true
+		return variableRef{Name: typed.Name, Value: cloneVariableInput(raw), HasValue: true}, true
 	case map[string]any:
 		return bindVariableMap(typed, scope), true
 	case []any:
@@ -94,5 +94,32 @@ func bindVariableValue(value any, scope operationVariableValues) (any, bool) {
 		return out, true
 	default:
 		return value, true
+	}
+}
+
+// cloneVariableInput isolates GraphQL input containers from custom scalar
+// parsers and resolvers that may modify their arguments.
+func cloneVariableInput(value any) any {
+	switch typed := value.(type) {
+	case map[string]any:
+		if typed == nil {
+			return typed
+		}
+		out := make(map[string]any, len(typed))
+		for name, item := range typed {
+			out[name] = cloneVariableInput(item)
+		}
+		return out
+	case []any:
+		if typed == nil {
+			return typed
+		}
+		out := make([]any, len(typed))
+		for index, item := range typed {
+			out[index] = cloneVariableInput(item)
+		}
+		return out
+	default:
+		return value
 	}
 }
