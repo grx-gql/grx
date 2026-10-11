@@ -159,3 +159,28 @@ func TestIncrementalDetectionUsesSelectedFragmentBindings(t *testing.T) {
 		}
 	}
 }
+
+func TestCustomScalarVariableContainersAreRequestLocal(t *testing.T) {
+	s, err := ParseSDL(`scalar JSON type Query { take(input:JSON):String }`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.Query.Fields["take"].Resolver = func(_ context.Context, p schema.ResolveParams) (any, error) {
+		input := p.Args["input"].(map[string]any)
+		list := input["values"].([]any)
+		original := list[0]
+		list[0] = "changed"
+		input["added"] = true
+		return original, nil
+	}
+	e := New(s, nil, WithDocumentCache(1))
+	query := `query Q($input:JSON={values:["default"]}){take(input:$input)}`
+	for range 2 {
+		assertScopedVariableResponse(t, e, core.Request{Query: query}, `{"data":{"take":"default"}}`)
+	}
+	vars := map[string]any{"input": map[string]any{"values": []any{"provided"}}}
+	assertScopedVariableResponse(t, e, core.Request{Query: query, Variables: vars}, `{"data":{"take":"provided"}}`)
+	if !reflect.DeepEqual(vars, map[string]any{"input": map[string]any{"values": []any{"provided"}}}) {
+		t.Fatalf("caller input changed: %v", vars)
+	}
+}
