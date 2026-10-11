@@ -24,6 +24,7 @@ import (
 	"io"
 	"mime"
 	nethttp "net/http"
+	"reflect"
 	"strconv"
 	"strings"
 	"sync"
@@ -262,7 +263,7 @@ func (t *Transport) Serve(w nethttp.ResponseWriter, r *nethttp.Request, executor
 		}
 		responses[i] = executor.Execute(r.Context(), gqlReq)
 	}
-	t.writeGraphQLPayload(w, r, nethttp.StatusOK, responseType, responses)
+	t.writeGraphQLBatch(w, r, nethttp.StatusOK, responseType, responses)
 }
 
 func responseStatus(mediaType string, response core.Response) int {
@@ -344,13 +345,23 @@ func (t *Transport) negotiateEncoding(r *nethttp.Request) (string, bool) {
 	return encoding, identityAllowed
 }
 
-func (t *Transport) writeGraphQLPayload(w nethttp.ResponseWriter, r *nethttp.Request, status int, mediaType string, payload any) {
+func (t *Transport) writeGraphQLPayload(w nethttp.ResponseWriter, r *nethttp.Request, status int, mediaType string, response core.Response) {
+	encoded, err := response.MarshalJSON()
+	if err != nil {
+		wrapped := &json.MarshalerError{Type: reflect.TypeFor[core.Response](), Err: err}
+		nethttp.Error(w, wrapped.Error(), nethttp.StatusInternalServerError)
+		return
+	}
+	t.writeEncodedGraphQLPayload(w, r, status, mediaType, encoded)
+}
+
+func (t *Transport) writeGraphQLBatch(w nethttp.ResponseWriter, r *nethttp.Request, status int, mediaType string, responses []core.Response) {
 	buf := jsonEncodeBufferPool.Get().(*bytes.Buffer)
 	buf.Reset()
 	defer jsonEncodeBufferPool.Put(buf)
 
 	enc := json.NewEncoder(buf)
-	if err := enc.Encode(payload); err != nil {
+	if err := enc.Encode(responses); err != nil {
 		nethttp.Error(w, err.Error(), nethttp.StatusInternalServerError)
 		return
 	}
@@ -358,6 +369,10 @@ func (t *Transport) writeGraphQLPayload(w nethttp.ResponseWriter, r *nethttp.Req
 	if n := len(encoded); n > 0 && encoded[n-1] == '\n' {
 		encoded = encoded[:n-1]
 	}
+	t.writeEncodedGraphQLPayload(w, r, status, mediaType, encoded)
+}
+
+func (t *Transport) writeEncodedGraphQLPayload(w nethttp.ResponseWriter, r *nethttp.Request, status int, mediaType string, encoded []byte) {
 	contentType := mediaType
 	if !strings.Contains(contentType, "charset=") {
 		contentType += "; charset=utf-8"
