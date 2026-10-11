@@ -144,6 +144,11 @@ type Config struct {
 	// the limit.
 	MaxRootFieldCount int
 
+	// QueryConcurrency bounds concurrent root fields in query operations. Values
+	// at most one keep serial execution. See exec.WithQueryConcurrency for the
+	// resolver and hook concurrency contract.
+	QueryConcurrency int
+
 	// DocumentCacheSize caches parsed documents for requests without variables.
 	// Zero disables the cache.
 	DocumentCacheSize int
@@ -237,6 +242,9 @@ func New(config Config) (*Server, error) {
 	}
 	if config.MaxRootFieldCount > 0 {
 		execOpts = append(execOpts, exec.WithMaxRootFieldCount(config.MaxRootFieldCount))
+	}
+	if config.QueryConcurrency > 1 {
+		execOpts = append(execOpts, exec.WithQueryConcurrency(config.QueryConcurrency))
 	}
 	if config.DocumentCacheSize > 0 {
 		execOpts = append(execOpts, exec.WithDocumentCache(config.DocumentCacheSize))
