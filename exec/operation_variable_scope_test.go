@@ -149,3 +149,13 @@ func TestVariableFreeSelectionRetainsParsedStorage(t *testing.T) {
 		t.Fatal("variable-free operation cloned selections")
 	}
 }
+
+func TestIncrementalDetectionUsesSelectedFragmentBindings(t *testing.T) {
+	e := scopedVariableExecutor(t, WithDocumentCache(1))
+	query := `fragment Shared on Query { echo @defer(if:$active) } query A($active:Boolean!=false){...Shared} query B($active:Boolean!=true){...Shared}`
+	for _, name := range []string{"A", "B", "A"} {
+		if got := e.HasIncrementalDirectives(core.Request{Query: query, OperationName: name}); got != (name == "B") {
+			t.Fatalf("operation %s incremental=%t", name, got)
+		}
+	}
+}
