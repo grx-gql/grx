@@ -3,8 +3,8 @@
 //
 // The package centres on a small [PubSub] interface so the rest of the
 // runtime can stay backend-agnostic. Implementations live in sibling
-// packages (for example [github.com/grx-gql/grx/in-memory] for
-// in-process delivery and [github.com/grx-gql/grx/redis] for
+// packages (for example [github.com/grx-gql/grx/pubsub/memory] for
+// in-process delivery and [github.com/grx-gql/grx/pubsub/redis] for
 // cross-replica fan-out). Any third-party broker can be plugged in by
 // satisfying [PubSub] — the executor and subscription transports never
 // look at the concrete type.

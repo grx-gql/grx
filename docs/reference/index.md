@@ -26,8 +26,9 @@ in the source tree and regenerate.
 | [`http`](/reference/http/)                         | GraphQL-over-HTTP+JSON transport (the canonical `POST /graphql` request).                                    |
 | [`sse`](/reference/sse/)                           | GraphQL over Server-Sent Events transport.                                                                  |
 | [`websocket`](/reference/websocket/)               | RFC 6455 WebSockets implementing the `graphql-transport-ws` subprotocol.                                  |
-| [`memory-pubsub`](/reference/memory-pubsub/)       | Pub/Sub interface (`package pubsub`): in-memory backend, filters, and the generic `Typed[T]` wrapper.      |
-| [`redis-pubsub`](/reference/redis-pubsub/)         | Redis-backed `PubSub` implementation. Separate Go submodule so the root grx module stays dependency-free.  |
+| [`pubsub`](/reference/pubsub/)                     | Backend-neutral byte-oriented pub/sub contract.                                                            |
+| [`in-memory`](/reference/in-memory/)               | In-process `PubSub` implementation.                                                                        |
+| [`redis`](/reference/redis/)                       | Redis-backed `PubSub` implementation in a separate Go submodule.                                           |
 
 ## Hosted Go documentation
 

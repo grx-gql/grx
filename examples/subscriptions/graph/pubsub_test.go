@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/grx-gql/grx/examples/subscriptions/graph"
-	"github.com/grx-gql/grx/in-memory"
+	"github.com/grx-gql/grx/pubsub/memory"
 )
 
 func TestUserCreatedPublishSubscribe(t *testing.T) {

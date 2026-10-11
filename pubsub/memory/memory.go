@@ -26,7 +26,7 @@ const defaultBuffer = 16
 // payload slice without copying; callers and subscribers must honour the
 // [pubsub.Message] ownership rules. This is the fastest backend and the
 // right default for development, tests, and single-replica deployments.
-// Swap in [github.com/grx-gql/grx/redis] (or any other [pubsub.PubSub]
+// Swap in [github.com/grx-gql/grx/pubsub/redis] (or any other [pubsub.PubSub]
 // implementation) to fan messages across replicas.
 //
 // inMemoryPubSub is safe for concurrent use.

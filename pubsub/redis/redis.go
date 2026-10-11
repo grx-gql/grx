@@ -6,7 +6,7 @@
 // fan-out for GraphQL subscriptions:
 //
 //	import (
-//	    redisps "github.com/grx-gql/grx/redis"
+//	    redisps "github.com/grx-gql/grx/pubsub/redis"
 //	    "github.com/redis/go-redis/v9"
 //	)
 //

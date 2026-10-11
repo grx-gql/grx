@@ -8,7 +8,7 @@ import (
 
 	"github.com/alicebob/miniredis/v2"
 	"github.com/grx-gql/grx/pubsub"
-	redisps "github.com/grx-gql/grx/redis"
+	redisps "github.com/grx-gql/grx/pubsub/redis"
 	goredis "github.com/redis/go-redis/v9"
 )
 
