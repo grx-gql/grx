@@ -26,7 +26,7 @@ Roughly everything in **HTTP / WebSocket framing** touches **TCP**, **headers**,
                     ▼
  ┌─────────────────────────────────────────────────────────┐
  │ Transport-agnostic GraphQL                               │
- │  exec.Executor  ——  compiled schema / schema.Schema      │
+ │  exec.Executor  <->  compiled schema / schema.Schema      │
  └─────────────────────────────────────────────────────────┘
 ```
 

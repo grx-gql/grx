@@ -10,6 +10,10 @@ GraphQL subscription resolvers can consume events published by mutations or
 other application code. grx keeps this boundary backend-neutral with the
 `github.com/grx-gql/grx/pubsub` package.
 
+Use the memory backend when one process owns all publishers and subscribers.
+Use Redis or another shared backend when replicas must fan out events. Define
+the delivery guarantees before choosing a backend.
+
 ## Choosing a backend {#choosing-a-backend}
 
 | | Memory | Redis |
@@ -22,6 +26,10 @@ other application code. grx keeps this boundary backend-neutral with the
 Both implementations satisfy the same `pubsub.PubSub` contract. Slow
 subscribers may miss messages, and messages published before subscription are
 not replayed. Use a durable event system separately when replay is required.
+
+The interface does not promise ordering across topics, duplicate suppression,
+durability, replay, or delivery after reconnect. A custom backend must document
+which of these it provides.
 
 ## The interface
 
@@ -103,3 +111,16 @@ queries and non-event mutations, with no subscription root.
 
 See [Realtime subscriptions](/guides/subscriptions#encode-payloads-at-the-resolver-boundary)
 for the tested message resolver, JSON encoding and decoding, and shared bus wiring.
+
+## Lifecycle and backpressure
+
+Pass the resolver context into `Publish` and `Subscribe`. Cancel the
+subscription when the client disconnects and close the backend during service
+shutdown. Remove subscribers when their contexts end.
+
+Choose a buffer policy deliberately. A bounded buffer can drop or reject
+events; an unbounded buffer can exhaust memory. Do not let one slow subscriber
+block unrelated topics or publishers unless that is an explicit guarantee.
+
+For a new backend, read [Custom pub/sub](/guides/custom-pubsub) and test
+publish, subscribe, cancellation, cleanup, shutdown, and error behavior.

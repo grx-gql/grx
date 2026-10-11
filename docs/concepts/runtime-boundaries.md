@@ -35,6 +35,39 @@ credentials, allowed headers, and router examples.
 HTTP CORS does not configure WebSocket origins. Set an explicit origin policy
 with `websocket.Config.CheckOrigin` for browser WebSocket connections.
 
+## Security boundaries
+
+Parse authentication credentials in host middleware or in the WebSocket
+`OnConnect` hook. Use grx operation and field authorizers for decisions that
+need GraphQL operation or field information.
+
+For cookie-based browser sessions, add CSRF protection at the host boundary.
+Do not treat a GraphQL field authorizer as a replacement for CSRF checks.
+
+Rate limits, IP allowlists, WAF rules, and TLS policy usually belong at the
+edge or in host middleware. GraphQL-specific request limits belong in grx.
+
+## Operational boundaries
+
+The host application or platform should provide:
+
+- Request IDs and trace propagation.
+- Logs, metrics, and exporters.
+- Liveness and readiness endpoints.
+- Configuration and secret loading.
+- Graceful shutdown and connection draining.
+- Reverse proxy, TLS, and load balancer settings.
+
+Use grx plugins when the work needs GraphQL lifecycle data. Use host
+middleware when it needs HTTP headers, cookies, or the full application route.
+
+## Data and business boundaries
+
+Resolvers should call application services. Services and repositories own
+database access, transactions, caching, queues, and background jobs. This
+keeps business rules independent of GraphQL and makes them reusable from
+other entry points.
+
 ## Continue
 
 - [HTTP, WebSocket, and SSE](/concepts/transports)

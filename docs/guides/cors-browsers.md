@@ -13,6 +13,11 @@ one host-level policy.
 
 `grx` does not provide a CORS package. Use the middleware for your HTTP stack.
 
+For a browser request, the host middleware must answer the `OPTIONS` preflight
+before GraphQL tries to parse a document. Allow only the origins, methods, and
+headers that the application needs. When credentials are enabled, return an
+explicit origin instead of `*` and configure the client to send credentials.
+
 ## `net/http`
 
 The [`rs/cors`](https://github.com/rs/cors) package wraps any `http.Handler`:
@@ -95,6 +100,9 @@ requests with `Access-Control-Allow-Origin: *`.
 
 HTTP CORS does not replace WebSocket origin checks. Configure
 `websocket.Config.CheckOrigin` separately for WebSocket subscriptions.
+
+The WebSocket check runs during the upgrade request. It is not controlled by
+the HTTP CORS middleware, even when both requests use the same URL.
 
 See [HTTP middleware](/guides/middleware) for authentication, request IDs,
 and other host-level middleware.

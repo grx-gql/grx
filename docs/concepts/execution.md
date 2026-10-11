@@ -10,6 +10,10 @@ The `exec` package owns the GraphQL hot path: lex, parse, validate,
 execute. It is intentionally transport-agnostic  -  it sees a `core.Request`
 in, returns a `core.Response` (or a stream of them, for subscriptions) out.
 
+Read [Define your schema](/concepts/schema-basics) first if the root types and
+resolver methods are new. Read [Runtime boundaries](/concepts/runtime-boundaries)
+to decide which work belongs in middleware, plugins, or application services.
+
 ## Pipeline
 
 ```text
@@ -103,3 +107,9 @@ deployments, configure **`DisableIntrospection`** / **`grx.WithDisableIntrospect
 
 - Variable and value validation follows the current parser and validator
   behavior. Check the validation tests when you need exact edge-case details.
+
+## Next steps
+
+- [Hooks and plugins](/concepts/plugins)
+- [HTTP, WebSocket, and SSE](/concepts/transports)
+- [Query and mutation guide](/guides/query-mutation-server)
