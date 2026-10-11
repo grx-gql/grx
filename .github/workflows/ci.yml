@@ -24,12 +24,18 @@ jobs:
       - name: Test
         run: go test -race ./...
 
+      - name: Coverage
+        run: env COVER_MIN=90 ./scripts/cover-lib.sh
+
+      - name: Set up Go for Redis module
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: pubsub/redis/go.mod
+          cache-dependency-path: pubsub/redis/go.sum
+
       - name: Test Redis module
         working-directory: pubsub/redis
         run: go test -race -coverprofile=/tmp/grx-redis-coverage.out ./...
-
-      - name: Coverage
-        run: env COVER_MIN=90 ./scripts/cover-lib.sh
 
       - name: Set up Go for CORS integrations
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
