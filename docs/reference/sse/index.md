@@ -8,6 +8,7 @@ lastUpdated: false
 # sse
 
 ```go
+import "github.com/grx-gql/grx/sse"
 ```
 
 ## Index

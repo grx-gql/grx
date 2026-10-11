@@ -19,7 +19,7 @@ The [`rs/cors`](https://github.com/rs/cors) package wraps any `http.Handler`:
 
 ```go
 graphql, err := grx.NewServer(
-	grx.WithSchema(graph.New()),
+	grx.WithSchema(graph.Schema()),
 )
 if err != nil {
 	log.Fatal(err)

@@ -41,7 +41,7 @@ import (
 
 func main() {
 	srv, err := server.New(server.Config{
-		Schema:             graph.NewSchema(),
+		Schema:             graph.Schema(),
 		MaskInternalErrors: true,
 		ClientErrorMessage: "internal error", // omit for default wording
 	})

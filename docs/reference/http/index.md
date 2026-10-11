@@ -8,6 +8,7 @@ lastUpdated: false
 # http
 
 ```go
+import "github.com/grx-gql/grx/http"
 ```
 
 Package http provides the default GraphQL\-over\-HTTP\+JSON transport.

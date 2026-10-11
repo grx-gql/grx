@@ -8,6 +8,7 @@ lastUpdated: false
 # plugins/logger
 
 ```go
+import "github.com/grx-gql/grx/plugins/logger"
 ```
 
 Package logger provides a [plugins.Plugin](<https://pkg.go.dev/github.com/grx-gql/grx/plugins#Plugin>) that records GraphQL request lifecycle events through a structured slog logger. It is the canonical example of a built\-in plugin and a useful drop\-in for production observability.

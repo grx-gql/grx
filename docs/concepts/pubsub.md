@@ -98,7 +98,7 @@ type MessageSubscription struct {
 ```
 
 The subscription example composes these dependencies with
-`grx.WithSchema(graph.New(bus))`. Without a bus, `graph.New()` registers only
+`grx.WithSchema(graph.Schema(bus))`. Without a bus, `graph.Schema(nil)` registers only
 queries and non-event mutations, with no subscription root.
 
 See [Realtime subscriptions](/guides/subscriptions#encode-payloads-at-the-resolver-boundary)

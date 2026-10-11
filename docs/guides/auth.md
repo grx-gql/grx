@@ -143,7 +143,7 @@ func requireViewerField() grx.FieldAuthorizer {
 
 func wireServerWithFieldAuth() error {
 	srv, err := grx.NewServer(
-		grx.WithSchema(graph.NewSchema()),
+		grx.WithSchema(graph.Schema()),
 		grx.WithFieldAuthorizer(requireViewerField()),
 	)
 	if err != nil {

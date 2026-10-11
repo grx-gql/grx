@@ -35,7 +35,7 @@ func main() {
 	var err error
 
 	_, err = grx.NewServer(
-		grx.WithSchema(graph.NewSchema()),
+		grx.WithSchema(graph.Schema()),
 		grx.WithRequestTimeout(15*time.Second),
 		grx.WithMaxHTTPRequestBytes(1<<20),
 		grx.WithMaxSelectionDepth(16),
@@ -45,7 +45,7 @@ func main() {
 	}
 
 	_, err = server.New(server.Config{
-		Schema:              graph.NewSchema(),
+		Schema:              graph.Schema(),
 		RequestTimeout:      30 * time.Second,
 		MaxHTTPRequestBytes: 2 << 20,
 		MaxVariableBytes:    96 << 10,
@@ -90,7 +90,7 @@ import (
 
 func main() {
 	srv, err := server.New(server.Config{
-		Schema:            graph.NewSchema(),
+		Schema:            graph.Schema(),
 		MaxSelectionDepth: 16,
 		MaxSelectionCount: 750,
 		MaxAliasCount:     200,

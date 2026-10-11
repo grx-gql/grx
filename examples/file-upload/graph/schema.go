@@ -27,8 +27,8 @@ type UploadResult struct {
 	Contents string `gql:"contents,nonNull"`
 }
 
-// NewSchema registers the Upload scalar and the uploadFile mutation.
-func NewSchema() schema.Config {
+// Schema registers the Upload scalar and the uploadFile mutation.
+func Schema() schema.Config {
 	return schema.Config{
 		Query:    Query{},
 		Mutation: Mutation{},

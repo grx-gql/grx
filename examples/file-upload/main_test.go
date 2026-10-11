@@ -15,7 +15,7 @@ import (
 
 func newUploadServer(t *testing.T) http.Handler {
 	t.Helper()
-	srv, err := grx.NewServer(grx.WithSchema(graph.NewSchema()))
+	srv, err := grx.NewServer(grx.WithSchema(graph.Schema()))
 	if err != nil {
 		t.Fatalf("NewServer: %v", err)
 	}

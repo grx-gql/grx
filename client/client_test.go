@@ -21,7 +21,7 @@ func TestClientExecQueryAgainstServer(t *testing.T) {
 	t.Cleanup(func() { _ = bus.Close() })
 
 	srv, err := grx.NewServer(
-		grx.WithSchema(subscriptiongraph.New(bus)),
+		grx.WithSchema(subscriptiongraph.Schema(bus)),
 	)
 	if err != nil {
 		t.Fatalf("new server: %v", err)

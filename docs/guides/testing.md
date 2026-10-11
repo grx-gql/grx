@@ -35,7 +35,7 @@ import (
 )
 
 func TestGraphQLPing(t *testing.T) {
-	srv, err := grx.NewServer(grx.WithSchema(graph.NewSchema()))
+	srv, err := grx.NewServer(grx.WithSchema(graph.Schema()))
 	if err != nil {
 		t.Fatalf("new server: %v", err)
 	}

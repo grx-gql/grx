@@ -8,6 +8,7 @@ lastUpdated: false
 # schema
 
 ```go
+import "github.com/grx-gql/grx/schema"
 ```
 
 Package schema describes the runtime metadata that the executor uses to resolve GraphQL operations. It also exposes the [Build](<#Build>) entry point that reflects user\-defined Go types into this metadata.

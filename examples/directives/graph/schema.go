@@ -25,7 +25,7 @@ type Profile struct {
 	LegacyName string `gql:"legacyName,deprecated=Use username instead"`
 }
 
-func NewSchema() schema.Config {
+func Schema() schema.Config {
 	return schema.Config{
 		Query: Query{},
 	}

@@ -27,7 +27,7 @@ import (
 
 func main() {
 	srv, err := grx.NewServer(
-		grx.WithSchema(graph.NewSchema()),
+		grx.WithSchema(graph.Schema()),
 		grx.WithDisableIntrospection(),
 	)
 	if err != nil {
@@ -60,7 +60,7 @@ import (
 
 func main() {
 	srv, err := grx.NewServer(
-		grx.WithSchema(graph.NewSchema()),
+		grx.WithSchema(graph.Schema()),
 		grx.WithPlaygroundPath(""), // no GET explorer
 	)
 	if err != nil {

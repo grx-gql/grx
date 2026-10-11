@@ -150,7 +150,7 @@ type Mutation struct {
     PostMutation
 }
 
-func NewSchema() schema.Config {
+func Schema() schema.Config {
     return schema.Config{
         Query:    Query{},
         Mutation: Mutation{},
@@ -174,7 +174,7 @@ import (
 
 func main() {
     srv, err := grx.NewServer(
-        grx.WithSchema(graph.NewSchema()),
+        grx.WithSchema(graph.Schema()),
         grx.WithPlaygroundPath("/"),
     )
     if err != nil {
@@ -216,4 +216,3 @@ query {
 ## See also
 
 - **[Testing with the HTTP client](/guides/testing)**  -  **`httptest.Server`** plus **`client`** for integration tests against your handler.
-

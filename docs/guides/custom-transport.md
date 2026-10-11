@@ -107,7 +107,7 @@ import (
 
 func main() {
 	srv, err := grx.NewServer(
-		grx.WithSchema(graph.NewSchema()),
+		grx.WithSchema(graph.Schema()),
 		grx.WithTransports(httpget.New()),
 	)
 	if err != nil {
@@ -143,7 +143,7 @@ import (
 
 func main() {
 	srv, err := grx.NewServer(
-		grx.WithSchema(graph.NewSchema()),
+		grx.WithSchema(graph.Schema()),
 		grx.WithTransports(
 			websocket.New(),
 			sse.New(),

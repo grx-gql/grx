@@ -13,13 +13,12 @@ import (
 	"github.com/grx-gql/grx/schema"
 )
 
-func TestNewWithoutBusOmitsEventResolvers(t *testing.T) {
+func TestSchemaWithNilBusOmitsEventResolvers(t *testing.T) {
 	for _, scenario := range []struct {
 		name   string
 		config schema.Config
 	}{
-		{name: "omitted", config: graph.New()},
-		{name: "nil", config: graph.New(nil)},
+		{name: "nil", config: graph.Schema(nil)},
 	} {
 		t.Run(scenario.name, func(t *testing.T) {
 			compiled, err := schema.Build(scenario.config)
@@ -65,14 +64,14 @@ func TestNewWithoutBusOmitsEventResolvers(t *testing.T) {
 	}
 }
 
-func TestNewWithBusExecutesEventMutationsAndSubscriptions(t *testing.T) {
+func TestSchemaWithBusExecutesEventMutationsAndSubscriptions(t *testing.T) {
 	bus := memory.New()
 	t.Cleanup(func() {
 		if err := bus.Close(); err != nil {
 			t.Error(err)
 		}
 	})
-	compiled, err := schema.Build(graph.New(bus))
+	compiled, err := schema.Build(graph.Schema(bus))
 	if err != nil {
 		t.Fatal(err)
 	}

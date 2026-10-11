@@ -42,7 +42,7 @@ func listeningAddr(defaultAddr string) string {
 
 func main() {
 	addr := listeningAddr(":4000")
-	srv, err := grx.NewServer(grx.WithSchema(graph.NewSchema()))
+	srv, err := grx.NewServer(grx.WithSchema(graph.Schema()))
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -78,7 +78,7 @@ import (
 
 func main() {
 	srv, err := grx.NewServer(
-		grx.WithSchema(graph.NewSchema()),
+		grx.WithSchema(graph.Schema()),
 		grx.WithPlaygroundPath(""), // production: disable playground
 	)
 	if err != nil {
@@ -135,7 +135,7 @@ import (
 )
 
 func main() {
-	srv, err := grx.NewServer(grx.WithSchema(graph.NewSchema()))
+	srv, err := grx.NewServer(grx.WithSchema(graph.Schema()))
 	if err != nil {
 		log.Fatal(err)
 	}

@@ -13,7 +13,7 @@ use its own middleware ecosystem.
 
 ```go
 srv, err := grx.NewServer(
-    grx.WithSchema(graph.NewSchema()),
+    grx.WithSchema(graph.Schema()),
 )
 if err != nil {
     log.Fatal(err)
@@ -41,7 +41,7 @@ Any middleware with the standard `func(http.Handler) http.Handler` shape can
 wrap the server directly:
 
 ```go
-srv, err := grx.NewServer(grx.WithSchema(graph.NewSchema()))
+srv, err := grx.NewServer(grx.WithSchema(graph.Schema()))
 if err != nil {
     log.Fatal(err)
 }
