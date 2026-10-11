@@ -27,6 +27,7 @@ func TestRoadmapCompressionAcceptsQualityValues(t *testing.T) {
 		{name: "invalid parameter", config: grxhttp.Config{EnableGzip: true}, accept: "gzip;q"},
 		{name: "wildcard", config: grxhttp.Config{EnableBrotli: true}, accept: "*;q=0.5", want: "br"},
 		{name: "omitted", config: grxhttp.Config{EnableGzip: true}},
+		{name: "prefer identity", config: grxhttp.Config{EnableGzip: true}, accept: "identity;q=1,gzip;q=0.5"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -43,5 +44,28 @@ func TestRoadmapCompressionAcceptsQualityValues(t *testing.T) {
 				t.Fatalf("encoding=%q, want %q", got, tt.want)
 			}
 		})
+	}
+}
+
+func TestCompressionIdentityExclusion(t *testing.T) {
+	for _, tc := range []struct {
+		accept   string
+		size     int
+		status   int
+		encoding string
+	}{
+		{"gzip;q=0,identity;q=0", 100, 406, ""},
+		{"gzip;q=1,identity;q=0", 1, 200, "gzip"},
+		{"*;q=0", 100, 406, ""},
+		{"*;q=0,identity;q=1", 100, 200, ""},
+	} {
+		transport := grxhttp.New(grxhttp.Config{EnableGzip: true})
+		req := postGraphQLRequest("/graphql", `{"query":"{ hello }"}`)
+		req.Header.Set("Accept-Encoding", tc.accept)
+		rec := httptest.NewRecorder()
+		transport.Serve(rec, req, &stubExecutor{response: core.Response{Data: strings.Repeat("x", tc.size)}})
+		if rec.Code != tc.status || rec.Header().Get("Content-Encoding") != tc.encoding {
+			t.Errorf("%s size=%d: status=%d encoding=%s", tc.accept, tc.size, rec.Code, rec.Header().Get("Content-Encoding"))
+		}
 	}
 }
