@@ -34,12 +34,25 @@ func coerceArguments(defs []schema.InputValue, values map[string]any) (map[strin
 	return out, nil
 }
 
+type scalarInputCoercer func(*schema.Scalar, any) (any, error)
+
 func coerceInputValue(inputType schema.Type, raw any) (any, error) {
+	return coerceInputValueUsing(inputType, raw, coerceBuiltinScalarInput)
+}
+
+func coerceBuiltinScalarInput(scalar *schema.Scalar, raw any) (any, error) {
+	return coerceScalarInput(scalar.TypeName, raw)
+}
+
+func coerceInputValueUsing(inputType schema.Type, raw any, scalarCoercer scalarInputCoercer) (any, error) {
 	if ref, ok := raw.(variableRef); ok {
-		if !ref.HasValue {
-			return coerceInputValue(inputType, nil)
+		if ref.Coerced && ref.Value != nil {
+			return ref.Value, nil
 		}
-		return coerceInputValue(inputType, ref.Value)
+		if !ref.HasValue {
+			return coerceInputValueUsing(inputType, nil, scalarCoercer)
+		}
+		return coerceInputValueUsing(inputType, ref.Value, scalarCoercer)
 	}
 	if literal, ok := raw.(enumLiteral); ok {
 		raw = string(literal)
@@ -49,7 +62,11 @@ func coerceInputValue(inputType schema.Type, raw any) (any, error) {
 		if raw == nil {
 			return nil, fmt.Errorf("expected non-null %s", typed.Name())
 		}
-		return coerceInputValue(typed.OfType, raw)
+		value, err := coerceInputValueUsing(typed.OfType, raw, scalarCoercer)
+		if err == nil && value == nil {
+			return nil, fmt.Errorf("expected non-null %s", typed.Name())
+		}
+		return value, err
 	case *schema.List:
 		if raw == nil {
 			return nil, nil
@@ -58,7 +75,7 @@ func coerceInputValue(inputType schema.Type, raw any) (any, error) {
 		if rawValue.IsValid() && rawValue.Kind() != reflect.String && (rawValue.Kind() == reflect.Slice || rawValue.Kind() == reflect.Array) {
 			out := make([]any, rawValue.Len())
 			for index := 0; index < rawValue.Len(); index++ {
-				item, err := coerceInputValue(typed.OfType, rawValue.Index(index).Interface())
+				item, err := coerceInputValueUsing(typed.OfType, rawValue.Index(index).Interface(), scalarCoercer)
 				if err != nil {
 					return nil, fmt.Errorf("list item %d: %w", index, err)
 				}
@@ -66,14 +83,17 @@ func coerceInputValue(inputType schema.Type, raw any) (any, error) {
 			}
 			return out, nil
 		}
-		item, err := coerceInputValue(typed.OfType, raw)
+		item, err := coerceInputValueUsing(typed.OfType, raw, scalarCoercer)
 		if err != nil {
 			return nil, err
 		}
 		return []any{item}, nil
 	case *schema.InputObject:
-		return coerceInputObject(typed, raw)
+		return coerceInputObjectUsing(typed, raw, scalarCoercer)
 	case *schema.Enum:
+		if raw == nil {
+			return nil, nil
+		}
 		parsed, err := typed.Parse(raw)
 		if err == nil {
 			return parsed, nil
@@ -83,13 +103,17 @@ func coerceInputValue(inputType schema.Type, raw any) (any, error) {
 		}
 		return nil, err
 	case *schema.Scalar:
-		return coerceScalarInput(typed.TypeName, raw)
+		return scalarCoercer(typed, raw)
 	default:
 		return raw, nil
 	}
 }
 
 func coerceInputObject(inputType *schema.InputObject, raw any) (any, error) {
+	return coerceInputObjectUsing(inputType, raw, coerceBuiltinScalarInput)
+}
+
+func coerceInputObjectUsing(inputType *schema.InputObject, raw any, scalarCoercer scalarInputCoercer) (any, error) {
 	if raw == nil {
 		return nil, nil
 	}
@@ -105,9 +129,11 @@ func coerceInputObject(inputType *schema.InputObject, raw any) (any, error) {
 	}
 	for name, field := range inputType.Fields {
 		rawField, exists := fields[name]
+		fieldCoercer := scalarCoercer
 		if !exists {
 			if field.DefaultValue != nil {
 				rawField = field.DefaultValue
+				fieldCoercer = coerceBuiltinScalarInput
 			} else {
 				if _, required := field.Type.(*schema.NonNull); required {
 					return nil, fmt.Errorf("missing required input field %q on %s", name, inputType.Name())
@@ -115,7 +141,7 @@ func coerceInputObject(inputType *schema.InputObject, raw any) (any, error) {
 				continue
 			}
 		}
-		coerced, err := coerceInputValue(field.Type, rawField)
+		coerced, err := coerceInputValueUsing(field.Type, rawField, fieldCoercer)
 		if err != nil {
 			return nil, fmt.Errorf("input field %q: %w", name, err)
 		}

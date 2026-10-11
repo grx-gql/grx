@@ -61,6 +61,8 @@ type Scalar struct {
 	SpecifiedByURL string
 	serializeFn    func(any) (any, error)
 	Directives     []AppliedDirective
+	parseFn        func(any) (any, error)
+	inputGoType    reflect.Type
 }
 
 // Name returns the scalar type name.
@@ -71,6 +73,27 @@ func (s *Scalar) Name() string {
 // Kind returns [ScalarKind].
 func (s *Scalar) Kind() Kind {
 	return ScalarKind
+}
+
+// Parse converts a scalar input using its registered parser. Scalars without a
+// registered parser retain the input value. Parsed custom values are normalized
+// to their registered Go type so reflected resolvers do not parse them again.
+func (s *Scalar) Parse(value any) (any, error) {
+	if s.parseFn == nil {
+		return value, nil
+	}
+	parsed, err := s.parseFn(value)
+	if err != nil || parsed == nil {
+		return parsed, err
+	}
+	raw := reflect.ValueOf(parsed)
+	if raw.Type().AssignableTo(s.inputGoType) {
+		return parsed, nil
+	}
+	if !raw.Type().ConvertibleTo(s.inputGoType) {
+		return nil, fmt.Errorf("scalar %s parser returned %T, cannot assign to %s", s.TypeName, parsed, s.inputGoType)
+	}
+	return raw.Convert(s.inputGoType).Interface(), nil
 }
 
 // Serialize converts a Go scalar value into a GraphQL response value.

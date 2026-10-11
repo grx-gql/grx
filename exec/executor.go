@@ -160,7 +160,7 @@ func (e *Executor) prepareExecution(ctx context.Context, req core.Request) (cont
 		e.notifyError(ctx, err)
 		return e.shortResponse(ctx, err)
 	}
-	doc, err := selectOperation(bundle, req.OperationName)
+	doc, err := selectOperationDefinition(bundle, req.OperationName)
 	if err != nil {
 		e.notifyError(ctx, err)
 		return e.shortResponse(ctx, err)
@@ -171,6 +171,11 @@ func (e *Executor) prepareExecution(ctx context.Context, req core.Request) (cont
 	}
 	if e.disableIntrospection && selectionsIntrospect(doc.Selections, doc.Fragments, make(map[string]bool)) {
 		err := fmt.Errorf("introspection is disabled")
+		e.notifyError(ctx, err)
+		return e.shortResponse(ctx, err)
+	}
+	doc, err = coerceOperationVariables(e.Schema, doc, req.Variables)
+	if err != nil {
 		e.notifyError(ctx, err)
 		return e.shortResponse(ctx, err)
 	}
@@ -245,13 +250,18 @@ func (e *Executor) Subscribe(ctx context.Context, req core.Request) (responses <
 		e.notifyError(ctx, err)
 		return nil, err
 	}
-	doc, err := selectOperation(bundle, req.OperationName)
+	doc, err := selectOperationDefinition(bundle, req.OperationName)
 	if err != nil {
 		e.notifyError(ctx, err)
 		return nil, err
 	}
 	if verrs := ValidateDocument(e.Schema, bundle, doc); len(verrs) > 0 {
 		return nil, verrs[0]
+	}
+	doc, err = coerceOperationVariables(e.Schema, doc, req.Variables)
+	if err != nil {
+		e.notifyError(ctx, err)
+		return nil, err
 	}
 	if err := e.validateDocumentSecurity(ctx, req, doc); err != nil {
 		e.notifyError(ctx, err)
