@@ -41,7 +41,7 @@ func decodeGraphQLHTTP(r *nethttp.Request, config Config) (decodedRequest, error
 		bodies, err := parsePostGraphQLJSON(raw, config)
 		return decodedRequest{bodies: bodies, batch: len(raw) > 0 && raw[0] == '['}, err
 	case nethttp.MethodGet:
-		body, err := core.DecodeGraphQLRequest(r)
+		body, err := core.DecodeGraphQLParameters(r.URL.Query())
 		if err != nil {
 			return decodedRequest{}, err
 		}

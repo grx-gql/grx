@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/url"
 	"strings"
 )
 
@@ -55,23 +56,38 @@ func DecodeGraphQLRequest(r *http.Request) (GraphQLBody, error) {
 	case http.MethodPost:
 		return DecodeGraphQLBody(r)
 	case http.MethodGet:
-		q := r.URL.Query()
-		body := GraphQLBody{
-			Query:         q.Get("query"),
-			OperationName: q.Get("operationName"),
+		body, err := DecodeGraphQLParameters(r.URL.Query())
+		if err != nil {
+			return body, err
 		}
 		if body.Query == "" {
 			return body, fmt.Errorf("missing GraphQL query")
-		}
-		if raw := q.Get("variables"); raw != "" {
-			if err := json.Unmarshal([]byte(raw), &body.Variables); err != nil {
-				return body, fmt.Errorf("invalid GraphQL variables: %s", err.Error())
-			}
 		}
 		return body, nil
 	default:
 		return GraphQLBody{}, fmt.Errorf("unsupported HTTP method %s", r.Method)
 	}
+}
+
+// DecodeGraphQLParameters decodes GraphQL GET parameters, including variables
+// and extensions. Query presence is checked by the caller after resolving any
+// persisted-query extension. DecodeGraphQLRequest requires a query directly.
+func DecodeGraphQLParameters(parameters url.Values) (GraphQLBody, error) {
+	body := GraphQLBody{
+		Query:         parameters.Get("query"),
+		OperationName: parameters.Get("operationName"),
+	}
+	if raw := parameters.Get("variables"); raw != "" {
+		if err := json.Unmarshal([]byte(raw), &body.Variables); err != nil {
+			return body, fmt.Errorf("invalid GraphQL variables: %w", err)
+		}
+	}
+	if raw := parameters.Get("extensions"); raw != "" {
+		if err := json.Unmarshal([]byte(raw), &body.Extensions); err != nil {
+			return body, fmt.Errorf("invalid GraphQL extensions: %w", err)
+		}
+	}
+	return body, nil
 }
 
 // WriteGraphQLResponse writes value using the GraphQL-over-HTTP response

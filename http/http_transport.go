@@ -54,7 +54,7 @@ type Config struct {
 	// arbitrary path should set Path accordingly.
 	Path string
 	// MaxRequestBytes limits POST JSON bodies and GET query, variables, and
-	// operationName parameter bytes combined. Zero disables the limit; a
+	// operationName and extensions parameter bytes combined. Zero disables the limit; a
 	// negative value also disables it.
 	MaxRequestBytes int64
 	// EnableGzip compresses JSON GraphQL responses when the client sends
@@ -115,13 +115,14 @@ func New(cfg ...Config) *Transport {
 }
 
 // Match reports whether r is a GraphQL-over-HTTP request this transport will
-// handle: POST with a JSON body, or GET with a non-empty query parameter.
+// handle: POST with a JSON body, or GET with query or extensions parameters.
 // When [Config.Path] is non-empty, the request path must match it.
 func (t *Transport) Match(r *nethttp.Request) bool {
 	switch r.Method {
 	case nethttp.MethodPost:
 	case nethttp.MethodGet:
-		if strings.TrimSpace(r.URL.Query().Get("query")) == "" {
+		parameters := r.URL.Query()
+		if strings.TrimSpace(parameters.Get("query")) == "" && strings.TrimSpace(parameters.Get("extensions")) == "" {
 			return false
 		}
 	default:
@@ -398,7 +399,7 @@ func limitRequestSize(w nethttp.ResponseWriter, r *nethttp.Request, max int64) e
 		return nil
 	case nethttp.MethodGet:
 		q := r.URL.Query()
-		size := int64(len(q.Get("query")) + len(q.Get("variables")) + len(q.Get("operationName")))
+		size := int64(len(q.Get("query")) + len(q.Get("variables")) + len(q.Get("operationName")) + len(q.Get("extensions")))
 		if size > max {
 			return fmt.Errorf("request exceeds %d byte limit", max)
 		}
