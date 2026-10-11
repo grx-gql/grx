@@ -6,7 +6,21 @@ outline: deep
 
 # Examples
 
-In this section you’ll find **the same Go that ships in `examples/`** - ready to skim, paste, or tweak - plus **tiny router mounts** for production-style URLs.
+This section shows complete applications that you can run from the repository
+root. Start with the basic server if you are learning grx. Then choose an
+example that matches your application, such as authentication, subscriptions,
+or a custom transport mount.
+
+Every example keeps the same shape:
+
+1. Define a schema with `Schema()`.
+2. Create a server with `grx.NewServer`.
+3. Mount the returned handler in your HTTP service.
+4. Add host concerns such as authentication, CORS, logging, and deployment
+   policy around the GraphQL runtime.
+
+The snippets below mirror the Go source under `examples/`, so you can use them
+as working references rather than isolated API fragments.
 
 ::: tip Runs from repo root  
 The commands assume your working directory is a clone of **`github.com/grx-gql/grx`**. Prefer your own module path when you copy snippets into another module (everything under **`examples/*/`** is importable paths from this repo).  
@@ -105,7 +119,7 @@ Try inside GraphiQL:
 }
 ```
 
-**Next concepts:** [**Get started**](/getting-started/) · [**Queries and mutations**](/guides/query-mutation-server)
+**Next concepts:** [**Run your first server**](/getting-started/) · [**Queries and mutations**](/guides/query-mutation-server)
 
 ---
 
