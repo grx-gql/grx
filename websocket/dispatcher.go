@@ -112,13 +112,16 @@ func (d *dispatcher) run(ctx context.Context) {
 			return
 		}
 
-		switch msg.Type {
-		case "connection_init":
+		if msg.Type == "connection_init" || msg.Type == "ping" || msg.Type == "pong" {
 			payload := bytes.TrimSpace(msg.Payload)
 			if len(payload) > 0 && payload[0] != '{' && !bytes.Equal(payload, []byte("null")) {
-				d.conn.SendClose(wsCloseInvalidMessage, "connection_init payload must be an object or null")
+				d.conn.SendClose(wsCloseInvalidMessage, "message payload must be an object or null")
 				return
 			}
+		}
+
+		switch msg.Type {
+		case "connection_init":
 			if !d.markInited() {
 				d.conn.SendClose(wsCloseTooManyInits, "too many initialisation requests")
 				return
