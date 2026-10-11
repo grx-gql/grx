@@ -39,6 +39,10 @@ func (r Response) MarshalJSON() ([]byte, error) {
 		}
 	}
 
+	if len(r.Incremental) > 0 {
+		return marshalIncrementalResponse(r)
+	}
+
 	aux := struct {
 		Data        json.RawMessage      `json:"data,omitempty"`
 		Errors      []Error              `json:"errors,omitempty"`

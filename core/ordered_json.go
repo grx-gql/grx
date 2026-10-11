@@ -78,16 +78,6 @@ func writeGraphQLJSON(buf *bytes.Buffer, v any) error {
 			}
 		}
 		buf.WriteByte(']')
-	case json.Marshaler:
-		if v == nil {
-			buf.WriteString("null")
-			return nil
-		}
-		b, err := v.MarshalJSON()
-		if err != nil {
-			return err
-		}
-		buf.Write(b)
 	default:
 		b, err := json.Marshal(v)
 		if err != nil {
