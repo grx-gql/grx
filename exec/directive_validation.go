@@ -39,7 +39,10 @@ func directiveArgumentValue(args map[string]any, name string) (any, bool) {
 }
 
 func validateDefinitionDirectives(s *schema.Schema, bundle documentBundle, op document, reachable map[string]bool) []validationError {
-	errs := validateDirectives(s, selection{Directives: op.Directives, Location: op.Location}, strings.ToUpper(string(op.Kind)), variableScope{Types: op.VariableTypes, Definitions: op.VariableDefinitions})
+	var errs []validationError
+	if len(op.Directives) > 0 {
+		errs = validateDirectives(s, selection{Directives: op.Directives, Location: op.Location}, strings.ToUpper(string(op.Kind)), variableScope{Types: op.VariableTypes, Definitions: op.VariableDefinitions})
+	}
 	for _, definition := range op.VariableDefinitions {
 		errs = append(errs, validateDirectives(s, selection{Directives: definition.Directives, Location: definition.Location}, "VARIABLE_DEFINITION", variableScope{Types: op.VariableTypes, Definitions: op.VariableDefinitions})...)
 	}

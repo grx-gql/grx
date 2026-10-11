@@ -134,6 +134,6 @@ func resolveValueVariableRef(value any) any {
 		}
 		return out
 	default:
-		return value
+		return cloneVariableInput(value)
 	}
 }

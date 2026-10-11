@@ -22,9 +22,9 @@ func TestFragmentValidationScratchAllocations(t *testing.T) {
 			t.Fatal(errs)
 		}
 	})
-	// The fragment recursion stack is the only required heap allocation.
-	if allocations > 1 {
-		t.Fatalf("fragment validation allocated %g times; want at most 1", allocations)
+	// Small fragment validation needs no heap-backed scratch storage.
+	if allocations != 0 {
+		t.Fatalf("fragment validation allocated %g times; want 0", allocations)
 	}
 }
 
@@ -54,8 +54,8 @@ func TestParserVariableBindingAllocations(t *testing.T) {
 			t.Fatal(err)
 		}
 	})
-	if allocations > 44 {
-		t.Fatalf("parse allocated %g times; want at most 44", allocations)
+	if allocations > 38 {
+		t.Fatalf("parse allocated %g times; want at most 38", allocations)
 	}
 }
 
@@ -74,5 +74,48 @@ func TestStringInputCoercionPreservesBoxedValue(t *testing.T) {
 	}
 	if captured != raw {
 		t.Fatalf("coerced value = %v", captured)
+	}
+}
+
+func TestEmptyDefinitionDirectivesAvoidAllocations(t *testing.T) {
+	s, err := schema.Build(schema.Config{Query: orderedListQuery{}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	bundle, err := parseDocumentBundle(`{ __typename }`, nil, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	allocations := testing.AllocsPerRun(100, func() {
+		if errs := validateDefinitionDirectives(s, bundle, bundle.operations[0], nil); len(errs) != 0 {
+			t.Fatal(errs)
+		}
+	})
+	if allocations != 0 {
+		t.Fatalf("empty definition directives allocated %g times; want 0", allocations)
+	}
+}
+
+func TestRequiredVariableCoercionAvoidsWrapperAllocation(t *testing.T) {
+	e := scopedVariableExecutor(t)
+	provided := map[string]any{"v": "value"}
+	allocations := make([]float64, 0, 2)
+	for _, reference := range []string{"String", "String!"} {
+		bundle, err := parseDocumentBundle(`query Q($v:`+reference+`){echo(value:$v)}`, nil, 0)
+		if err != nil {
+			t.Fatal(err)
+		}
+		allocations = append(allocations, testing.AllocsPerRun(100, func() {
+			bound, err := coerceOperationVariables(e.Schema, bundle.operations[0], provided)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if bound.Selections[0].Arguments["value"].(variableRef).Value != "value" {
+				t.Fatal("wrong coerced value")
+			}
+		}))
+	}
+	if allocations[1] != allocations[0] {
+		t.Fatalf("required allocated %g times; nullable %g", allocations[1], allocations[0])
 	}
 }

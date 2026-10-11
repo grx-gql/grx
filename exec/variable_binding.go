@@ -31,14 +31,40 @@ func bindVariableMap(values map[string]any, scope operationVariableValues) map[s
 	})
 }
 
+func operationVariableInput(scope operationVariableValues, name string) (any, bool) {
+	if value, present := scope.provided[name]; present {
+		return value, true
+	}
+	definition := scope.definitions[name]
+	return definition.DefaultValue, definition.HasDefault
+}
+
+// resolveOperationInputValue binds parser results directly, without allocating
+// intermediate variable references or copying literal containers twice.
+func resolveOperationInputValue(value any, scope operationVariableValues) (any, bool) {
+	switch typed := value.(type) {
+	case variableRef:
+		raw, present := operationVariableInput(scope, typed.Name)
+		return resolveValueVariableRef(raw), present
+	case map[string]any:
+		return transformInputValueMap(typed, func(item any) (any, bool) {
+			return resolveOperationInputValue(item, scope)
+		}), true
+	case []any:
+		out := make([]any, len(typed))
+		for index, item := range typed {
+			out[index], _ = resolveOperationInputValue(item, scope)
+		}
+		return out, true
+	default:
+		return resolveValueVariableRef(value), true
+	}
+}
+
 func bindVariableValue(value any, scope operationVariableValues) (any, bool) {
 	switch typed := value.(type) {
 	case variableRef:
-		raw, present := scope.provided[typed.Name]
-		if !present {
-			definition := scope.definitions[typed.Name]
-			raw, present = definition.DefaultValue, definition.HasDefault
-		}
+		raw, present := operationVariableInput(scope, typed.Name)
 		if !present {
 			return nil, false
 		}

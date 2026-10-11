@@ -116,8 +116,7 @@ func parseDocumentNamed(query string, variables map[string]any, operationName st
 	}
 	scope := operationVariableValues{provided: variables, definitions: doc.VariableDefinitions}
 	return transformOperationValues(doc, func(value any) (any, bool) {
-		bound, present := bindVariableValue(value, scope)
-		return resolveValueVariableRef(bound), present
+		return resolveOperationInputValue(value, scope)
 	}), nil
 }
 

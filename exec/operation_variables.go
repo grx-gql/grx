@@ -1,6 +1,10 @@
 package exec
 
-import "github.com/grx-gql/grx/schema"
+import (
+	"strings"
+
+	"github.com/grx-gql/grx/schema"
+)
 
 // coerceOperationVariables checks the selected operation before any resolver
 // runs. References carry their coerced state through argument completion.
@@ -15,16 +19,21 @@ func coerceOperationVariables(s *schema.Schema, doc document, provided map[strin
 		if !present && definition.HasDefault {
 			raw, present = definition.DefaultValue, true
 		}
-		inputType := variableTypeFromReference(s, doc.VariableTypes[name])
-		if _, required := inputType.(*schema.NonNull); required && (!present || raw == nil) {
-			return document{}, newValidationError(definition.Location, `Variable "$%s" of required type "%s" must be provided and must not be null.`, name, inputType.Name())
+		typeReference := doc.VariableTypes[name]
+		required := strings.HasSuffix(typeReference, "!")
+		if required && (!present || raw == nil) {
+			return document{}, newValidationError(definition.Location, `Variable "$%s" of required type "%s" must be provided and must not be null.`, name, typeReference)
 		}
 		if !present {
 			continue
 		}
+		inputType := variableTypeFromReference(s, strings.TrimSuffix(typeReference, "!"))
 		value, err := coerceInputValueUsing(inputType, raw, coerceVariableScalarInput)
 		if err != nil {
-			return document{}, newValidationError(definition.Location, `Variable "$%s" of type "%s": %s`, name, inputType.Name(), err.Error())
+			return document{}, newValidationError(definition.Location, `Variable "$%s" of type "%s": %s`, name, typeReference, err.Error())
+		}
+		if required && value == nil {
+			return document{}, newValidationError(definition.Location, `Variable "$%s" of type "%s": expected non-null %s`, name, typeReference, typeReference)
 		}
 		values[name] = variableRef{Name: name, Value: value, HasValue: true, Coerced: true}
 	}
