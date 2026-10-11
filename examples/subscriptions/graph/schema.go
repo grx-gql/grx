@@ -47,17 +47,18 @@ func New(buses ...pubsub.PubSub) schema.Config {
 }
 
 func wiredSchema(bus pubsub.PubSub) schema.Config {
-	mutation := Mutation{PostMutation: PostMutation{}}
 	config := schema.Config{
 		Query:    Query{},
-		Mutation: mutation,
+		Mutation: PostMutation{},
 	}
 	if bus == nil {
 		return config
 	}
-	mutation.UserMutation = &UserMutation{Bus: bus}
-	mutation.MessageMutation = &MessageMutation{Bus: bus}
-	config.Mutation = mutation
+	config.Mutation = Mutation{
+		PostMutation:    PostMutation{},
+		UserMutation:    &UserMutation{Bus: bus},
+		MessageMutation: &MessageMutation{Bus: bus},
+	}
 	config.Subscription = Subscription{
 		UserSubscription:    UserSubscription{Bus: bus},
 		MessageSubscription: MessageSubscription{Bus: bus},

@@ -6,7 +6,7 @@ description: Redis-backed pub/sub backend.
 # Package redis
 
 ```go
-import redisps "github.com/grx-gql/grx/redis"
+import redisps "github.com/grx-gql/grx/pubsub/redis"
 ```
 
 The Redis implementation is a separate Go module so applications that do not

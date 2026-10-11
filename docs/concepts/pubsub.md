@@ -67,7 +67,7 @@ do not add a Redis dependency to the root module.
 
 ```go
 import (
-	redisps "github.com/grx-gql/grx/redis"
+	redisps "github.com/grx-gql/grx/pubsub/redis"
 	"github.com/redis/go-redis/v9"
 )
 
@@ -85,40 +85,21 @@ Encode and decode domain values at the resolver boundary. This keeps every
 backend interchangeable and avoids putting application-specific codecs in the
 transport-agnostic bus.
 
+Each resolver holds the same `pubsub.PubSub` directly:
+
 ```go
-type Events struct {
+type MessageMutation struct {
 	Bus pubsub.PubSub
 }
 
-func (m MessageMutation) PostMessage(ctx context.Context, message *Message) error {
-	payload, err := json.Marshal(message)
-	if err != nil {
-		return err
-	}
-	return m.Bus.Publish(ctx, "message.posted."+message.RoomID, payload)
-}
-
-func (s MessageSubscription) MessagePosted(ctx context.Context, roomID string) (<-chan *Message, error) {
-	msgs, err := s.Bus.Subscribe(ctx, "message.posted."+roomID)
-	if err != nil {
-		return nil, err
-	}
-
-	out := make(chan *Message)
-	go func() {
-		defer close(out)
-		for msg := range msgs {
-			var message Message
-			if err := json.Unmarshal(msg.Payload, &message); err != nil {
-				continue
-			}
-			select {
-			case out <- &message:
-			case <-ctx.Done():
-				return
-			}
-		}
-	}()
-	return out, nil
+type MessageSubscription struct {
+	Bus pubsub.PubSub
 }
 ```
+
+The subscription example composes these dependencies with
+`grx.WithSchema(graph.New(bus))`. Without a bus, `graph.New()` registers only
+queries and non-event mutations, with no subscription root.
+
+See [Realtime subscriptions](/guides/subscriptions#encode-payloads-at-the-resolver-boundary)
+for the tested message resolver, JSON encoding and decoding, and shared bus wiring.

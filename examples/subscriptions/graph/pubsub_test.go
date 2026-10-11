@@ -2,23 +2,117 @@ package graph_test
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 	"time"
 
+	"github.com/grx-gql/grx/core"
 	"github.com/grx-gql/grx/examples/subscriptions/graph"
+	"github.com/grx-gql/grx/exec"
 	"github.com/grx-gql/grx/pubsub/memory"
+	"github.com/grx-gql/grx/schema"
 )
 
 func TestNewWithoutBusOmitsEventResolvers(t *testing.T) {
-	config := graph.New()
-	if config.Query == nil {
-		t.Fatal("expected query resolver")
+	for _, scenario := range []struct {
+		name   string
+		config schema.Config
+	}{
+		{name: "omitted", config: graph.New()},
+		{name: "nil", config: graph.New(nil)},
+	} {
+		t.Run(scenario.name, func(t *testing.T) {
+			compiled, err := schema.Build(scenario.config)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if compiled.Query == nil || compiled.Mutation == nil {
+				t.Fatal("expected queries and non-event mutations")
+			}
+			if compiled.Subscription != nil {
+				t.Error("subscriptions must be absent without a bus")
+			}
+			for _, name := range []string{"createUser", "postMessage"} {
+				if _, exists := compiled.Mutation.Fields[name]; exists {
+					t.Errorf("event mutation %s must be absent without a bus", name)
+				}
+			}
+			executor := exec.New(compiled, nil)
+			for _, query := range []string{
+				`{ user(id: "user_1") { id name } }`,
+				`mutation { createPost(input: {title: "Hello", body: "World", authorId: "user_1"}) { post { id title } } }`,
+			} {
+				response := executor.Execute(context.Background(), core.Request{Query: query})
+				if len(response.Errors) != 0 || response.Data == nil {
+					t.Fatalf("query %s: %+v", query, response)
+				}
+			}
+			for _, query := range []string{
+				`mutation { createUser(input: {name: "Ada"}) { user { id } } }`,
+				`mutation { postMessage(input: {roomId: "general", author: "Ada", body: "Hello"}) { message { id } } }`,
+			} {
+				response := executor.Execute(context.Background(), core.Request{Query: query})
+				if len(response.Errors) == 0 {
+					t.Fatalf("event mutation should fail validation: %s", query)
+				}
+				for _, issue := range response.Errors {
+					if issue.Extensions["code"] != "GRAPHQL_VALIDATION_FAILED" {
+						t.Errorf("expected validation error, got %+v", issue)
+					}
+				}
+			}
+		})
 	}
-	if config.Mutation == nil {
-		t.Fatal("expected non-event mutation resolver")
+}
+
+func TestNewWithBusExecutesEventMutationsAndSubscriptions(t *testing.T) {
+	bus := memory.New()
+	t.Cleanup(func() {
+		if err := bus.Close(); err != nil {
+			t.Error(err)
+		}
+	})
+	compiled, err := schema.Build(graph.New(bus))
+	if err != nil {
+		t.Fatal(err)
 	}
-	if config.Subscription != nil {
-		t.Fatal("expected subscriptions to be omitted without a bus")
+	executor := exec.New(compiled, nil)
+	for _, scenario := range []struct {
+		name         string
+		subscription string
+		mutation     string
+		want         string
+	}{
+		{name: "user", subscription: `subscription { userCreated { name } }`, mutation: `mutation { createUser(input: {name: "Ada"}) { user { name } } }`, want: `{"userCreated":{"name":"Ada"}}`},
+		{name: "message", subscription: `subscription { messagePosted(roomId: "general") { body } }`, mutation: `mutation { postMessage(input: {roomId: "general", author: "Ada", body: "Hello"}) { message { body } } }`, want: `{"messagePosted":{"body":"Hello"}}`},
+	} {
+		t.Run(scenario.name, func(t *testing.T) {
+			ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+			defer cancel()
+			stream, err := executor.Subscribe(ctx, core.Request{Query: scenario.subscription})
+			if err != nil {
+				t.Fatal(err)
+			}
+			response := executor.Execute(ctx, core.Request{Query: scenario.mutation})
+			if len(response.Errors) != 0 || response.Data == nil {
+				t.Fatalf("mutation: %+v", response)
+			}
+			select {
+			case event, ok := <-stream:
+				if !ok || len(event.Errors) != 0 {
+					t.Fatalf("subscription closed or failed: %+v", event)
+				}
+				encoded, err := json.Marshal(event.Data)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if string(encoded) != scenario.want {
+					t.Fatalf("got %s, want %s", encoded, scenario.want)
+				}
+			case <-ctx.Done():
+				t.Fatal("subscription did not receive the mutation event")
+			}
+		})
 	}
 }
 

@@ -302,10 +302,10 @@ This file is the source of truth for feature parity tracking and roadmap sync in
 - [x] Backpressure handling for slow clients (`Config.WriteTimeout`)
 - [x] Connection authentication hook (`Config.OnConnect`)
 - [x] Pub/Sub primitive for cross-resolver fan-out (`pubsub.PubSub`)
-- [x] In-process pub/sub backend (`pubsub.Memory`)
-- [x] Redis pub/sub backend (`redis`, separate Go module)
-- [x] Type-safe generic wrapper with pluggable codec (`pubsub.Typed`)
-- [x] Server-side filters / typed predicates on subscribe
+- [x] In-process pub/sub backend (`pubsub/memory`)
+- [x] Redis pub/sub backend (`pubsub/redis`, separate Go module)
+- [x] Byte payloads with application-owned encoding and decoding
+- [x] Exact-match topics for room- or tenant-scoped subscriptions
 - [x] Configurable maximum concurrent SSE streams per transport (`sse.Config.MaxActiveSubscriptions`)
 
 ### WebSocket Transport (RFC 6455)

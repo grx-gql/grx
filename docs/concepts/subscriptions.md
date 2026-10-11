@@ -118,10 +118,12 @@ payload, err := json.Marshal(msg)
 if err != nil {
 	return err
 }
-_ = bus.Publish(ctx, "message.posted", payload)
+if err := bus.Publish(ctx, "message.posted."+msg.RoomID, payload); err != nil {
+	return err
+}
 
-// inside the subscription resolver  -  predicates run on the publish
-// path so uninteresting messages never wake the consumer goroutine.
+// Inside the subscription resolver, use the same room-specific topic.
+// Other rooms' messages are never delivered to this subscriber.
 msgs, err := bus.Subscribe(ctx, "message.posted."+args.RoomID)
 if err != nil {
 	return nil, err
