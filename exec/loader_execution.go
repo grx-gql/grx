@@ -35,8 +35,8 @@ type batchObject struct {
 	path       []any
 }
 type batchPending struct {
-	key       string
-	selected  selection
+	result    *resolvedField
+	selected  *selection
 	fragments map[string]*fragmentDef
 }
 
@@ -118,7 +118,7 @@ func (e *Executor) completeBatchValue(ctx context.Context, fieldType schema.Type
 	batch := newBatchExecution()
 	lookupPathArena(ctx).batch = batch
 	defer e.finishBatch(ctx, batch)
-	e.collectBatchValue(ctx, batch, fieldType, value, selections, fragments, path)
+	e.collectBatchValue(ctx, batch, fieldType, value, selections, fragments, clonePath(path))
 	if err := e.prepareBatch(ctx, batch); err != nil {
 		return nil, []core.Error{newFieldError(err.Error(), path, core.Location{})}
 	}
@@ -144,7 +144,7 @@ func (e *Executor) prepareBatch(ctx context.Context, batch *batchExecution) erro
 						continue
 					}
 					if _, pending := result.value.(*loader.Pending); pending {
-						batch.pending = append(batch.pending, batchPending{key: key, selected: selected, fragments: object.fragments})
+						batch.pending = append(batch.pending, batchPending{result: result, selected: &flat[i], fragments: object.fragments})
 					} else {
 						e.collectBatchField(ctx, batch, result, selected, object.fragments)
 					}
@@ -160,7 +160,7 @@ func (e *Executor) prepareBatch(ctx context.Context, batch *batchExecution) erro
 		pending := batch.pending
 		batch.pending = nil
 		for _, work := range pending {
-			result := batch.fields[work.key]
+			result := work.result
 			value, err := loader.Read(result.value.(*loader.Pending))
 			if _, nested := value.(*loader.Pending); nested && err == nil {
 				err = fmt.Errorf("loader result at %v must be a concrete value", result.path)
@@ -172,7 +172,7 @@ func (e *Executor) prepareBatch(ctx context.Context, batch *batchExecution) erro
 				result.errors = []core.Error{newFieldError(e.maskError(err, true).Error(), result.path, work.selected.Location)}
 			}
 			if err == nil {
-				e.collectBatchField(ctx, batch, result, work.selected, work.fragments)
+				e.collectBatchField(ctx, batch, result, *work.selected, work.fragments)
 			}
 		}
 	}
@@ -242,6 +242,8 @@ func (e *Executor) collectBatchField(ctx context.Context, batch *batchExecution,
 	e.collectBatchValue(ctx, batch, result.field.Type, value, selected.Selections, fragments, result.path)
 }
 
+// collectBatchValue retains paths owned by the batch; callers must not pass
+// the mutable path arena buffer. List elements get their own path in appendPath.
 func (e *Executor) collectBatchValue(ctx context.Context, batch *batchExecution, fieldType schema.Type, value any, selections []selection, fragments map[string]*fragmentDef, path []any) {
 	if value == nil || isNilPointer(value) || ctx.Err() != nil {
 		return
@@ -261,7 +263,7 @@ func (e *Executor) collectBatchValue(ctx context.Context, batch *batchExecution,
 			e.collectBatchValue(ctx, batch, typed.OfType, raw.Index(i).Interface(), selections, fragments, appendPath(path, i))
 		}
 	case *schema.Object:
-		batch.objects = append(batch.objects, batchObject{object: typed, source: value, selections: selections, fragments: fragments, path: clonePath(path)})
+		batch.objects = append(batch.objects, batchObject{object: typed, source: value, selections: selections, fragments: fragments, path: path})
 	case *schema.Interface:
 		e.collectBatchAbstract(ctx, batch, typed.Name(), typed.Resolve, value, selections, fragments, path)
 	case *schema.Union:

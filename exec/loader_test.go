@@ -34,6 +34,39 @@ func loaderSchema(t *testing.T, l *loader.Loader) *schema.Schema {
 	return s
 }
 
+func TestLoadersListAllocationBudget(t *testing.T) {
+	var calls int
+	l, err := loader.New("names", func(_ context.Context, keys []loader.Key) ([]loader.Result, error) {
+		calls++
+		results := make([]loader.Result, len(keys))
+		for i, key := range keys {
+			results[i].Value = string(key)
+		}
+		return results, nil
+	}, 32)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := loaderSchema(t, l)
+	keys := make([]loader.Key, 32)
+	for i := range keys {
+		keys[i] = loader.Key(strconv.Itoa(i))
+	}
+	s.Query.Fields["users"].Resolver = func(context.Context, schema.ResolveParams) (any, error) { return keys, nil }
+	e := New(s, nil, WithLoaders([]*loader.Loader{l}), WithDocumentCache(1))
+	req := core.Request{Query: `{ users { name } }`}
+	allocations := testing.AllocsPerRun(100, func() {
+		calls = 0
+		response := e.Execute(context.Background(), req)
+		if len(response.Errors) != 0 || calls != 1 {
+			t.Fatalf("errors=%v batch calls=%d", response.Errors, calls)
+		}
+	})
+	if allocations > 490 {
+		t.Fatalf("32 batched lookups allocated %g times, want at most 490", allocations)
+	}
+}
+
 func TestLoadersBatchSuccessiveObjectLookups(t *testing.T) {
 	var names [][]loader.Key
 	namesLoader, _ := loader.New("names", func(_ context.Context, keys []loader.Key) ([]loader.Result, error) {
