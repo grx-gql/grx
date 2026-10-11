@@ -1,5 +1,5 @@
 // Package exec contains the GraphQL lexer, parser, AST, executor, and
-// introspection fast-path. It is the hot per-request execution path and
+// introspection execution. It is the hot per-request execution path and
 // is deliberately transport-agnostic: callers communicate with the
 // executor through [core.Request] and [core.Response].
 //
@@ -34,29 +34,28 @@ var ErrSubscriptionOperation = errors.New("subscription operations must use the 
 // notifies the registered plugins at each lifecycle phase. It satisfies
 // [core.Executor] and is safe for concurrent use.
 type Executor struct {
-	Schema                  *schema.Schema
-	Plugins                 []plugins.Plugin
-	disableIntrospection    bool
-	maxSelectionDepth       int
-	maxSelectionCount       int
-	maxAliasCount           int
-	maxRootFieldCount       int
-	maskInternalErrors      bool
-	clientErrorMessage      string
-	operationAuthorizer     OperationAuthorizer
-	fieldAuthorizer         FieldAuthorizer
-	rateLimiter             RateLimiter
-	trustedDocuments        map[string]string
-	rejectUnknownVars       bool
-	resolverCacheEnabled    bool
-	abstractTypeResolver    AbstractTypeResolver
-	executableIntrospection bool
-	apolloTracing           bool
-	fieldEnders             []plugins.FieldResolveEnder
-	documentCache           map[string]documentBundle
-	documentCacheOrder      []string
-	documentCacheLimit      int
-	documentCacheMu         sync.RWMutex
+	Schema               *schema.Schema
+	Plugins              []plugins.Plugin
+	disableIntrospection bool
+	maxSelectionDepth    int
+	maxSelectionCount    int
+	maxAliasCount        int
+	maxRootFieldCount    int
+	maskInternalErrors   bool
+	clientErrorMessage   string
+	operationAuthorizer  OperationAuthorizer
+	fieldAuthorizer      FieldAuthorizer
+	rateLimiter          RateLimiter
+	trustedDocuments     map[string]string
+	rejectUnknownVars    bool
+	resolverCacheEnabled bool
+	abstractTypeResolver AbstractTypeResolver
+	apolloTracing        bool
+	fieldEnders          []plugins.FieldResolveEnder
+	documentCache        map[string]documentBundle
+	documentCacheOrder   []string
+	documentCacheLimit   int
+	documentCacheMu      sync.RWMutex
 
 	lexTokenCache map[string][]token
 	lexCacheOrder []string
@@ -68,7 +67,7 @@ type Executor struct {
 // may be nil; an Executor with no plugins simply skips the lifecycle
 // notifications.
 func New(schemaValue *schema.Schema, pluginList []plugins.Plugin, opts ...ExecutorOption) *Executor {
-	e := &Executor{Schema: schemaValue, Plugins: pluginList}
+	e := &Executor{Schema: executableIntrospectionSchema(schemaValue), Plugins: pluginList}
 	for _, opt := range opts {
 		opt(e)
 	}
@@ -136,11 +135,10 @@ func (e *Executor) enableResolverCache(ctx context.Context, kind operationKind) 
 }
 
 // prepareExecution runs the shared query/mutation preamble: request start,
-// parsing, introspection short-circuit, parsing/validation/security checks, and
+// parsing, validation/security checks, and
 // root-object resolution. It returns the (possibly updated) context plus the
 // root object and selected operation. When a non-nil *core.Response is
-// returned, the caller must return it directly — it represents an introspection
-// result or a request-level failure that ends the operation early.
+// returned, the caller must return it directly — it represents a request-level failure that ends the operation early.
 func (e *Executor) prepareExecution(ctx context.Context, req core.Request) (context.Context, *schema.Object, document, *core.Response) {
 	ctx, err := e.startRequest(ctx, req)
 	if err != nil {
@@ -148,30 +146,6 @@ func (e *Executor) prepareExecution(ctx context.Context, req core.Request) (cont
 	}
 	if err := e.notifyParsing(ctx, req); err != nil {
 		return e.shortResponse(ctx, e.maskError(err, false))
-	}
-
-	if isIntrospectionQuery(req.Query) {
-		if e.disableIntrospection {
-			err := fmt.Errorf("introspection is disabled")
-			e.notifyError(ctx, err)
-			return e.shortResponse(ctx, err)
-		}
-		if e.executableIntrospection {
-			data, errs := e.executeIntrospection(ctx, req)
-			out := core.Response{Errors: errs}
-			if data == nil && len(errs) > 0 {
-				out.DataNull = true
-			} else {
-				out.Data = data
-			}
-			if len(errs) == 0 {
-				out.Errors = nil
-			}
-			res := e.sendResponse(ctx, out)
-			return ctx, nil, document{}, &res
-		}
-		res := e.sendResponse(ctx, core.Response{Data: introspectionData(e.Schema, req)})
-		return ctx, nil, document{}, &res
 	}
 
 	bundle, err := e.parseBundle(req)
@@ -187,6 +161,11 @@ func (e *Executor) prepareExecution(ctx context.Context, req core.Request) (cont
 	if verrs := ValidateDocument(e.Schema, bundle, doc); len(verrs) > 0 {
 		res := e.validationFailResponse(ctx, verrs)
 		return ctx, nil, document{}, &res
+	}
+	if e.disableIntrospection && selectionsIntrospect(doc.Selections, doc.Fragments, make(map[string]bool)) {
+		err := fmt.Errorf("introspection is disabled")
+		e.notifyError(ctx, err)
+		return e.shortResponse(ctx, err)
 	}
 	if err := e.validateDocumentSecurity(ctx, req, doc); err != nil {
 		e.notifyError(ctx, err)

@@ -24,64 +24,12 @@ func TestExecutableIntrospectionMatchesFastPath(t *testing.T) {
 		t.Fatalf("unexpected errors: fast=%#v exe=%#v", fastResp.Errors, exeResp.Errors)
 	}
 
-	// The fast path emits every field regardless of selection, whereas
-	// executable mode honors the selection set. So executable data must be a
-	// subset of the fast-path data, agreeing on every selected field.
+	// The legacy option must preserve the normal execution response exactly.
 	fastMap := orderedToMap(fastResp.Data)
 	exeMap := orderedToMap(exeResp.Data)
-	if diff := introspectionSubsetDiff(exeMap, fastMap); diff != "" {
-		t.Fatalf("executable introspection disagrees with fast path at %s", diff)
+	if !reflect.DeepEqual(exeMap, fastMap) {
+		t.Fatal("legacy introspection option changed execution result")
 	}
-}
-
-// introspectionSubsetDiff returns a path describing the first place sub is not
-// contained in sup with equal values, or "" when sub ⊆ sup.
-func introspectionSubsetDiff(sub, sup any) string {
-	switch s := sub.(type) {
-	case map[string]any:
-		supMap, ok := sup.(map[string]any)
-		if !ok {
-			return "<type mismatch>"
-		}
-		for k, v := range s {
-			sv, ok := supMap[k]
-			if !ok {
-				return "." + k + " (missing in fast path)"
-			}
-			if d := introspectionSubsetDiff(v, sv); d != "" {
-				return "." + k + d
-			}
-		}
-		return ""
-	case []any:
-		supSlice, ok := sup.([]any)
-		if !ok || len(supSlice) != len(s) {
-			return "[] (length mismatch)"
-		}
-		for i := range s {
-			if d := introspectionSubsetDiff(s[i], supSlice[i]); d != "" {
-				return "[" + itoa(i) + "]" + d
-			}
-		}
-		return ""
-	default:
-		if !reflect.DeepEqual(sub, sup) {
-			return " (value mismatch)"
-		}
-		return ""
-	}
-}
-
-func itoa(i int) string {
-	if i == 0 {
-		return "0"
-	}
-	var b []byte
-	for i > 0 {
-		b = append([]byte{byte('0' + i%10)}, b...)
-		i /= 10
-	}
-	return string(b)
 }
 
 func TestExecutableIntrospectionHonorsSelectionSet(t *testing.T) {
