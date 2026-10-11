@@ -792,8 +792,8 @@ func TestServerMaxSelectionDepthRejectsDeepQuery(t *testing.T) {
 
 	status, raw := postGraphQLRaw(t, h, []byte(`{"query":"{ node { child { value } } }"}`))
 
-	if status != http.StatusOK {
-		t.Fatalf("status = %d, want %d", status, http.StatusOK)
+	if status != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d", status, http.StatusBadRequest)
 	}
 	body := decodeGraphQLResponseMap(t, raw)
 	errors := graphQLErrors(t, body)

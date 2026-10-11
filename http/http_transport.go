@@ -211,7 +211,7 @@ func (t *Transport) Serve(w nethttp.ResponseWriter, r *nethttp.Request, executor
 		}
 
 		response := executor.Execute(r.Context(), gqlReq)
-		t.writeGraphQLPayload(w, r, nethttp.StatusOK, responseType, response)
+		t.writeGraphQLPayload(w, r, responseStatus(responseType, response), responseType, response)
 		return
 	}
 
@@ -236,6 +236,13 @@ func (t *Transport) Serve(w nethttp.ResponseWriter, r *nethttp.Request, executor
 		responses[i] = executor.Execute(r.Context(), gqlReq)
 	}
 	t.writeGraphQLPayload(w, r, nethttp.StatusOK, responseType, responses)
+}
+
+func responseStatus(mediaType string, response core.Response) int {
+	if mediaType == core.MediaTypeGraphQLResponse && response.Data == nil && !response.DataNull && len(response.Errors) > 0 {
+		return nethttp.StatusBadRequest
+	}
+	return nethttp.StatusOK
 }
 
 func gzipAccepted(r *nethttp.Request) bool {
