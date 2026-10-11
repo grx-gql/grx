@@ -164,3 +164,11 @@ func WithAbstractTypeResolver(resolver AbstractTypeResolver) ExecutorOption {
 		e.abstractTypeResolver = resolver
 	}
 }
+
+// WithQueryConcurrency bounds concurrent root fields of Execute query operations.
+// Values at most one retain serial execution. Mutations, subscriptions, nested
+// selections and incremental delivery remain serial. Resolvers and field hooks
+// used with this option must permit concurrent calls and shared source reads.
+func WithQueryConcurrency(limit int) ExecutorOption {
+	return func(e *Executor) { e.queryConcurrency = limit }
+}

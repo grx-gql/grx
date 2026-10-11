@@ -20,6 +20,7 @@ type pathArena struct {
 	// resolverCache memoizes raw resolver outputs within a single query
 	// request when WithResolverCache is enabled; nil disables memoization.
 	resolverCache map[string]resolverCacheEntry
+	parallelCache *parallelResolverCache
 	// apollo accumulates per-field timings for the Apollo tracing extension
 	// when WithApolloTracing is enabled; nil disables tracing.
 	apollo *apolloTrace
@@ -39,6 +40,7 @@ func withPathArena(ctx context.Context) context.Context {
 	a.buf = a.buf[:0]
 	a.collector = nil
 	a.resolverCache = nil
+	a.parallelCache = nil
 	a.apollo = nil
 	return context.WithValue(ctx, pathArenaCtxKey{}, a)
 }
@@ -50,6 +52,7 @@ func recyclePathArena(ctx context.Context) {
 	}
 	// Do not retain parsed documents or request variables in the pool.
 	a.selectionPlans = selectionPlanCache{}
+	a.parallelCache = nil
 	pathArenaPool.Put(a)
 }
 

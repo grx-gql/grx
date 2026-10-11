@@ -3,8 +3,8 @@
 // is deliberately transport-agnostic: callers communicate with the
 // executor through [core.Request] and [core.Response].
 //
-// Resolver runs are ordered: sibling fields execute sequentially within each
-// selection set (deterministic semantics for side-effecting code).
+// Resolver runs are serial by default. WithQueryConcurrency allows bounded
+// parallel query root fields while preserving response order.
 package exec
 
 import (
@@ -49,6 +49,7 @@ type Executor struct {
 	trustedDocuments     map[string]string
 	rejectUnknownVars    bool
 	resolverCacheEnabled bool
+	queryConcurrency     int
 	abstractTypeResolver AbstractTypeResolver
 	apolloTracing        bool
 	fieldEnders          []plugins.FieldResolveEnder
@@ -108,7 +109,13 @@ func (e *Executor) Execute(ctx context.Context, req core.Request) (response core
 		arena.apollo = newApolloTrace()
 	}
 
-	data, fieldErrors := e.executeSelectionSet(ctx, root, nil, doc.Selections, doc.Fragments, nil)
+	var data *core.OrderedObject
+	var fieldErrors []core.Error
+	if doc.Kind == operationQuery && e.queryConcurrency > 1 {
+		data, fieldErrors = e.executeParallelQuery(ctx, root, doc)
+	} else {
+		data, fieldErrors = e.executeSelectionSet(ctx, root, nil, doc.Selections, doc.Fragments, nil)
+	}
 	res := core.Response{Errors: fieldErrors}
 	if data == nil && len(fieldErrors) > 0 {
 		res.DataNull = true
@@ -598,6 +605,11 @@ func (e *Executor) resolveSelectedField(ctx context.Context, object *schema.Obje
 // invokeResolver runs a field resolver, applying request-scoped memoization
 // when enabled and unwrapping any returned [schema.Thunk] (deferred value).
 func (e *Executor) invokeResolver(ctx context.Context, arena *pathArena, field *schema.Field, source any, args map[string]any) (any, error) {
+	if arena != nil && arena.parallelCache != nil {
+		if key, ok := resolverCacheKey(field, source, args); ok {
+			return arena.parallelCache.resolve(ctx, key, func() (any, error) { return e.callResolver(ctx, field, source, args) })
+		}
+	}
 	if arena != nil && arena.resolverCache != nil {
 		if key, ok := resolverCacheKey(field, source, args); ok {
 			if entry, hit := arena.resolverCache[key]; hit {
