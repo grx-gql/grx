@@ -118,6 +118,7 @@ type EnumValue struct {
 	Description       string
 	IsDeprecated      bool
 	DeprecationReason *string
+	Directives        []AppliedDirective
 }
 
 // Enum represents a GraphQL enum type.
