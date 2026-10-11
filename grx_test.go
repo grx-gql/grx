@@ -169,7 +169,7 @@ func TestNonIncrementalRequestStaysSingleJSON(t *testing.T) {
 	body := `{"query":"{ user(id: \"1\") { id name } }"}`
 	req := httptest.NewRequest(http.MethodPost, "/graphql", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Accept", "multipart/mixed")
+	req.Header.Set("Accept", "multipart/mixed, application/json")
 	rec := httptest.NewRecorder()
 
 	srv.ServeHTTP(rec, req)

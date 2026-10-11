@@ -164,10 +164,15 @@ func (t *Transport) Serve(w nethttp.ResponseWriter, r *nethttp.Request, executor
 		}
 	}()
 
-	responseType, ok := core.NegotiateResponseContentType(r.Header.Values("Accept"))
-	if !ok {
+	responseType, jsonAccepted := core.NegotiateResponseContentType(r.Header.Values("Accept"))
+	multipartAccepted := acceptsMultipartMixed(r)
+	if !jsonAccepted && !multipartAccepted {
 		writeRequestError(r.Context(), w, core.MediaTypeJSON, nethttp.StatusNotAcceptable, fmt.Errorf("no supported response media type in Accept header"))
 		return
+	}
+
+	if !jsonAccepted {
+		responseType = core.MediaTypeJSON
 	}
 
 	if r.Method == nethttp.MethodPost && !core.IsMultipartRequest(r) {
@@ -218,8 +223,13 @@ func (t *Transport) Serve(w nethttp.ResponseWriter, r *nethttp.Request, executor
 			}
 		}
 
-		if ie, ok := executor.(core.IncrementalExecutor); ok && acceptsMultipartMixed(r) && ie.HasIncrementalDirectives(gqlReq) {
+		if ie, ok := executor.(core.IncrementalExecutor); ok && multipartAccepted && ie.HasIncrementalDirectives(gqlReq) {
 			t.writeIncremental(w, r, ie, gqlReq)
+			return
+		}
+
+		if !jsonAccepted {
+			writeRequestError(r.Context(), w, responseType, nethttp.StatusNotAcceptable, fmt.Errorf("operation does not support the requested multipart response"))
 			return
 		}
 
@@ -228,6 +238,10 @@ func (t *Transport) Serve(w nethttp.ResponseWriter, r *nethttp.Request, executor
 		return
 	}
 
+	if !jsonAccepted {
+		writeRequestError(r.Context(), w, responseType, nethttp.StatusNotAcceptable, fmt.Errorf("batched operations require a supported JSON response media type"))
+		return
+	}
 	responses := make([]core.Response, len(bodies))
 	for i := range bodies {
 		gqlReq := core.Request{
