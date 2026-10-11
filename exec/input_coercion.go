@@ -41,6 +41,9 @@ func coerceInputValue(inputType schema.Type, raw any) (any, error) {
 		}
 		return coerceInputValue(inputType, ref.Value)
 	}
+	if literal, ok := raw.(enumLiteral); ok {
+		raw = string(literal)
+	}
 	switch typed := inputType.(type) {
 	case *schema.NonNull:
 		if raw == nil {

@@ -2,6 +2,8 @@ package exec
 
 import "github.com/grx-gql/grx/core"
 
+type enumLiteral string
+
 type operationKind string
 
 const (

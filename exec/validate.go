@@ -130,7 +130,7 @@ func validateSelections(
 	variables variableScope,
 ) []validationError {
 	var errs []validationError
-	errs = append(errs, validateFieldMergeConflicts(selections)...)
+	errs = append(errs, validateFieldMergeConflicts(s, parent, selections, fragments)...)
 
 	for _, sel := range selections {
 		switch {
@@ -347,41 +347,6 @@ func validateVariables(op document, fragments map[string]*fragmentDef, reachable
 	return errs
 }
 
-func validateFieldMergeConflicts(selections []selection) []validationError {
-	seen := map[string]selection{}
-	var errs []validationError
-	for _, sel := range selections {
-		if !sel.isField() {
-			continue
-		}
-		key := sel.responseKey()
-		prev, ok := seen[key]
-		if !ok {
-			seen[key] = sel
-			continue
-		}
-		if prev.Name != sel.Name || !argumentValuesEqual(prev.Arguments, sel.Arguments) {
-			errs = append(errs, newValidationError(sel.Location,
-				`Fields "%s" conflict because they select different fields or arguments. Use different aliases on the fields to fetch both if this was intentional.`,
-				key))
-		}
-	}
-	return errs
-}
-
-func argumentValuesEqual(left map[string]any, right map[string]any) bool {
-	if len(left) != len(right) {
-		return false
-	}
-	for key, leftValue := range left {
-		rightValue, ok := right[key]
-		if !ok || fmt.Sprint(leftValue) != fmt.Sprint(rightValue) {
-			return false
-		}
-	}
-	return true
-}
-
 func fieldArg(field *schema.Field, name string) (schema.InputValue, bool) {
 	if field == nil {
 		return schema.InputValue{}, false
@@ -535,6 +500,9 @@ func validateVariableDefinitions(s *schema.Schema, op document) []validationErro
 			errs = append(errs, newValidationError(core.Location{Line: 1, Column: 1},
 				`Variable "$%s" cannot be non-input type "%s".`, name, typeRef))
 		}
+		if definition := op.VariableDefinitions[name]; definition.HasDefault && isInputType(t) {
+			errs = append(errs, validateInputValue(variableTypeFromReference(s, typeRef), definition.DefaultValue, definition.Location, name)...)
+		}
 	}
 	return errs
 }
@@ -634,13 +602,13 @@ func validateInputValue(t schema.Type, value any, loc core.Location, label strin
 		if value == nil {
 			return nil
 		}
-		name, ok := value.(string)
+		name, ok := value.(enumLiteral)
 		if !ok {
 			return []validationError{newValidationError(loc,
 				`Enum "%s" cannot represent non-string value: %v.`, typed.Name(), value)}
 		}
 		for _, v := range typed.Values {
-			if v.Name == name {
+			if v.Name == string(name) {
 				return nil
 			}
 		}
