@@ -149,10 +149,6 @@ const docsSidebar: DefaultTheme.SidebarItem[] = [
         collapsed: true,
         items: [
           {
-            text: "AI assistants",
-            link: "/guides/ai-assistants",
-          },
-          {
             text: "Security",
             link: "/guides/production-security",
           },

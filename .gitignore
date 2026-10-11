@@ -19,5 +19,4 @@ examples/**/tmp/
 .idea/
 .vscode/
 *.swp
-.claude/settings.local.json
 benchmark/.benchstat-results.txt

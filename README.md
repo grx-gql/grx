@@ -1,76 +1,84 @@
 # grx
 
-`grx` is a fast, dependency-free GraphQL server and runtime for Go. The project is focused on predictable execution, clear extension points, and production-oriented transport support without unnecessary abstraction.
+`grx` is a fast, lightweight GraphQL server and runtime for Go. You write plain Go structs and methods; `grx` turns them into an executable GraphQL schema — no SDL files, no code generation — and serves it as an ordinary `http.Handler`.
 
-## Quick Start
+- **Code-first schema** — exported structs are object types, methods on `Query`, `Mutation` and `Subscription` are resolvers, and `gql` struct tags set names and nullability.
+- **Queries, mutations and subscriptions** over HTTP, WebSocket (`graphql-transport-ws`) and Server-Sent Events.
+- **Plain `net/http`** — mount it on the standard mux, Chi, Gin, Echo or Fiber.
+- **Production controls** — request and depth limits, timeouts, persisted queries, operation and field authorizers, introspection toggles, gzip, plugins and middleware.
 
-Requirements:
-
-- Go `1.25+` (see root `go.mod`)
-- Bun for building the [VitePress](https://vitepress.dev/) documentation site
-
-Run the basic example server:
+## Install
 
 ```bash
-go run ./examples/basic
+go get github.com/grx-gql/grx@latest
 ```
 
-The example starts a server on `http://localhost:4000` and serves the GraphQL playground at `http://localhost:4000/`.
+Requires Go 1.25 or newer.
 
-Run the subscription example when you want pub/sub, WebSocket, and SSE wiring:
+## Quick start
+
+```go
+package main
+
+import (
+	"context"
+	"log"
+	"net/http"
+
+	"github.com/grx-gql/grx"
+	"github.com/grx-gql/grx/schema"
+)
+
+type User struct {
+	ID   string `gql:"id,nonNull"`
+	Name string `gql:"name,nonNull"`
+}
+
+type UserArgs struct {
+	ID string `gql:"id,nonNull"`
+}
+
+type Query struct{}
+
+// User becomes the `user(id: String!): User` field on Query.
+func (Query) User(ctx context.Context, args UserArgs) (*User, error) {
+	return &User{ID: args.ID, Name: "Ada Lovelace"}, nil
+}
+
+func main() {
+	server, err := grx.NewServer(
+		grx.WithSchema(schema.Config{Query: Query{}}),
+		grx.WithPlaygroundPath("/"),
+	)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	log.Println("playground on http://localhost:4000/, GraphQL on POST /graphql")
+	log.Fatal(http.ListenAndServe(":4000", server))
+}
+```
+
+Run it with `go run .`, open `http://localhost:4000/` and query:
+
+```graphql
+{
+  user(id: "1") {
+    id
+    name
+  }
+}
+```
+
+## Examples
+
+Runnable examples live in [`examples/`](./examples):
 
 ```bash
-go run ./examples/subscriptions
+go run ./examples/basic           # queries, mutations, plugins
+go run ./examples/subscriptions   # pub/sub over WebSocket and SSE
+go run ./examples/auth            # bearer auth, context identity, field authorizer
 ```
-
-For Bearer authentication, context-scoped identity, and a field authorizer, run:
-
-```bash
-go run ./examples/auth
-```
-
-Useful local commands:
-
-```bash
-make dev-setup      # go mod tidy + install-hooks (good right after clone)
-# or
-make mod-tidy && make install-hooks
-make build
-make test
-make vet
-make fmt
-```
-
-## Documentation
-
-Full documentation is available at:
-
-- https://grx-gql.github.io/grx/
-
-### AI-assisted development
-
-- **`AGENT.md`** at the repo root is the operational guide for **agents working inside this repository**.
-- **`AGENTS.md`** is a stub for tools that look for **`AGENTS.md`**; it points **`AGENT.md`** vs **`.cursor/skills/graphql-grx/`** for **app developers** importing **`grx`**.
-- **`/.cursor/skills/graphql-grx/SKILL.md`** is a reusable **Cursor skill** describing public API patterns (`schema.Config`, **`grx.NewServer`**, transports, subscriptions, hardening)—copy it to **`~/.cursor/skills/graphql-grx`** in your Go project.
-
-See **[AI assistants](https://grx-gql.github.io/grx/guides/ai-assistants)** on the docs site for setup steps.
-
-## Contributing
-
-Contributions should stay small, focused, and directly related to the problem being solved.
-
-**Releases**: use **[Conventional Commits](https://www.conventionalcommits.org/)** in the squash-merge subject (`feat:`, `fix:`, `chore:`, `docs:`, …); **[release-please](https://github.com/googleapis/release-please)** on **`main`** (see **[`.github/workflows/release.yml`](.github/workflows/release.yml)**) opens a Release PR that updates **[CHANGELOG.md](./CHANGELOG.md)** and semver; merge it to publish **`v*`** tags. After cloning, **`make dev-setup`** runs **`go mod tidy`** in each module and then enables hooks; use **`make install-hooks`** alone if you only need the Conventional Commit check.
-
-Contribution rules for this repository:
-
-- Keep changes minimal.
-- Prefer existing logic over introducing new patterns.
-- Preserve performance characteristics and use the fast path where possible.
-- Use strict typing and simple single-purpose functions.
-- Do not revert unrelated changes.
-- Run relevant validation before opening a change, at minimum `make test` when code changes affect runtime behavior.
-
-## Releases
 
 Tagged **[Go module](https://go.dev/doc/modules/publishing)** releases (no binaries). The nested **`redis`** module is **not** in release-please — tag **`redis/v*`** yourself (the same workflow warms **`proxy.golang.org`** for those tags).
 
@@ -84,22 +92,24 @@ The current pub/sub API is byte-oriented and backend-neutral. Import
 filters are no longer part of the public API; encode domain values in
 resolvers before publishing and decode them after subscribing.
 
+There are also examples for directives, enums, interfaces and unions, custom scalars and file uploads.
+
+## Documentation
+
+The full documentation is at **https://grx-gql.github.io/grx/**:
+
+- [Get started](https://grx-gql.github.io/grx/getting-started/) — a first server, and mounting it on your router
+- [Define your schema](https://grx-gql.github.io/grx/concepts/schema-basics) — types, lists, enums, unions and inputs
+- [Subscriptions](https://grx-gql.github.io/grx/guides/subscriptions) — pub/sub, WebSocket and SSE
+- [Security](https://grx-gql.github.io/grx/guides/production-security) and [Deployment](https://grx-gql.github.io/grx/guides/deployment) — going to production
+- API reference on [pkg.go.dev](https://pkg.go.dev/github.com/grx-gql/grx)
+
+`grx` is in active development and does not yet cover the whole GraphQL specification; [ROADMAP.md](./ROADMAP.md) tracks what is missing.
+
+## Contributing
+
+See [CONTRIBUTING.md](./CONTRIBUTING.md).
+
 ## License
 
-This repository does not currently include a root `LICENSE` file. Until a license is added, the usage terms are not explicitly defined in the repository.
-
-## Project Status
-
-`grx` is active and usable for a subset of GraphQL workloads, but it is not yet at full production-grade GraphQL feature parity.
-
-Current status:
-
-- Core query, mutation, and subscription flows are implemented.
-- HTTP, SSE, and WebSocket transport support exists.
-- GraphQL responses now include field and request error classification, source locations, and stable response field ordering.
-- The roadmap still includes missing parity items such as broader GraphQL-over-HTTP semantics, incremental delivery execution, and additional language and execution features.
-
-For detailed status and planned work, see:
-
-- [ROADMAP.md](./ROADMAP.md)
-- https://grx-gql.github.io/grx/roadmap/
+[MIT](./LICENSE)

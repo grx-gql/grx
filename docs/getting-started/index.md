@@ -37,7 +37,7 @@ Next: add **`graph/schema.go`** (below), **`main.go`**, **`go run .`**. Prefer a
 
 ## Prerequisites
 
-- Go **1.22 or newer**
+- Go **1.25 or newer**
 - Terminal + editor
 
 ---
