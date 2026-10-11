@@ -461,7 +461,7 @@ func (UserQuery) ErrorExample(ctx context.Context) (string, error) {
 }
 
 // UserMutation groups every write-side resolver for the User entity.
-// The Bus dependency is wired by NewSchema so the mutation can publish
+// The Bus dependency is wired by New so the mutation can publish
 // domain events that subscriptions consume.
 type UserMutation struct {
 	Bus    *pubsub.Typed[*User]
@@ -484,7 +484,7 @@ func (m *UserMutation) CreateUser(ctx context.Context, args UserCreateArgs) (*Us
 }
 
 // UserSubscription groups every stream resolver for the User entity. The
-// Bus dependency is wired by NewSchema; UserCreated relays User events
+// Bus dependency is wired by New; UserCreated relays User events
 // published by CreateUser to every active GraphQL subscription.
 type UserSubscription struct {
 	Bus *pubsub.Typed[*User]

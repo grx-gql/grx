@@ -446,7 +446,7 @@ func main() {
 	defer bus.Close()
 
 	srv, err := grx.NewServer(
-		grx.WithSchema(graph.NewSchema(bus)),
+		grx.WithSchema(graph.New(bus)),
 		grx.WithTransports(
 			websocket.New(websocket.Config{ReadIdleTimeout: 60 * time.Second, CheckOrigin: allowOrigin}),
 			sse.New(),
