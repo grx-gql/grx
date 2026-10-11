@@ -1,5 +1,16 @@
 package schema
 
+// IntrospectionTypes returns a fresh set of standard meta-types and their
+// built-in scalar dependencies for schemas assembled without Build.
+func IntrospectionTypes() map[string]Type {
+	types := make(map[string]Type)
+	for _, name := range []string{"String", "Boolean", "Int", "Float", "ID"} {
+		types[name] = &Scalar{TypeName: name}
+	}
+	registerIntrospectionTypes(types)
+	return types
+}
+
 // registerIntrospectionTypes installs the standard introspection schema,
 // including recursive type references and enum values used by schema clients.
 func registerIntrospectionTypes(types map[string]Type) {

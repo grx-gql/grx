@@ -63,29 +63,7 @@ func TestIntrospectionLiteralFormattingBranches(t *testing.T) {
 	if introspectionDefaultValue(stringType, nil) != nil {
 		t.Fatal("nil default should format to nil")
 	}
-	if got := formatDefaultValue("x"); got != `"x"` {
-		t.Fatalf("formatDefaultValue = %q", got)
-	}
-	if got := nullableString("desc"); got != "desc" {
-		t.Fatalf("nullableString = %#v", got)
-	}
-	if formatDefaultValue([]string{"x"}) != nil {
-		t.Fatal("unsupported default should be nil")
-	}
-	ref := introspectionTypeRef(&schema.NonNull{OfType: &schema.List{OfType: stringType}})
-	if ref == nil {
-		t.Fatal("expected wrapped introspection ref")
-	}
-	introspectionSchemaValue := &schema.Schema{Types: map[string]schema.Type{"String": stringType}}
-	if introspectionNamedType(introspectionSchemaValue, core.Request{Variables: map[string]any{"name": "String"}}, false) == nil {
-		t.Fatal("expected named introspection type from variables")
-	}
-	if name, ok := introspectionTypeName(core.Request{Query: `{ __type(name: "String") { name } }`}); !ok || name != "String" {
-		t.Fatalf("type name = %q %v", name, ok)
-	}
-	if _, ok := introspectionTypeName(core.Request{Query: `{ __type(name: bad) { name } }`}); ok {
-		t.Fatal("expected invalid literal type name")
-	}
+
 }
 
 const graphiqlIntrospectionQuery = `
@@ -520,7 +498,7 @@ func TestIntrospectionUnknownNamedTypeYieldsNil(t *testing.T) {
 	}
 }
 
-func TestIntrospectionNamedTypeUnsetWhenVariablesNameIsWrongType(t *testing.T) {
+func TestIntrospectionUnusedVariableDoesNotShadowLiteral(t *testing.T) {
 	ex := New(buildGraphiQLTestSchema(t), nil)
 	response := ex.Execute(context.Background(), core.Request{
 		Query:     `{ __type(name: "Episode") { name } }`,
@@ -530,7 +508,7 @@ func TestIntrospectionNamedTypeUnsetWhenVariablesNameIsWrongType(t *testing.T) {
 		t.Fatalf("unexpected errors when variable name shadows query literal: %#v", response.Errors)
 	}
 	data := responseObject(t, response.Data)
-	if data["__type"] != nil {
-		t.Fatalf("__type variables branch should fail string cast and omit type, got %#v", data["__type"])
+	if named := responseObject(t, data["__type"]); named["name"] != "Episode" {
+		t.Fatalf("literal argument must not be shadowed by unrelated variables, got %#v", named)
 	}
 }

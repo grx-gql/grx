@@ -73,15 +73,9 @@ func builtinDirSchema(t *testing.T) *schema.Schema {
 }
 
 func findBuiltinDirective(name string) bool {
-	for _, d := range introspectionBuiltinDirectives() {
-		obj, ok := d.(*core.OrderedObject)
-		if !ok {
-			continue
-		}
-		for _, f := range obj.Fields() {
-			if f.Name == "name" && f.Value == name {
-				return true
-			}
+	for _, definition := range introspectionBuiltinDirectiveDefinitions() {
+		if definition.Name == name {
+			return true
 		}
 	}
 	return false
