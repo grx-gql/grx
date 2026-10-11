@@ -19,9 +19,13 @@ import (
 	"compress/gzip"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
+	"mime"
 	nethttp "net/http"
+	"reflect"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -54,7 +58,7 @@ type Config struct {
 	// arbitrary path should set Path accordingly.
 	Path string
 	// MaxRequestBytes limits POST JSON bodies and GET query, variables, and
-	// operationName parameter bytes combined. Zero disables the limit; a
+	// operationName and extensions parameter bytes combined. Zero disables the limit; a
 	// negative value also disables it.
 	MaxRequestBytes int64
 	// EnableGzip compresses JSON GraphQL responses when the client sends
@@ -69,6 +73,11 @@ type Config struct {
 	// GraphQL query strings for automatic persisted query (APQ) requests that
 	// send an empty "query" and a hash under extensions.persistedQuery.
 	PersistedQueries map[string]string
+	// APQCacheSize enables automatic registration and bounds cached query count.
+	// Zero disables registration. Entries are evicted in insertion order; each
+	// query is limited to 64 KiB. Static PersistedQueries remain independent.
+	APQCacheSize int
+	apq          *persistedQueryCache
 	// RequirePersistedQuery rejects requests that do not include
 	// extensions.persistedQuery.sha256Hash.
 	RequirePersistedQuery bool
@@ -103,6 +112,9 @@ func New(cfg ...Config) *Transport {
 	t := &Transport{}
 	if len(cfg) > 0 {
 		t.config = cfg[0]
+		if t.config.APQCacheSize > 0 {
+			t.config.apq = newPersistedQueryCache(t.config.APQCacheSize)
+		}
 		if t.config.PersistedQueries != nil {
 			norm := make(map[string]string, len(t.config.PersistedQueries))
 			for k, v := range t.config.PersistedQueries {
@@ -115,13 +127,14 @@ func New(cfg ...Config) *Transport {
 }
 
 // Match reports whether r is a GraphQL-over-HTTP request this transport will
-// handle: POST with a JSON body, or GET with a non-empty query parameter.
+// handle: POST with a JSON body, or GET with query or extensions parameters.
 // When [Config.Path] is non-empty, the request path must match it.
 func (t *Transport) Match(r *nethttp.Request) bool {
 	switch r.Method {
 	case nethttp.MethodPost:
 	case nethttp.MethodGet:
-		if strings.TrimSpace(r.URL.Query().Get("query")) == "" {
+		parameters := r.URL.Query()
+		if strings.TrimSpace(parameters.Get("query")) == "" && strings.TrimSpace(parameters.Get("extensions")) == "" {
 			return false
 		}
 	default:
@@ -152,10 +165,15 @@ func (t *Transport) Serve(w nethttp.ResponseWriter, r *nethttp.Request, executor
 		}
 	}()
 
-	responseType, ok := core.NegotiateResponseContentType(r.Header.Values("Accept"))
-	if !ok {
+	responseType, jsonAccepted := core.NegotiateResponseContentType(r.Header.Values("Accept"))
+	multipartAccepted := acceptsMultipartMixed(r)
+	if !jsonAccepted && !multipartAccepted {
 		writeRequestError(r.Context(), w, core.MediaTypeJSON, nethttp.StatusNotAcceptable, fmt.Errorf("no supported response media type in Accept header"))
 		return
+	}
+
+	if !jsonAccepted {
+		responseType = core.MediaTypeJSON
 	}
 
 	if r.Method == nethttp.MethodPost && !core.IsMultipartRequest(r) {
@@ -172,7 +190,7 @@ func (t *Transport) Serve(w nethttp.ResponseWriter, r *nethttp.Request, executor
 		}
 	}
 
-	bodies, err := decodeGraphQLHTTP(r, t.config)
+	decoded, err := decodeGraphQLHTTP(r, t.config)
 	if err != nil {
 		status := nethttp.StatusBadRequest
 		if t.config.maxRequestBytes() > 0 && requestBodyTooLarge(err) {
@@ -182,7 +200,8 @@ func (t *Transport) Serve(w nethttp.ResponseWriter, r *nethttp.Request, executor
 		return
 	}
 
-	if len(bodies) == 1 {
+	bodies := decoded.bodies
+	if !decoded.batch {
 		gqlReq := core.Request{
 			Query:         bodies[0].Query,
 			OperationName: bodies[0].OperationName,
@@ -205,16 +224,25 @@ func (t *Transport) Serve(w nethttp.ResponseWriter, r *nethttp.Request, executor
 			}
 		}
 
-		if ie, ok := executor.(core.IncrementalExecutor); ok && acceptsMultipartMixed(r) && ie.HasIncrementalDirectives(gqlReq) {
+		if ie, ok := executor.(core.IncrementalExecutor); ok && multipartAccepted && ie.HasIncrementalDirectives(gqlReq) {
 			t.writeIncremental(w, r, ie, gqlReq)
 			return
 		}
 
+		if !jsonAccepted {
+			writeRequestError(r.Context(), w, responseType, nethttp.StatusNotAcceptable, fmt.Errorf("operation does not support the requested multipart response"))
+			return
+		}
+
 		response := executor.Execute(r.Context(), gqlReq)
-		t.writeGraphQLPayload(w, r, nethttp.StatusOK, responseType, response)
+		t.writeGraphQLPayload(w, r, responseStatus(responseType, response), responseType, response)
 		return
 	}
 
+	if !jsonAccepted {
+		writeRequestError(r.Context(), w, responseType, nethttp.StatusNotAcceptable, fmt.Errorf("batched operations require a supported JSON response media type"))
+		return
+	}
 	responses := make([]core.Response, len(bodies))
 	for i := range bodies {
 		gqlReq := core.Request{
@@ -235,38 +263,105 @@ func (t *Transport) Serve(w nethttp.ResponseWriter, r *nethttp.Request, executor
 		}
 		responses[i] = executor.Execute(r.Context(), gqlReq)
 	}
-	t.writeGraphQLPayload(w, r, nethttp.StatusOK, responseType, responses)
+	t.writeGraphQLBatch(w, r, nethttp.StatusOK, responseType, responses)
 }
 
-func gzipAccepted(r *nethttp.Request) bool {
-	return core.HeaderContains(r.Header.Values("Accept-Encoding"), "gzip")
-}
-
-func brotliAccepted(r *nethttp.Request) bool {
-	return core.HeaderContains(r.Header.Values("Accept-Encoding"), "br")
-}
-
-// negotiateEncoding picks the response Content-Encoding based on the
-// transport's enabled compressors and the client's Accept-Encoding header.
-// Brotli is preferred over gzip when both are enabled and accepted. An empty
-// string means the response is sent uncompressed.
-func (t *Transport) negotiateEncoding(r *nethttp.Request) string {
-	if t.config.EnableBrotli && brotliAccepted(r) {
-		return "br"
+func responseStatus(mediaType string, response core.Response) int {
+	if mediaType == core.MediaTypeGraphQLResponse && response.Data == nil && !response.DataNull && len(response.Errors) > 0 {
+		return nethttp.StatusBadRequest
 	}
-	if t.config.EnableGzip && gzipAccepted(r) {
-		return "gzip"
-	}
-	return ""
+	return nethttp.StatusOK
 }
 
-func (t *Transport) writeGraphQLPayload(w nethttp.ResponseWriter, r *nethttp.Request, status int, mediaType string, payload any) {
+// negotiateEncoding selects the highest accepted quality, preferring Brotli on
+// ties. An explicit coding overrides the wildcard even when its quality is zero.
+// The second result reports whether an uncompressed response is acceptable.
+func (t *Transport) negotiateEncoding(r *nethttp.Request) (string, bool) {
+	if len(r.Header.Values("Accept-Encoding")) == 0 {
+		return "", true
+	}
+	gzipQuality, brotliQuality, wildcard, identity := -1.0, -1.0, -1.0, -1.0
+	for _, value := range r.Header.Values("Accept-Encoding") {
+		for part := range strings.SplitSeq(value, ",") {
+			coding := strings.TrimSpace(part)
+			var params map[string]string
+			if strings.ContainsRune(coding, ';') {
+				parsed, parameters, err := mime.ParseMediaType(coding)
+				if err != nil {
+					continue
+				}
+				coding, params = parsed, parameters
+			} else {
+				switch {
+				case len(coding) == len("gzip") && strings.EqualFold(coding, "gzip"):
+					coding = "gzip"
+				case len(coding) == len("br") && strings.EqualFold(coding, "br"):
+					coding = "br"
+				case len(coding) == len("identity") && strings.EqualFold(coding, "identity"):
+					coding = "identity"
+				case coding == "*":
+				default:
+					continue
+				}
+			}
+			quality := 1.0
+			if raw, exists := params["q"]; exists {
+				parsed, err := strconv.ParseFloat(raw, 64)
+				if err != nil || !(parsed >= 0 && parsed <= 1) {
+					quality = 0
+				} else {
+					quality = parsed
+				}
+			}
+			switch coding {
+			case "gzip":
+				gzipQuality = quality
+			case "br":
+				brotliQuality = quality
+			case "*":
+				wildcard = quality
+			case "identity":
+				identity = quality
+			}
+		}
+	}
+	if gzipQuality < 0 {
+		gzipQuality = wildcard
+	}
+	if brotliQuality < 0 {
+		brotliQuality = wildcard
+	}
+	identityAllowed := identity > 0 || identity < 0 && wildcard != 0
+	encoding, quality := "", 0.0
+	if t.config.EnableBrotli && brotliQuality > 0 {
+		encoding, quality = "br", brotliQuality
+	}
+	if t.config.EnableGzip && gzipQuality > quality {
+		encoding, quality = "gzip", gzipQuality
+	}
+	if identity > quality {
+		return "", true
+	}
+	return encoding, identityAllowed
+}
+
+func (t *Transport) writeGraphQLPayload(w nethttp.ResponseWriter, r *nethttp.Request, status int, mediaType string, response core.Response) {
+	encoded, err := response.MarshalJSON()
+	if err != nil {
+		wrapped := &json.MarshalerError{Type: reflect.TypeFor[core.Response](), Err: err}
+		nethttp.Error(w, wrapped.Error(), nethttp.StatusInternalServerError)
+		return
+	}
+	t.writeEncodedGraphQLPayload(w, r, status, mediaType, encoded)
+}
+
+func (t *Transport) writeGraphQLBatch(w nethttp.ResponseWriter, r *nethttp.Request, status int, mediaType string, responses []core.Response) {
 	buf := jsonEncodeBufferPool.Get().(*bytes.Buffer)
 	buf.Reset()
 	defer jsonEncodeBufferPool.Put(buf)
 
 	enc := json.NewEncoder(buf)
-	if err := enc.Encode(payload); err != nil {
+	if err := enc.Encode(responses); err != nil {
 		nethttp.Error(w, err.Error(), nethttp.StatusInternalServerError)
 		return
 	}
@@ -274,14 +369,25 @@ func (t *Transport) writeGraphQLPayload(w nethttp.ResponseWriter, r *nethttp.Req
 	if n := len(encoded); n > 0 && encoded[n-1] == '\n' {
 		encoded = encoded[:n-1]
 	}
+	t.writeEncodedGraphQLPayload(w, r, status, mediaType, encoded)
+}
+
+func (t *Transport) writeEncodedGraphQLPayload(w nethttp.ResponseWriter, r *nethttp.Request, status int, mediaType string, encoded []byte) {
 	contentType := mediaType
 	if !strings.Contains(contentType, "charset=") {
 		contentType += "; charset=utf-8"
 	}
 	w.Header().Set("Content-Type", contentType)
-	if encoding := t.negotiateEncoding(r); encoding != "" && len(encoded) >= 64 {
-		w.Header().Set("Content-Encoding", encoding)
+	if t.config.EnableGzip || t.config.EnableBrotli {
 		w.Header().Add("Vary", "Accept-Encoding")
+	}
+	encoding, identityAllowed := t.negotiateEncoding(r)
+	if encoding == "" && !identityAllowed {
+		writeRequestError(r.Context(), w, mediaType, nethttp.StatusNotAcceptable, fmt.Errorf("no acceptable response content encoding"))
+		return
+	}
+	if encoding != "" && (len(encoded) >= 64 || !identityAllowed) {
+		w.Header().Set("Content-Encoding", encoding)
 		w.WriteHeader(status)
 		cw := newCompressWriter(w, encoding)
 		if _, err := cw.Write(encoded); err != nil {
@@ -311,23 +417,26 @@ const incrementalBoundary = "-"
 
 func acceptsMultipartMixed(r *nethttp.Request) bool {
 	for _, raw := range r.Header.Values("Accept") {
-		for _, part := range strings.Split(raw, ",") {
-			mediaType := strings.TrimSpace(part)
-			if semi := strings.Index(mediaType, ";"); semi >= 0 {
-				mediaType = strings.TrimSpace(mediaType[:semi])
+		for part := range strings.SplitSeq(raw, ",") {
+			mediaType, _, _ := strings.Cut(part, ";")
+			mediaType = strings.TrimSpace(mediaType)
+			if len(mediaType) != len("multipart/mixed") || !strings.EqualFold(mediaType, "multipart/mixed") {
+				continue
 			}
-			if strings.EqualFold(mediaType, "multipart/mixed") {
-				return true
+			mediaType, params, err := mime.ParseMediaType(strings.TrimSpace(part))
+			if err != nil || mediaType != "multipart/mixed" {
+				continue
 			}
+			if raw, exists := params["q"]; exists {
+				quality, err := strconv.ParseFloat(raw, 64)
+				if err != nil || !(quality > 0 && quality <= 1) {
+					continue
+				}
+			}
+			return true
 		}
 	}
 	return false
-}
-
-// incrementalChunk is the JSON body of a subsequent multipart/mixed part.
-type incrementalChunk struct {
-	Incremental []core.IncrementalPayload `json:"incremental,omitempty"`
-	HasNext     bool                      `json:"hasNext"`
 }
 
 // writeIncremental streams a GraphQL incremental-delivery response as
@@ -335,49 +444,86 @@ type incrementalChunk struct {
 // payload is sent first, followed by one part per deferred/streamed payload, and
 // finally the closing boundary.
 func (t *Transport) writeIncremental(w nethttp.ResponseWriter, r *nethttp.Request, ie core.IncrementalExecutor, req core.Request) {
-	initial, payloads := ie.ExecuteIncremental(r.Context(), req)
-
-	w.Header().Set("Content-Type", `multipart/mixed; boundary="`+incrementalBoundary+`"; deferSpec=20220824`)
-	w.WriteHeader(nethttp.StatusOK)
-	flusher, _ := w.(nethttp.Flusher)
-
-	initialJSON, err := json.Marshal(initial)
-	if err != nil {
-		return
-	}
-	writeMultipartPart(w, initialJSON)
-	if flusher != nil {
-		flusher.Flush()
-	}
-
-	for i, payload := range payloads {
-		chunk := incrementalChunk{
-			Incremental: []core.IncrementalPayload{payload},
-			HasNext:     i < len(payloads)-1,
-		}
-		body, err := json.Marshal(chunk)
+	started := false
+	emitInitial := func(initial core.Response) error {
+		initialJSON, err := json.Marshal(initial)
 		if err != nil {
+			nethttp.Error(w, "failed to encode incremental response", nethttp.StatusInternalServerError)
+			return err
+		}
+		status := responseStatus(core.MediaTypeGraphQLResponse, initial)
+		if status != nethttp.StatusOK {
+			if responseType, accepted := core.NegotiateResponseContentType(r.Header.Values("Accept")); accepted {
+				t.writeGraphQLPayload(w, r, responseStatus(responseType, initial), responseType, initial)
+				return nil
+			}
+		}
+		w.Header().Set("Content-Type", `multipart/mixed; boundary="`+incrementalBoundary+`"; deferSpec=20220824`)
+		w.WriteHeader(status)
+		started = true
+		return writeMultipartPart(w, initialJSON)
+	}
+	emitPatch := func(payload core.IncrementalPayload, hasNext bool) error {
+		body, err := (core.Response{Incremental: []core.IncrementalPayload{payload}, HasNext: &hasNext}).MarshalJSON()
+		if err != nil {
+			return err
+		}
+		return writeMultipartPart(w, body)
+	}
+	if streaming, ok := ie.(core.IncrementalStreamExecutor); ok {
+		if err := streaming.ExecuteIncrementalStream(r.Context(), req, emitInitial, emitPatch); err != nil {
 			return
 		}
-		writeMultipartPart(w, body)
-		if flusher != nil {
-			flusher.Flush()
+	} else {
+		initial, payloads := ie.ExecuteIncremental(r.Context(), req)
+		if err := r.Context().Err(); err != nil {
+			return
+		}
+		if err := emitInitial(initial); err != nil {
+			return
+		}
+		for i, payload := range payloads {
+			if err := r.Context().Err(); err != nil {
+				return
+			}
+			if err := emitPatch(payload, i < len(payloads)-1); err != nil {
+				return
+			}
 		}
 	}
-
-	_, _ = w.Write([]byte("\r\n--" + incrementalBoundary + "--\r\n"))
-	if flusher != nil {
-		flusher.Flush()
+	if !started || r.Context().Err() != nil {
+		return
 	}
+	if _, err := io.WriteString(w, "\r\n--"+incrementalBoundary+"--\r\n"); err != nil {
+		return
+	}
+	_ = flushMultipart(w)
 }
 
-func writeMultipartPart(w nethttp.ResponseWriter, body []byte) {
+func writeMultipartPart(w nethttp.ResponseWriter, body []byte) error {
 	var b bytes.Buffer
 	b.WriteString("\r\n--")
 	b.WriteString(incrementalBoundary)
 	b.WriteString("\r\nContent-Type: application/json; charset=utf-8\r\n\r\n")
 	b.Write(body)
-	_, _ = w.Write(b.Bytes())
+	n, err := w.Write(b.Bytes())
+	if err != nil {
+		return err
+	}
+	if n != b.Len() {
+		return io.ErrShortWrite
+	}
+	return flushMultipart(w)
+}
+
+func flushMultipart(w nethttp.ResponseWriter) error {
+	if flusher, ok := w.(interface{ FlushError() error }); ok {
+		return flusher.FlushError()
+	}
+	if flusher, ok := w.(nethttp.Flusher); ok {
+		flusher.Flush()
+	}
+	return nil
 }
 
 func limitRequestSize(w nethttp.ResponseWriter, r *nethttp.Request, max int64) error {
@@ -390,7 +536,7 @@ func limitRequestSize(w nethttp.ResponseWriter, r *nethttp.Request, max int64) e
 		return nil
 	case nethttp.MethodGet:
 		q := r.URL.Query()
-		size := int64(len(q.Get("query")) + len(q.Get("variables")) + len(q.Get("operationName")))
+		size := int64(len(q.Get("query")) + len(q.Get("variables")) + len(q.Get("operationName")) + len(q.Get("extensions")))
 		if size > max {
 			return fmt.Errorf("request exceeds %d byte limit", max)
 		}
@@ -407,7 +553,12 @@ func requestBodyTooLarge(err error) bool {
 }
 
 func writeRequestError(ctx context.Context, w nethttp.ResponseWriter, mediaType string, status int, err error) {
-	res := core.Response{Errors: []core.Error{core.NewRequestError(err)}}
+	requestError := core.NewRequestError(err)
+	var persistedError *persistedQueryError
+	if errors.As(err, &persistedError) {
+		requestError.Extensions["code"] = persistedError.code
+	}
+	res := core.Response{Errors: []core.Error{requestError}}
 	res = core.AttachRequestIDExtension(res, core.RequestIDFromContext(ctx))
 	core.WriteGraphQLResponse(w, status, mediaType, res)
 }

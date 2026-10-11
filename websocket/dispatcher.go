@@ -1,6 +1,7 @@
 package websocket
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -28,6 +29,13 @@ type message struct {
 	Payload json.RawMessage `json:"payload,omitempty"`
 }
 
+type subscribePayload struct {
+	Query         *string        `json:"query"`
+	OperationName string         `json:"operationName"`
+	Variables     map[string]any `json:"variables"`
+	Extensions    map[string]any `json:"extensions"`
+}
+
 type ackMessage struct {
 	Type    string          `json:"type"`
 	Payload json.RawMessage `json:"payload,omitempty"`
@@ -45,6 +53,10 @@ type nextMessage struct {
 	Payload core.Response `json:"payload"`
 }
 
+type activeSubscription struct {
+	cancel context.CancelFunc
+}
+
 // dispatcher coordinates a single graphql-transport-ws session: it tracks
 // open subscriptions by id, fans incoming messages out to the executor, and
 // forwards emitted responses back to the peer.
@@ -55,7 +67,7 @@ type dispatcher struct {
 
 	mu            sync.Mutex
 	connInited    bool
-	subscriptions map[string]context.CancelFunc
+	subscriptions map[string]*activeSubscription
 
 	// connCtx is the context passed to executor calls. It starts as the
 	// per-request context and may be replaced by OnConnect.
@@ -68,7 +80,7 @@ func newDispatcher(conn *Conn, executor core.Executor, cfg Config) *dispatcher {
 		conn:          conn,
 		executor:      executor,
 		cfg:           cfg,
-		subscriptions: map[string]context.CancelFunc{},
+		subscriptions: map[string]*activeSubscription{},
 	}
 }
 
@@ -102,6 +114,14 @@ func (d *dispatcher) run(ctx context.Context) {
 		if err := json.Unmarshal(payload, &msg); err != nil {
 			d.conn.SendClose(wsCloseInvalidMessage, "invalid message")
 			return
+		}
+
+		if msg.Type == "connection_init" || msg.Type == "ping" || msg.Type == "pong" {
+			payload := bytes.TrimSpace(msg.Payload)
+			if len(payload) > 0 && payload[0] != '{' && !bytes.Equal(payload, []byte("null")) {
+				d.conn.SendClose(wsCloseInvalidMessage, "message payload must be an object or null")
+				return
+			}
 		}
 
 		switch msg.Type {
@@ -170,6 +190,10 @@ func (d *dispatcher) currentConnCtx() context.Context {
 }
 
 func (d *dispatcher) refreshReadDeadline() {
+	// Only initialization may replace the original connection-init deadline.
+	if !d.isInited() {
+		return
+	}
 	if d.cfg.ReadIdleTimeout <= 0 {
 		_ = d.conn.SetReadDeadline(time.Time{})
 		return
@@ -198,17 +222,14 @@ func (d *dispatcher) startSubscription(msg message) {
 		return
 	}
 
-	var body core.GraphQLBody
-	if len(msg.Payload) > 0 {
-		if err := json.Unmarshal(msg.Payload, &body); err != nil {
-			_ = d.sendError(msg.ID, fmt.Errorf("invalid subscribe payload: %s", err.Error()))
-			_ = d.send(message{ID: msg.ID, Type: "complete"})
-			return
-		}
+	var payload subscribePayload
+	if err := json.Unmarshal(msg.Payload, &payload); err != nil || payload.Query == nil {
+		d.conn.SendClose(wsCloseInvalidMessage, "subscribe payload must be an object containing a query string")
+		return
 	}
+	body := core.GraphQLBody{Query: *payload.Query, OperationName: payload.OperationName, Variables: payload.Variables, Extensions: payload.Extensions}
 	if strings.TrimSpace(body.Query) == "" {
 		_ = d.sendError(msg.ID, errors.New("subscribe payload must include a query"))
-		_ = d.send(message{ID: msg.ID, Type: "complete"})
 		return
 	}
 
@@ -221,15 +242,15 @@ func (d *dispatcher) startSubscription(msg message) {
 	if d.cfg.MaxSubscriptions > 0 && len(d.subscriptions) >= d.cfg.MaxSubscriptions {
 		d.mu.Unlock()
 		_ = d.sendError(msg.ID, fmt.Errorf("active subscription limit %d exceeded", d.cfg.MaxSubscriptions))
-		_ = d.send(message{ID: msg.ID, Type: "complete"})
 		return
 	}
 	subCtx, cancel := context.WithCancel(d.currentConnCtx())
-	d.subscriptions[msg.ID] = cancel
+	active := &activeSubscription{cancel: cancel}
+	d.subscriptions[msg.ID] = active
 	d.mu.Unlock()
 
 	go func() {
-		defer d.removeSubscription(msg.ID)
+		defer d.removeSubscription(msg.ID, active)
 		defer cancel()
 
 		req := core.Request{
@@ -239,9 +260,11 @@ func (d *dispatcher) startSubscription(msg message) {
 		}
 
 		kind, err := d.executor.OperationKind(req)
+		if subCtx.Err() != nil {
+			return
+		}
 		if err != nil {
 			_ = d.sendError(msg.ID, err)
-			_ = d.send(message{ID: msg.ID, Type: "complete"})
 			return
 		}
 
@@ -251,6 +274,9 @@ func (d *dispatcher) startSubscription(msg message) {
 		}
 
 		response := d.executor.Execute(subCtx, req)
+		if subCtx.Err() != nil {
+			return
+		}
 		_ = d.sendNext(msg.ID, response)
 		_ = d.send(message{ID: msg.ID, Type: "complete"})
 	}()
@@ -262,9 +288,11 @@ func (d *dispatcher) runStream(ctx context.Context, id string, body core.GraphQL
 		OperationName: body.OperationName,
 		Variables:     body.Variables,
 	})
+	if ctx.Err() != nil {
+		return
+	}
 	if err != nil {
 		_ = d.sendError(id, err)
-		_ = d.send(message{ID: id, Type: "complete"})
 		return
 	}
 
@@ -273,6 +301,9 @@ func (d *dispatcher) runStream(ctx context.Context, id string, body core.GraphQL
 		case <-ctx.Done():
 			return
 		case res, open := <-stream:
+			if ctx.Err() != nil {
+				return
+			}
 			if !open {
 				_ = d.send(message{ID: id, Type: "complete"})
 				return
@@ -286,32 +317,34 @@ func (d *dispatcher) runStream(ctx context.Context, id string, body core.GraphQL
 
 func (d *dispatcher) cancelSubscription(id string) {
 	d.mu.Lock()
-	cancel, exists := d.subscriptions[id]
+	active, exists := d.subscriptions[id]
 	if exists {
 		delete(d.subscriptions, id)
 	}
 	d.mu.Unlock()
-	if cancel != nil {
-		cancel()
+	if active != nil {
+		active.cancel()
 	}
 }
 
 func (d *dispatcher) cancelAll() {
 	d.mu.Lock()
 	cancels := make([]context.CancelFunc, 0, len(d.subscriptions))
-	for _, cancel := range d.subscriptions {
-		cancels = append(cancels, cancel)
+	for _, active := range d.subscriptions {
+		cancels = append(cancels, active.cancel)
 	}
-	d.subscriptions = map[string]context.CancelFunc{}
+	d.subscriptions = map[string]*activeSubscription{}
 	d.mu.Unlock()
 	for _, cancel := range cancels {
 		cancel()
 	}
 }
 
-func (d *dispatcher) removeSubscription(id string) {
+func (d *dispatcher) removeSubscription(id string, active *activeSubscription) {
 	d.mu.Lock()
-	delete(d.subscriptions, id)
+	if d.subscriptions[id] == active {
+		delete(d.subscriptions, id)
+	}
 	d.mu.Unlock()
 }
 

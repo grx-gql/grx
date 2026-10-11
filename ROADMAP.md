@@ -213,8 +213,8 @@ This file is the source of truth for feature parity tracking and roadmap sync in
 
 ### Introspection
 
-- [x] `__schema` fast-path response
-- [x] `__type(name:)` fast-path response
+- [x] Validated `__schema` response with exact field selections
+- [x] Validated `__type(name:)` response with exact field selections
 - [x] Root query type metadata
 - [x] Root mutation type metadata
 - [x] Object field metadata

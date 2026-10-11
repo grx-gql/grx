@@ -17,24 +17,31 @@ func PrintSDL(s *Schema) string {
 
 	names := make([]string, 0, len(s.Types))
 	for n := range s.Types {
+		if isBuiltInScalarName(n) || strings.HasPrefix(n, "__") {
+			continue
+		}
 		names = append(names, n)
 	}
 	sort.Strings(names)
 
 	var b strings.Builder
+	writeDirectiveDefinitions(&b, s.DirectiveDefinitions)
 	for _, name := range names {
 		t := s.Types[name]
 		switch typed := t.(type) {
 		case *Scalar:
 			writeDescription(&b, typed.Description)
 			fmt.Fprintf(&b, "scalar %s", typed.Name())
-			if typed.SpecifiedByURL != "" {
+			if typed.SpecifiedByURL != "" && !hasAppliedDirective(typed.Directives, "specifiedBy") {
 				fmt.Fprintf(&b, " @specifiedBy(url: %s)", strconv.Quote(typed.SpecifiedByURL))
 			}
+			writeAppliedDirectives(&b, typed.Directives, s.DirectiveDefinitions)
 			b.WriteString("\n\n")
 		case *Enum:
 			writeDescription(&b, typed.Description)
-			fmt.Fprintf(&b, "enum %s {\n", typed.Name())
+			fmt.Fprintf(&b, "enum %s", typed.Name())
+			writeAppliedDirectives(&b, typed.Directives, s.DirectiveDefinitions)
+			b.WriteString(" {\n")
 			ev := append([]EnumValue(nil), typed.Values...)
 			sort.Slice(ev, func(i, j int) bool { return ev[i].Name < ev[j].Name })
 			for _, v := range ev {
@@ -42,12 +49,13 @@ func PrintSDL(s *Schema) string {
 					fmt.Fprintf(&b, "  \"\"\"%s\"\"\"\n", v.Description)
 				}
 				fmt.Fprintf(&b, "  %s", v.Name)
-				if v.IsDeprecated {
+				if v.IsDeprecated && !hasAppliedDirective(v.Directives, "deprecated") {
 					b.WriteString(" @deprecated")
 					if v.DeprecationReason != nil && *v.DeprecationReason != "" {
 						fmt.Fprintf(&b, "(reason: %s)", strconv.Quote(*v.DeprecationReason))
 					}
 				}
+				writeAppliedDirectives(&b, v.Directives, s.DirectiveDefinitions)
 				b.WriteByte('\n')
 			}
 			b.WriteString("}\n\n")
@@ -60,7 +68,9 @@ func PrintSDL(s *Schema) string {
 				}
 			}
 			sort.Strings(parts)
-			fmt.Fprintf(&b, "union %s = %s\n\n", typed.Name(), strings.Join(parts, " | "))
+			fmt.Fprintf(&b, "union %s", typed.Name())
+			writeAppliedDirectives(&b, typed.Directives, s.DirectiveDefinitions)
+			fmt.Fprintf(&b, " = %s\n\n", strings.Join(parts, " | "))
 		case *Interface:
 			writeDescription(&b, typed.Description)
 			fmt.Fprintf(&b, "interface %s", typed.Name())
@@ -75,14 +85,16 @@ func PrintSDL(s *Schema) string {
 					b.WriteString(it.Name())
 				}
 			}
-			writeInterfaceFields(&b, typed)
+			writeAppliedDirectives(&b, typed.Directives, s.DirectiveDefinitions)
+			writeInterfaceFields(&b, typed, s.DirectiveDefinitions)
 		case *InputObject:
 			writeDescription(&b, typed.Description)
 			fmt.Fprintf(&b, "input %s", typed.Name())
-			if typed.IsOneOf {
+			if typed.IsOneOf && !hasAppliedDirective(typed.Directives, "oneOf") {
 				b.WriteString(" @oneOf")
 			}
-			writeInputFields(&b, typed)
+			writeAppliedDirectives(&b, typed.Directives, s.DirectiveDefinitions)
+			writeInputFields(&b, typed, s.DirectiveDefinitions)
 		case *Object:
 			writeDescription(&b, typed.Description)
 			fmt.Fprintf(&b, "type %s", typed.Name())
@@ -97,13 +109,16 @@ func PrintSDL(s *Schema) string {
 					b.WriteString(it.Name())
 				}
 			}
-			writeObjectFields(&b, typed)
+			writeAppliedDirectives(&b, typed.Directives, s.DirectiveDefinitions)
+			writeObjectFields(&b, typed, s.DirectiveDefinitions)
 		default:
 			continue
 		}
 	}
 
-	b.WriteString("schema {\n")
+	b.WriteString("schema")
+	writeAppliedDirectives(&b, s.Directives, s.DirectiveDefinitions)
+	b.WriteString(" {\n")
 	if s.Query != nil {
 		fmt.Fprintf(&b, "  query: %s\n", s.Query.Name())
 	}
@@ -128,32 +143,32 @@ func writeDescription(b *strings.Builder, desc string) {
 	}
 }
 
-func writeInterfaceFields(b *strings.Builder, iface *Interface) {
+func writeInterfaceFields(b *strings.Builder, iface *Interface, definitions map[string]*DirectiveDefinition) {
 	b.WriteString(" {\n")
 	keys := sortedFieldKeys(iface.Fields)
 	for _, k := range keys {
 		f := iface.Fields[k]
-		fmt.Fprintf(b, "  %s", formatField(f, false))
+		fmt.Fprintf(b, "  %s", formatField(f, false, definitions))
 	}
 	b.WriteString("}\n\n")
 }
 
-func writeObjectFields(b *strings.Builder, o *Object) {
+func writeObjectFields(b *strings.Builder, o *Object, definitions map[string]*DirectiveDefinition) {
 	b.WriteString(" {\n")
 	keys := sortedFieldKeys(o.Fields)
 	for _, k := range keys {
 		f := o.Fields[k]
-		fmt.Fprintf(b, "  %s", formatField(f, false))
+		fmt.Fprintf(b, "  %s", formatField(f, false, definitions))
 	}
 	b.WriteString("}\n\n")
 }
 
-func writeInputFields(b *strings.Builder, in *InputObject) {
+func writeInputFields(b *strings.Builder, in *InputObject, definitions map[string]*DirectiveDefinition) {
 	b.WriteString(" {\n")
 	keys := sortedFieldKeys(in.Fields)
 	for _, k := range keys {
 		f := in.Fields[k]
-		fmt.Fprintf(b, "  %s", formatField(f, true))
+		fmt.Fprintf(b, "  %s", formatField(f, true, definitions))
 	}
 	b.WriteString("}\n\n")
 }
@@ -167,7 +182,7 @@ func sortedFieldKeys(fields map[string]*Field) []string {
 	return keys
 }
 
-func formatField(f *Field, input bool) string {
+func formatField(f *Field, input bool, definitions map[string]*DirectiveDefinition) string {
 	var sb strings.Builder
 	if f.Description != "" {
 		fmt.Fprintf(&sb, "  \"\"\"%s\"\"\"\n  ", f.Description)
@@ -181,13 +196,7 @@ func formatField(f *Field, input bool) string {
 			if i > 0 {
 				sb.WriteString(", ")
 			}
-			sb.WriteString(a.Name)
-			sb.WriteString(": ")
-			sb.WriteString(a.Type.Name())
-			if s, ok := formatSDLDefault(a.DefaultValue); ok {
-				sb.WriteString(" = ")
-				sb.WriteString(s)
-			}
+			writeInputValue(&sb, a, definitions)
 		}
 		sb.WriteByte(')')
 	}
@@ -199,12 +208,13 @@ func formatField(f *Field, input bool) string {
 			sb.WriteString(s)
 		}
 	}
-	if f.IsDeprecated {
+	if f.IsDeprecated && !hasAppliedDirective(f.Directives, "deprecated") {
 		sb.WriteString(" @deprecated")
 		if f.DeprecationReason != nil && *f.DeprecationReason != "" {
 			fmt.Fprintf(&sb, "(reason: %s)", strconv.Quote(*f.DeprecationReason))
 		}
 	}
+	writeAppliedDirectives(&sb, f.Directives, definitions)
 	sb.WriteByte('\n')
 	return sb.String()
 }

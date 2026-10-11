@@ -46,6 +46,7 @@ func TestAllForwardingOptionsSmoke(t *testing.T) {
 		WithMaxSelectionDepth(8),
 		WithResponseGzip(),
 		WithPersistedQueries(map[string]string{}),
+		WithAPQCacheSize(2),
 		WithOperationAuthorizer(func(ctx context.Context, op OperationContext) error { return nil }),
 		WithFieldAuthorizer(func(ctx context.Context, fc FieldAuthorizationContext) error { return nil }),
 		WithSchemaSDLPath("/schema.graphql"),
@@ -168,7 +169,7 @@ func TestNonIncrementalRequestStaysSingleJSON(t *testing.T) {
 	body := `{"query":"{ user(id: \"1\") { id name } }"}`
 	req := httptest.NewRequest(http.MethodPost, "/graphql", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Accept", "multipart/mixed")
+	req.Header.Set("Accept", "multipart/mixed, application/json")
 	rec := httptest.NewRecorder()
 
 	srv.ServeHTTP(rec, req)

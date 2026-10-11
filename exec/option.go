@@ -144,15 +144,10 @@ func WithApolloTracing() ExecutorOption {
 	}
 }
 
-// WithExecutableIntrospection runs introspection (__schema/__type) through the
-// normal selection-execution path instead of the built-in fast path. Field
-// hooks (plugins, field authorizer) then observe introspection fields and the
-// response honors the exact selection set. The fast path remains the default to
-// preserve its performance characteristics.
+// WithExecutableIntrospection is retained for compatibility. Introspection
+// always uses normal validated execution, including field hooks and security.
 func WithExecutableIntrospection() ExecutorOption {
-	return func(e *Executor) {
-		e.executableIntrospection = true
-	}
+	return func(*Executor) {}
 }
 
 // AbstractTypeResolver returns the concrete GraphQL type name for a value of an
@@ -168,4 +163,12 @@ func WithAbstractTypeResolver(resolver AbstractTypeResolver) ExecutorOption {
 	return func(e *Executor) {
 		e.abstractTypeResolver = resolver
 	}
+}
+
+// WithQueryConcurrency bounds concurrent root fields of Execute query operations.
+// Values at most one retain serial execution. Mutations, subscriptions, nested
+// selections and incremental delivery remain serial. Resolvers and field hooks
+// used with this option must permit concurrent calls and shared source reads.
+func WithQueryConcurrency(limit int) ExecutorOption {
+	return func(e *Executor) { e.queryConcurrency = limit }
 }

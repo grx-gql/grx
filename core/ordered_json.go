@@ -22,7 +22,7 @@ func writeGraphQLJSON(buf *bytes.Buffer, v any) error {
 	case string:
 		writeEscapedJSONString(buf, v)
 	case int:
-		buf.Write(strconv.AppendInt(nil, int64(v), 10))
+		buf.Write(strconv.AppendInt(buf.AvailableBuffer(), int64(v), 10))
 	case int8:
 		buf.Write(strconv.AppendInt(nil, int64(v), 10))
 	case int16:
@@ -78,16 +78,6 @@ func writeGraphQLJSON(buf *bytes.Buffer, v any) error {
 			}
 		}
 		buf.WriteByte(']')
-	case json.Marshaler:
-		if v == nil {
-			buf.WriteString("null")
-			return nil
-		}
-		b, err := v.MarshalJSON()
-		if err != nil {
-			return err
-		}
-		buf.Write(b)
 	default:
 		b, err := json.Marshal(v)
 		if err != nil {

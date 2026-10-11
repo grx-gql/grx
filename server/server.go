@@ -86,6 +86,10 @@ type Config struct {
 	// HTTP transport.
 	PersistedQueries map[string]string
 
+	// APQCacheSize enables bounded automatic persisted-query registration on HTTP.
+	// Zero disables it. Each cached query is limited to 64 KiB.
+	APQCacheSize int
+
 	// RequirePersistedQuery rejects HTTP requests that do not include an APQ
 	// sha256Hash under extensions.persistedQuery.
 	RequirePersistedQuery bool
@@ -139,6 +143,11 @@ type Config struct {
 	// MaxRootFieldCount limits top-level fields in an operation. Zero disables
 	// the limit.
 	MaxRootFieldCount int
+
+	// QueryConcurrency bounds concurrent root fields in query operations. Values
+	// at most one keep serial execution. See exec.WithQueryConcurrency for the
+	// resolver and hook concurrency contract.
+	QueryConcurrency int
 
 	// DocumentCacheSize caches parsed documents for requests without variables.
 	// Zero disables the cache.
@@ -234,6 +243,9 @@ func New(config Config) (*Server, error) {
 	if config.MaxRootFieldCount > 0 {
 		execOpts = append(execOpts, exec.WithMaxRootFieldCount(config.MaxRootFieldCount))
 	}
+	if config.QueryConcurrency > 1 {
+		execOpts = append(execOpts, exec.WithQueryConcurrency(config.QueryConcurrency))
+	}
 	if config.DocumentCacheSize > 0 {
 		execOpts = append(execOpts, exec.WithDocumentCache(config.DocumentCacheSize))
 	}
@@ -279,7 +291,7 @@ func New(config Config) (*Server, error) {
 		main = append(main, config.Transports...)
 	}
 
-	httpTransportCfg := grxhttp.Config{Path: graphqlPath}
+	httpTransportCfg := grxhttp.Config{Path: graphqlPath, APQCacheSize: config.APQCacheSize}
 	if config.MaxHTTPRequestBytes != 0 {
 		httpTransportCfg.MaxRequestBytes = config.MaxHTTPRequestBytes
 	}

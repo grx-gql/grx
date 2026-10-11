@@ -156,6 +156,13 @@ func WithMaxSelectionDepth(depth int) Option {
 	}
 }
 
+// WithQueryConcurrency bounds concurrent root fields of query operations.
+// Values at most one retain serial execution. Mutations stay serial. Resolvers
+// and field hooks must support concurrent calls when this option is enabled.
+func WithQueryConcurrency(limit int) Option {
+	return func(config *server.Config) { config.QueryConcurrency = limit }
+}
+
 // WithResponseGzip enables gzip compression for JSON GraphQL responses when
 // the client sends Accept-Encoding: gzip.
 func WithResponseGzip() Option {
@@ -170,6 +177,12 @@ func WithPersistedQueries(queries map[string]string) Option {
 	return func(c *server.Config) {
 		c.PersistedQueries = queries
 	}
+}
+
+// WithAPQCacheSize enables automatic persisted-query registration with at most
+// size entries. Zero disables the cache; each cached query is limited to 64 KiB.
+func WithAPQCacheSize(size int) Option {
+	return func(c *server.Config) { c.APQCacheSize = size }
 }
 
 // WithOperationAuthorizer registers a hook invoked while validating the parsed

@@ -21,34 +21,42 @@ const defaultMultipartMemory = 32 << 20 // 32 MiB
 // decodeGraphQLHTTP decodes one or more GraphQL operations from an HTTP
 // request. POST bodies may be a single JSON object or a JSON array (Apollo-style
 // batching). GET requests always yield exactly one body.
-func decodeGraphQLHTTP(r *nethttp.Request, config Config) ([]core.GraphQLBody, error) {
+type decodedRequest struct {
+	bodies []core.GraphQLBody
+	batch  bool
+}
+
+func decodeGraphQLHTTP(r *nethttp.Request, config Config) (decodedRequest, error) {
 	switch r.Method {
 	case nethttp.MethodPost:
 		if core.IsMultipartRequest(r) {
-			return parseMultipartGraphQL(r, config)
+			bodies, err := parseMultipartGraphQL(r, config)
+			return decodedRequest{bodies: bodies, batch: strings.HasPrefix(strings.TrimSpace(r.FormValue("operations")), "[")}, err
 		}
 		raw, err := io.ReadAll(r.Body)
 		if err != nil {
-			return nil, fmt.Errorf("reading request body: %w", err)
+			return decodedRequest{}, fmt.Errorf("reading request body: %w", err)
 		}
-		return parsePostGraphQLJSON(raw, config)
+		raw = bytes.TrimSpace(raw)
+		bodies, err := parsePostGraphQLJSON(raw, config)
+		return decodedRequest{bodies: bodies, batch: len(raw) > 0 && raw[0] == '['}, err
 	case nethttp.MethodGet:
-		body, err := core.DecodeGraphQLRequest(r)
+		body, err := core.DecodeGraphQLParameters(r.URL.Query())
 		if err != nil {
-			return nil, err
+			return decodedRequest{}, err
 		}
 		if err := validateVariableBytes(body.Variables, config.MaxVariableBytes); err != nil {
-			return nil, err
+			return decodedRequest{}, err
 		}
 		if err := resolvePersistedQuery(&body, config); err != nil {
-			return nil, err
+			return decodedRequest{}, err
 		}
 		if strings.TrimSpace(body.Query) == "" {
-			return nil, fmt.Errorf("missing GraphQL query")
+			return decodedRequest{}, fmt.Errorf("missing GraphQL query")
 		}
-		return []core.GraphQLBody{body}, nil
+		return decodedRequest{bodies: []core.GraphQLBody{body}}, nil
 	default:
-		return nil, fmt.Errorf("unsupported HTTP method %s", r.Method)
+		return decodedRequest{}, fmt.Errorf("unsupported HTTP method %s", r.Method)
 	}
 }
 
@@ -311,15 +319,24 @@ func resolvePersistedQuery(body *core.GraphQLBody, config Config) error {
 
 	query := strings.TrimSpace(body.Query)
 	if query != "" {
-		if config.StrictPersistedQueries {
+		if config.StrictPersistedQueries || config.apq != nil {
 			sum := sha256.Sum256([]byte(body.Query))
 			if hash != fmt.Sprintf("%x", sum[:]) {
 				return fmt.Errorf("persisted query sha256Hash does not match GraphQL query")
 			}
 		}
+		if config.apq != nil {
+			return config.apq.store(hash, body.Query)
+		}
 		return nil
 	}
 	query, ok := persisted[hash]
+	if !ok && config.apq != nil {
+		query, ok = config.apq.lookup(hash)
+		if !ok {
+			return &persistedQueryError{message: "PersistedQueryNotFound", code: "PERSISTED_QUERY_NOT_FOUND"}
+		}
+	}
 	if !ok {
 		return fmt.Errorf("unknown persisted query sha256Hash %q", rawHash)
 	}

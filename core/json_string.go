@@ -65,6 +65,17 @@ func writeEscapedJSONStringContent(buf *bytes.Buffer, s string) {
 			i++
 			continue
 		}
+		if c == 0xe2 && i+2 < len(s) && s[i+1] == 0x80 && s[i+2]&^1 == 0xa8 {
+			buf.WriteString(s[start:i])
+			if s[i+2] == 0xa8 {
+				buf.WriteString(`\u2028`)
+			} else {
+				buf.WriteString(`\u2029`)
+			}
+			i += 3
+			start = i
+			continue
+		}
 		_, wid := utf8.DecodeRuneInString(s[i:])
 		i += wid
 	}

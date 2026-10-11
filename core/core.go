@@ -57,10 +57,12 @@ type Location struct {
 // IncrementalPayload is a single GraphQL incremental delivery patch.
 // It is shared across HTTP, SSE, and WebSocket transports.
 type IncrementalPayload struct {
-	Label      string         `json:"label,omitempty"`
-	Path       []any          `json:"path,omitempty"`
-	Data       any            `json:"data,omitempty"`
-	Items      []any          `json:"items,omitempty"`
+	Label string `json:"label,omitempty"`
+	Path  []any  `json:"path,omitempty"`
+	Data  any    `json:"data,omitempty"`
+	Items []any  `json:"items,omitempty"`
+	// ItemsNull marks a failed stream boundary, encoded as items:null.
+	ItemsNull  bool           `json:"-"`
 	Errors     []Error        `json:"errors,omitempty"`
 	Extensions map[string]any `json:"extensions,omitempty"`
 }
@@ -163,4 +165,17 @@ type IncrementalExecutor interface {
 	// ExecuteIncremental runs the operation and returns the initial response
 	// (with HasNext set) plus the ordered incremental payloads that follow.
 	ExecuteIncremental(ctx context.Context, req Request) (Response, []IncrementalPayload)
+}
+
+// IncrementalStreamExecutor emits incremental responses as execution progresses.
+// Transports prefer this optional capability over buffered IncrementalExecutor.
+type IncrementalStreamExecutor interface {
+	IncrementalExecutor
+
+	// ExecuteIncrementalStream calls emitInitial once, before completing deferred
+	// work, then emitPatch for each patch. hasNext reports whether work remains.
+	// Callbacks run synchronously; their errors are returned unchanged and stop
+	// execution. Context cancellation also stops pending work and returns ctx.Err().
+	// GraphQL execution errors are delivered inside responses and patches.
+	ExecuteIncrementalStream(ctx context.Context, req Request, emitInitial func(Response) error, emitPatch func(IncrementalPayload, bool) error) error
 }

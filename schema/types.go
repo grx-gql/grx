@@ -60,6 +60,9 @@ type Scalar struct {
 	Description    string
 	SpecifiedByURL string
 	serializeFn    func(any) (any, error)
+	Directives     []AppliedDirective
+	parseFn        func(any) (any, error)
+	inputGoType    reflect.Type
 }
 
 // Name returns the scalar type name.
@@ -70,6 +73,27 @@ func (s *Scalar) Name() string {
 // Kind returns [ScalarKind].
 func (s *Scalar) Kind() Kind {
 	return ScalarKind
+}
+
+// Parse converts a scalar input using its registered parser. Scalars without a
+// registered parser retain the input value. Parsed custom values are normalized
+// to their registered Go type so reflected resolvers do not parse them again.
+func (s *Scalar) Parse(value any) (any, error) {
+	if s.parseFn == nil {
+		return value, nil
+	}
+	parsed, err := s.parseFn(value)
+	if err != nil || parsed == nil {
+		return parsed, err
+	}
+	raw := reflect.ValueOf(parsed)
+	if raw.Type().AssignableTo(s.inputGoType) {
+		return parsed, nil
+	}
+	if !raw.Type().ConvertibleTo(s.inputGoType) {
+		return nil, fmt.Errorf("scalar %s parser returned %T, cannot assign to %s", s.TypeName, parsed, s.inputGoType)
+	}
+	return raw.Convert(s.inputGoType).Interface(), nil
 }
 
 // Serialize converts a Go scalar value into a GraphQL response value.
@@ -117,6 +141,7 @@ type EnumValue struct {
 	Description       string
 	IsDeprecated      bool
 	DeprecationReason *string
+	Directives        []AppliedDirective
 }
 
 // Enum represents a GraphQL enum type.
@@ -126,6 +151,7 @@ type Enum struct {
 	Values      []EnumValue
 	valueByName map[string]any
 	nameByValue map[string]string
+	Directives  []AppliedDirective
 }
 
 // Name returns the enum type name.
@@ -206,6 +232,7 @@ type InputValue struct {
 	DefaultValue      any
 	IsDeprecated      bool
 	DeprecationReason *string
+	Directives        []AppliedDirective
 }
 
 // Object describes a GraphQL object type. Fields is keyed by GraphQL
@@ -310,6 +337,7 @@ func (i *InputObject) Kind() Kind {
 // supply the corresponding root. Types is the type registry keyed by
 // GraphQL type name and is used by the introspection fast-path.
 type Schema struct {
+	introspectionTypes   map[string]Type
 	Query                *Object
 	Mutation             *Object
 	Subscription         *Object

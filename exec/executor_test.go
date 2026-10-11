@@ -866,27 +866,7 @@ func TestExecutorUnknownFragmentProducesError(t *testing.T) {
 }
 
 func TestExecutorRejectsSelectionBeyondMaxDepth(t *testing.T) {
-	type nestUser struct {
-		ID string `gql:"id,nonNull"`
-	}
-	type nestPost struct {
-		Author *nestUser `gql:"author,nonNull"`
-	}
-	type nestQuery struct{}
-
-	schemaValue, err := schema.Build(schema.Config{
-		Query: struct {
-			Post func(context.Context, struct {
-				ID string `gql:"id,nonNull"`
-			}) (*nestPost, error)
-		}{
-			Post: func(ctx context.Context, args struct {
-				ID string `gql:"id,nonNull"`
-			}) (*nestPost, error) {
-				return &nestPost{Author: &nestUser{ID: "1"}}, nil
-			},
-		},
-	})
+	schemaValue, err := ParseSDL(`type Query { post(id: ID!): Post } type Post { author: User! } type User { id: ID! }`)
 	if err != nil {
 		t.Fatalf("build schema: %v", err)
 	}
@@ -1678,7 +1658,7 @@ func TestQuerySiblingFieldsExecuteSerially(t *testing.T) {
 	}
 }
 
-type BubbleItem struct{}
+type BubbleItem struct{ Required string }
 
 type bubbleQuery struct{}
 
@@ -1836,7 +1816,7 @@ func TestExecutorSubscribeWithVariablesParsesBypassingDocumentCache(t *testing.T
 
 	stream, err := executor.Subscribe(context.Background(), core.Request{
 		Query: `subscription Sub($skip: Boolean!) {
-			userCreated @skip(if: $skip) { id name }
+			userCreated { id name @skip(if: $skip) }
 		}`,
 		Variables: map[string]any{"skip": false},
 	})

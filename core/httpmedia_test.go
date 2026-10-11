@@ -82,6 +82,25 @@ func TestNegotiateResponseContentType(t *testing.T) {
 		},
 	}
 
+	cases = append(cases, []struct {
+		name   string
+		accept []string
+		want   string
+		wantOK bool
+	}{
+		{"excluded", []string{"application/graphql-response+json;q=0"}, "", false},
+		{"exact overrides wildcard", []string{"application/graphql-response+json;q=0,*/*;q=1"}, MediaTypeJSON, true},
+		{"both excluded", []string{"application/graphql-response+json;q=0,application/json;q=0,*/*;q=1"}, "", false},
+		{"subtype wildcard", []string{"application/*;q=0.8,application/graphql-response+json;q=0.2"}, MediaTypeJSON, true},
+		{"multiline", []string{"application/json;q=0.9", "application/graphql-response+json;q=0.1"}, MediaTypeJSON, true},
+		{"invalid quality", []string{"application/json;q=bad"}, "", false},
+		{"out of range", []string{"application/json;q=1.1"}, "", false},
+		{"nonfinite", []string{"application/json;q=NaN"}, "", false},
+		{"bad params", []string{"application/json;q"}, "", false},
+		{"multipart excluded", []string{"multipart/mixed;q=0"}, "", false},
+		{"tie", []string{"application/json;q=0.5,application/graphql-response+json;q=0.5"}, MediaTypeGraphQLResponse, true},
+	}...)
+
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			got, ok := NegotiateResponseContentType(tc.accept)

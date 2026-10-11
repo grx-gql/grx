@@ -1,10 +1,10 @@
 // Package exec contains the GraphQL lexer, parser, AST, executor, and
-// introspection fast-path. It is the hot per-request execution path and
+// introspection execution. It is the hot per-request execution path and
 // is deliberately transport-agnostic: callers communicate with the
 // executor through [core.Request] and [core.Response].
 //
-// Resolver runs are ordered: sibling fields execute sequentially within each
-// selection set (deterministic semantics for side-effecting code).
+// Resolver runs are serial by default. WithQueryConcurrency allows bounded
+// parallel query root fields while preserving response order.
 package exec
 
 import (
@@ -34,29 +34,29 @@ var ErrSubscriptionOperation = errors.New("subscription operations must use the 
 // notifies the registered plugins at each lifecycle phase. It satisfies
 // [core.Executor] and is safe for concurrent use.
 type Executor struct {
-	Schema                  *schema.Schema
-	Plugins                 []plugins.Plugin
-	disableIntrospection    bool
-	maxSelectionDepth       int
-	maxSelectionCount       int
-	maxAliasCount           int
-	maxRootFieldCount       int
-	maskInternalErrors      bool
-	clientErrorMessage      string
-	operationAuthorizer     OperationAuthorizer
-	fieldAuthorizer         FieldAuthorizer
-	rateLimiter             RateLimiter
-	trustedDocuments        map[string]string
-	rejectUnknownVars       bool
-	resolverCacheEnabled    bool
-	abstractTypeResolver    AbstractTypeResolver
-	executableIntrospection bool
-	apolloTracing           bool
-	fieldEnders             []plugins.FieldResolveEnder
-	documentCache           map[string]documentBundle
-	documentCacheOrder      []string
-	documentCacheLimit      int
-	documentCacheMu         sync.RWMutex
+	Schema               *schema.Schema
+	Plugins              []plugins.Plugin
+	disableIntrospection bool
+	maxSelectionDepth    int
+	maxSelectionCount    int
+	maxAliasCount        int
+	maxRootFieldCount    int
+	maskInternalErrors   bool
+	clientErrorMessage   string
+	operationAuthorizer  OperationAuthorizer
+	fieldAuthorizer      FieldAuthorizer
+	rateLimiter          RateLimiter
+	trustedDocuments     map[string]string
+	rejectUnknownVars    bool
+	resolverCacheEnabled bool
+	queryConcurrency     int
+	abstractTypeResolver AbstractTypeResolver
+	apolloTracing        bool
+	fieldEnders          []plugins.FieldResolveEnder
+	documentCache        map[string]documentBundle
+	documentCacheOrder   []string
+	documentCacheLimit   int
+	documentCacheMu      sync.RWMutex
 
 	lexTokenCache map[string][]token
 	lexCacheOrder []string
@@ -68,7 +68,7 @@ type Executor struct {
 // may be nil; an Executor with no plugins simply skips the lifecycle
 // notifications.
 func New(schemaValue *schema.Schema, pluginList []plugins.Plugin, opts ...ExecutorOption) *Executor {
-	e := &Executor{Schema: schemaValue, Plugins: pluginList}
+	e := &Executor{Schema: executableIntrospectionSchema(schemaValue), Plugins: pluginList}
 	for _, opt := range opts {
 		opt(e)
 	}
@@ -109,7 +109,13 @@ func (e *Executor) Execute(ctx context.Context, req core.Request) (response core
 		arena.apollo = newApolloTrace()
 	}
 
-	data, fieldErrors := e.executeSelectionSet(ctx, root, nil, doc.Selections, doc.Fragments, nil)
+	var data *core.OrderedObject
+	var fieldErrors []core.Error
+	if doc.Kind == operationQuery && e.queryConcurrency > 1 {
+		data, fieldErrors = e.executeParallelQuery(ctx, root, doc)
+	} else {
+		data, fieldErrors = e.executeSelectionSet(ctx, root, nil, doc.Selections, doc.Fragments, nil)
+	}
 	res := core.Response{Errors: fieldErrors}
 	if data == nil && len(fieldErrors) > 0 {
 		res.DataNull = true
@@ -136,11 +142,10 @@ func (e *Executor) enableResolverCache(ctx context.Context, kind operationKind) 
 }
 
 // prepareExecution runs the shared query/mutation preamble: request start,
-// parsing, introspection short-circuit, parsing/validation/security checks, and
+// parsing, validation/security checks, and
 // root-object resolution. It returns the (possibly updated) context plus the
 // root object and selected operation. When a non-nil *core.Response is
-// returned, the caller must return it directly — it represents an introspection
-// result or a request-level failure that ends the operation early.
+// returned, the caller must return it directly — it represents a request-level failure that ends the operation early.
 func (e *Executor) prepareExecution(ctx context.Context, req core.Request) (context.Context, *schema.Object, document, *core.Response) {
 	ctx, err := e.startRequest(ctx, req)
 	if err != nil {
@@ -150,36 +155,12 @@ func (e *Executor) prepareExecution(ctx context.Context, req core.Request) (cont
 		return e.shortResponse(ctx, e.maskError(err, false))
 	}
 
-	if isIntrospectionQuery(req.Query) {
-		if e.disableIntrospection {
-			err := fmt.Errorf("introspection is disabled")
-			e.notifyError(ctx, err)
-			return e.shortResponse(ctx, err)
-		}
-		if e.executableIntrospection {
-			data, errs := e.executeIntrospection(ctx, req)
-			out := core.Response{Errors: errs}
-			if data == nil && len(errs) > 0 {
-				out.DataNull = true
-			} else {
-				out.Data = data
-			}
-			if len(errs) == 0 {
-				out.Errors = nil
-			}
-			res := e.sendResponse(ctx, out)
-			return ctx, nil, document{}, &res
-		}
-		res := e.sendResponse(ctx, core.Response{Data: introspectionData(e.Schema, req)})
-		return ctx, nil, document{}, &res
-	}
-
 	bundle, err := e.parseBundle(req)
 	if err != nil {
 		e.notifyError(ctx, err)
 		return e.shortResponse(ctx, err)
 	}
-	doc, err := selectOperation(bundle, req.OperationName)
+	doc, err := selectOperationDefinition(bundle, req.OperationName)
 	if err != nil {
 		e.notifyError(ctx, err)
 		return e.shortResponse(ctx, err)
@@ -187,6 +168,16 @@ func (e *Executor) prepareExecution(ctx context.Context, req core.Request) (cont
 	if verrs := ValidateDocument(e.Schema, bundle, doc); len(verrs) > 0 {
 		res := e.validationFailResponse(ctx, verrs)
 		return ctx, nil, document{}, &res
+	}
+	if e.disableIntrospection && selectionsIntrospect(doc.Selections, doc.Fragments, make(map[string]bool)) {
+		err := fmt.Errorf("introspection is disabled")
+		e.notifyError(ctx, err)
+		return e.shortResponse(ctx, err)
+	}
+	doc, err = coerceOperationVariables(e.Schema, doc, req.Variables)
+	if err != nil {
+		e.notifyError(ctx, err)
+		return e.shortResponse(ctx, err)
 	}
 	if err := e.validateDocumentSecurity(ctx, req, doc); err != nil {
 		e.notifyError(ctx, err)
@@ -259,13 +250,18 @@ func (e *Executor) Subscribe(ctx context.Context, req core.Request) (responses <
 		e.notifyError(ctx, err)
 		return nil, err
 	}
-	doc, err := selectOperation(bundle, req.OperationName)
+	doc, err := selectOperationDefinition(bundle, req.OperationName)
 	if err != nil {
 		e.notifyError(ctx, err)
 		return nil, err
 	}
 	if verrs := ValidateDocument(e.Schema, bundle, doc); len(verrs) > 0 {
 		return nil, verrs[0]
+	}
+	doc, err = coerceOperationVariables(e.Schema, doc, req.Variables)
+	if err != nil {
+		e.notifyError(ctx, err)
+		return nil, err
 	}
 	if err := e.validateDocumentSecurity(ctx, req, doc); err != nil {
 		e.notifyError(ctx, err)
@@ -307,10 +303,9 @@ func (e *Executor) Subscribe(ctx context.Context, req core.Request) (responses <
 		return nil, err
 	}
 
-	source, err := field.Resolver(ctx, schema.ResolveParams{Args: rootField.Arguments})
+	source, err := e.resolveSubscriptionSource(ctx, root, field, rootField)
 	if err != nil {
-		e.notifyError(ctx, err)
-		return nil, e.maskError(err, true)
+		return nil, err
 	}
 	sourceValue := reflect.ValueOf(source)
 	if sourceValue.Kind() != reflect.Chan {
@@ -434,7 +429,7 @@ func (e *Executor) sendResponse(ctx context.Context, res core.Response) core.Res
 	for _, hook := range e.Plugins {
 		if err := hook.ResponseSend(ctx, res); err != nil {
 			e.notifyError(ctx, err)
-			return e.failResponse(ctx, e.maskError(err, false))
+			return e.failResponse(ctx, e.maskError(err, true))
 		}
 	}
 	return res
@@ -499,6 +494,11 @@ func (e *Executor) executeSelectionSet(ctx context.Context, object *schema.Objec
 		if len(fieldErrors) > 0 {
 			errors = append(errors, fieldErrors...)
 		}
+		if len(fieldErrors) > 0 && value == nil {
+			if field := object.Fields[selected.Name]; field != nil && !isNullableGraphQLType(field.Type) {
+				return nil, errors
+			}
+		}
 		if !wire {
 			continue
 		}
@@ -542,7 +542,7 @@ func (e *Executor) resolveSelectedField(ctx context.Context, object *schema.Obje
 		})
 		if err != nil {
 			e.notifyError(ctx, err)
-			return key, nil, []core.Error{newFieldError(e.maskError(err, false).Error(), fieldPath, selected.Location)}, false
+			return key, nil, []core.Error{newFieldError(e.maskError(err, false).Error(), fieldPath, selected.Location)}, true
 		}
 	}
 
@@ -560,7 +560,7 @@ func (e *Executor) resolveSelectedField(ctx context.Context, object *schema.Obje
 	for _, hook := range e.Plugins {
 		if err := hook.FieldResolveStart(ctx, fieldCtx); err != nil {
 			e.notifyError(ctx, err)
-			return key, nil, []core.Error{newFieldError(e.maskError(err, false).Error(), fieldPath, selected.Location)}, false
+			return key, nil, []core.Error{newFieldError(e.maskError(err, true).Error(), fieldPath, selected.Location)}, true
 		}
 	}
 
@@ -572,10 +572,10 @@ func (e *Executor) resolveSelectedField(ctx context.Context, object *schema.Obje
 	args, err := coerceArguments(field.Args, selected.Arguments)
 	if err != nil {
 		e.notifyError(ctx, err)
-		return key, nil, []core.Error{newFieldError(e.maskError(err, false).Error(), fieldPath, selected.Location)}, false
+		return key, nil, []core.Error{newFieldError(e.maskError(err, false).Error(), fieldPath, selected.Location)}, true
 	}
 
-	value, resolverErr := e.invokeResolver(ctx, arena, field, selected, source, args)
+	value, resolverErr := e.invokeResolver(ctx, arena, field, source, args)
 	var resolverMsgs []core.Error
 	if resolverErr != nil {
 		e.notifyError(ctx, resolverErr)
@@ -594,10 +594,10 @@ func (e *Executor) resolveSelectedField(ctx context.Context, object *schema.Obje
 			}
 		}
 	}
-	if !streamed {
+	if !streamed && resolverErr == nil {
 		resolved, nestedErrors = e.completeValue(ctx, field.Type, value, selected.Selections, fragments, fieldPath)
 	}
-	errs := append(resolverMsgs, nestedErrors...)
+	errs := append(resolverMsgs, completionErrorLocations(nestedErrors, selected.Location)...)
 
 	if traceFields {
 		for _, ender := range e.fieldEnders {
@@ -608,49 +608,19 @@ func (e *Executor) resolveSelectedField(ctx context.Context, object *schema.Obje
 		}
 	}
 
-	var wire bool
-	switch {
-	case resolverErr != nil:
-		wire = false // omit nullable key so root can serialize as full data:null
-	case len(errs) == 0:
-		wire = true
-	case resolved == nil && !isNullableGraphQLType(field.Type):
-		wire = false
-	default:
-		wire = true
-	}
-	return key, resolved, errs, wire
-}
-
-// resolveAbstractType resolves the concrete object type for an interface or
-// union value, consulting the configured AbstractTypeResolver first and falling
-// back to the schema's default reflection-based resolver.
-func (e *Executor) resolveAbstractType(abstractName string, value any, fallback func(any) (*schema.Object, error)) (*schema.Object, error) {
-	if e.abstractTypeResolver != nil {
-		name, err := e.abstractTypeResolver(value)
-		if err != nil {
-			return nil, err
-		}
-		if name != "" {
-			typ, ok := e.Schema.Types[name]
-			if !ok {
-				return nil, fmt.Errorf("abstract type resolver returned unknown type %q for %s", name, abstractName)
-			}
-			object, ok := typ.(*schema.Object)
-			if !ok {
-				return nil, fmt.Errorf("abstract type resolver returned non-object type %q for %s", name, abstractName)
-			}
-			return object, nil
-		}
-	}
-	return fallback(value)
+	return key, resolved, errs, true
 }
 
 // invokeResolver runs a field resolver, applying request-scoped memoization
 // when enabled and unwrapping any returned [schema.Thunk] (deferred value).
-func (e *Executor) invokeResolver(ctx context.Context, arena *pathArena, field *schema.Field, selected selection, source any, args map[string]any) (any, error) {
+func (e *Executor) invokeResolver(ctx context.Context, arena *pathArena, field *schema.Field, source any, args map[string]any) (any, error) {
+	if arena != nil && arena.parallelCache != nil {
+		if key, ok := resolverCacheKey(field, source, args); ok {
+			return arena.parallelCache.resolve(ctx, key, func() (any, error) { return e.callResolver(ctx, field, source, args) })
+		}
+	}
 	if arena != nil && arena.resolverCache != nil {
-		if key, ok := resolverCacheKey(field, source, selected.Arguments); ok {
+		if key, ok := resolverCacheKey(field, source, args); ok {
 			if entry, hit := arena.resolverCache[key]; hit {
 				return entry.value, entry.err
 			}
@@ -662,8 +632,15 @@ func (e *Executor) invokeResolver(ctx context.Context, arena *pathArena, field *
 	return e.callResolver(ctx, field, source, args)
 }
 
-func (e *Executor) callResolver(ctx context.Context, field *schema.Field, source any, args map[string]any) (any, error) {
-	value, err := field.Resolver(ctx, schema.ResolveParams{Source: source, Args: args})
+func (e *Executor) callResolver(ctx context.Context, field *schema.Field, source any, args map[string]any) (value any, err error) {
+	defer func() {
+		if recovered := recover(); recovered != nil {
+			value = nil
+			err = fmt.Errorf("panic during GraphQL field resolution: %v", recovered)
+			e.notifyError(ctx, fmt.Errorf("panic stack: %s", debug.Stack()))
+		}
+	}()
+	value, err = field.Resolver(ctx, schema.ResolveParams{Source: source, Args: args})
 	if err != nil {
 		return nil, err
 	}
@@ -681,17 +658,6 @@ func resolveThunk(value any) (any, error) {
 	default:
 		return value, nil
 	}
-}
-
-// resolverCacheKey builds a memoization key from the field, source identity, and
-// arguments. It returns ok=false when the source has no stable identity (so the
-// call must not be cached).
-func resolverCacheKey(field *schema.Field, source any, args map[string]any) (string, bool) {
-	sourceKey, ok := sourceIdentity(source)
-	if !ok {
-		return "", false
-	}
-	return field.Name + "\x00" + sourceKey + "\x00" + fmt.Sprint(args), true
 }
 
 func sourceIdentity(source any) (string, bool) {
@@ -730,31 +696,31 @@ func (e *Executor) completeValue(ctx context.Context, fieldType schema.Type, val
 	switch typed := fieldType.(type) {
 	case *schema.NonNull:
 		inner, errs := e.completeValue(ctx, typed.OfType, value, selections, fragments, path)
-		if len(errs) > 0 || inner == nil {
+		if inner == nil {
 			if len(errs) == 0 {
 				errs = []core.Error{newFieldError("non-null field resolved to null", path, core.Location{})}
 			}
 			return nil, errs
 		}
-		return inner, nil
+		return inner, errs
 	case *schema.List:
 		return e.completeList(ctx, typed.OfType, value, selections, fragments, path)
 	case *schema.Object:
-		return e.executeSelectionSet(ctx, typed, value, selections, fragments, path)
+		return e.completeObjectValue(ctx, typed, value, selections, fragments, path)
 	case *schema.Interface:
 		objectType, err := e.resolveAbstractType(typed.Name(), value, typed.Resolve)
 		if err != nil {
 			e.notifyError(ctx, err)
 			return nil, []core.Error{newFieldError(e.maskError(err, true).Error(), path, core.Location{})}
 		}
-		return e.executeSelectionSet(ctx, objectType, value, selections, fragments, path)
+		return e.completeObjectValue(ctx, objectType, value, selections, fragments, path)
 	case *schema.Union:
 		objectType, err := e.resolveAbstractType(typed.Name(), value, typed.Resolve)
 		if err != nil {
 			e.notifyError(ctx, err)
 			return nil, []core.Error{newFieldError(e.maskError(err, true).Error(), path, core.Location{})}
 		}
-		return e.executeSelectionSet(ctx, objectType, value, selections, fragments, path)
+		return e.completeObjectValue(ctx, objectType, value, selections, fragments, path)
 	case *schema.Enum:
 		serialized, err := typed.Serialize(value)
 		if err != nil {
@@ -784,6 +750,14 @@ func (e *Executor) completeValue(ctx context.Context, fieldType schema.Type, val
 	}
 }
 
+func (e *Executor) completeObjectValue(ctx context.Context, object *schema.Object, value any, selections []selection, fragments map[string]*fragmentDef, path []any) (any, []core.Error) {
+	data, errs := e.executeSelectionSet(ctx, object, value, selections, fragments, path)
+	if data == nil {
+		return nil, errs
+	}
+	return data, errs
+}
+
 func (e *Executor) completeList(ctx context.Context, itemType schema.Type, value any, selections []selection, fragments map[string]*fragmentDef, path []any) (any, []core.Error) {
 	arena := lookupPathArena(ctx)
 
@@ -810,10 +784,19 @@ func (e *Executor) completeList(ctx context.Context, itemType schema.Type, value
 					return objs[:index], append(errors, newFieldError(err.Error(), path, core.Location{}))
 				}
 				itemPath := extendAppendedPath(arena, path, index)
+				if raw.Index(index).IsNil() {
+					if !isNullableGraphQLType(itemType) {
+						return nil, append(errors, newFieldError("non-null field resolved to null", itemPath, core.Location{}))
+					}
+					continue
+				}
 				item, itemErrors := e.executeSelectionSet(ctx, gqlObj, raw.Index(index).Interface(), selections, fragments, itemPath)
 				objs[index] = item
 				if len(itemErrors) > 0 {
 					errors = append(errors, itemErrors...)
+					if item == nil && !isNullableGraphQLType(itemType) {
+						return nil, errors
+					}
 				}
 			}
 			return objs, errors
@@ -831,6 +814,9 @@ func (e *Executor) completeList(ctx context.Context, itemType schema.Type, value
 		items[index] = item
 		if len(itemErrors) > 0 {
 			errors = append(errors, itemErrors...)
+			if item == nil && !isNullableGraphQLType(itemType) {
+				return nil, errors
+			}
 		}
 	}
 	return items, errors
@@ -842,7 +828,7 @@ func (e *Executor) startRequest(ctx context.Context, req core.Request) (context.
 		ctx, err = hook.RequestStart(ctx, req)
 		if err != nil {
 			e.notifyError(ctx, err)
-			return ctx, err
+			return ctx, e.maskError(err, true)
 		}
 	}
 	return ctx, nil
@@ -852,7 +838,7 @@ func (e *Executor) notifyParsing(ctx context.Context, req core.Request) error {
 	for _, hook := range e.Plugins {
 		if err := hook.ParsingStart(ctx, req); err != nil {
 			e.notifyError(ctx, err)
-			return err
+			return e.maskError(err, true)
 		}
 	}
 	return nil
@@ -862,7 +848,7 @@ func (e *Executor) notifyValidation(ctx context.Context, req core.Request) error
 	for _, hook := range e.Plugins {
 		if err := hook.ValidationStart(ctx, req); err != nil {
 			e.notifyError(ctx, err)
-			return err
+			return e.maskError(err, true)
 		}
 	}
 	return nil
@@ -872,7 +858,7 @@ func (e *Executor) notifyExecution(ctx context.Context, req core.Request) error 
 	for _, hook := range e.Plugins {
 		if err := hook.ExecutionStart(ctx, req); err != nil {
 			e.notifyError(ctx, err)
-			return err
+			return e.maskError(err, true)
 		}
 	}
 	return nil

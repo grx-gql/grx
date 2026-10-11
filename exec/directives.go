@@ -101,7 +101,7 @@ func (e *Executor) flattenSelections(collectDefers bool, object *schema.Object, 
 				errs = append(errs, newFieldError(fmt.Sprintf(`Unknown fragment "%s".`, s.FragmentSpread), nil, s.Location))
 				continue
 			}
-			if !fragmentTypeMatches(object, fd.TypeCondition) {
+			if !e.matchesTypeCondition(object, fd.TypeCondition) {
 				continue
 			}
 			if collectDefers {
@@ -115,7 +115,7 @@ func (e *Executor) flattenSelections(collectDefers bool, object *schema.Object, 
 			defers = append(defers, innerDefers...)
 			out = appendMergedSelections(out, inner)
 		case s.isInlineFragment():
-			if s.InlineFragmentOn != "" && !fragmentTypeMatches(object, s.InlineFragmentOn) {
+			if s.InlineFragmentOn != "" && !e.matchesTypeCondition(object, s.InlineFragmentOn) {
 				continue
 			}
 			if collectDefers {

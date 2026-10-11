@@ -140,7 +140,20 @@ func Build(config Config) (*Schema, error) {
 		return nil, errors.New("schema requires a query root")
 	}
 
+	if validationErrors := ValidateSchema(result); len(validationErrors) > 0 {
+		errs := make([]error, len(validationErrors))
+		for index, validationError := range validationErrors {
+			errs[index] = validationError
+		}
+		return nil, errors.Join(errs...)
+	}
 	registerIntrospectionTypes(builder.types)
+	result.introspectionTypes = make(map[string]Type, 8)
+	for name, typ := range builder.types {
+		if isBuiltinReservedType(name) {
+			result.introspectionTypes[name] = typ
+		}
+	}
 	return result, nil
 }
 
@@ -196,6 +209,8 @@ func (b *Builder) registerScalars(configs []ScalarConfig) error {
 			TypeName:       config.Name,
 			SpecifiedByURL: config.SpecifiedByURL,
 			serializeFn:    config.Serialize,
+			parseFn:        config.Parse,
+			inputGoType:    goType,
 		}
 		b.types[config.Name] = scalar
 		b.scalars[goType] = customScalar{scalar: scalar, parse: config.Parse}
@@ -965,7 +980,7 @@ func (b *Builder) parseDefaultValue(goType reflect.Type, raw string) (any, error
 		return enumType.Parse(raw)
 	}
 	if scalar, ok := b.scalars[baseType]; ok {
-		return scalar.parse(raw)
+		return scalar.scalar.Parse(raw)
 	}
 
 	switch baseType.Kind() {

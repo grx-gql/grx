@@ -21,7 +21,7 @@ func (e *Executor) HasIncrementalDirectives(req core.Request) bool {
 	if err != nil {
 		return false
 	}
-	return selectionsUseIncremental(doc.Selections, bundle.fragments, map[string]bool{})
+	return selectionsUseIncremental(doc.Selections, doc.Fragments, map[string]bool{})
 }
 
 func selectionsUseIncremental(selections []selection, fragments map[string]*fragmentDef, seen map[string]bool) bool {
@@ -150,6 +150,9 @@ func (e *Executor) completeListStreamed(ctx context.Context, itemType schema.Typ
 		items = append(items, item)
 		if len(itemErrors) > 0 {
 			errs = append(errs, itemErrors...)
+			if item == nil && !isNullableGraphQLType(itemType) {
+				return nil, errs
+			}
 		}
 	}
 
@@ -164,10 +167,34 @@ func (e *Executor) completeListStreamed(ctx context.Context, itemType schema.Typ
 // initial response's HasNext is set to true when at least one payload follows.
 // Callers that detect no incremental directives should prefer [Executor.Execute].
 func (e *Executor) ExecuteIncremental(ctx context.Context, req core.Request) (core.Response, []core.IncrementalPayload) {
+	var initial core.Response
+	var payloads []core.IncrementalPayload
+	err := e.ExecuteIncrementalStream(ctx, req, func(response core.Response) error {
+		initial = response
+		return nil
+	}, func(payload core.IncrementalPayload, _ bool) error {
+		payloads = append(payloads, payload)
+		return nil
+	})
+	if err != nil {
+		initial.Errors = append(initial.Errors, core.NewRequestError(err))
+		hasNext := false
+		initial.HasNext = &hasNext
+	}
+	return initial, payloads
+}
+
+// ExecuteIncrementalStream emits the initial response before completing pending
+// @defer/@stream work. Callbacks run synchronously while execution state is alive;
+// callback errors and context cancellation stop all remaining work.
+func (e *Executor) ExecuteIncrementalStream(ctx context.Context, req core.Request, emitInitial func(core.Response) error, emitPatch func(core.IncrementalPayload, bool) error) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	preparedCtx, root, doc, short := e.prepareExecution(ctx, req)
 	ctx = preparedCtx
 	if short != nil {
-		return *short, nil
+		return emitInitial(*short)
 	}
 
 	collector := &incrementalCollector{}
@@ -189,17 +216,35 @@ func (e *Executor) ExecuteIncremental(ctx context.Context, req core.Request) (co
 		initial.Errors = nil
 	}
 
-	var payloads []core.IncrementalPayload
-	for len(collector.work) > 0 {
-		item := collector.work[0]
-		collector.work = collector.work[1:]
-		payloads = append(payloads, e.runIncrementalWork(ctx, item))
-	}
-
-	hasNext := len(payloads) > 0
+	hasNext := len(collector.work) > 0
 	initial.HasNext = &hasNext
 	initial = e.sendResponse(ctx, initial)
-	return initial, payloads
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if err := emitInitial(initial); err != nil {
+		return err
+	}
+	// A response hook can replace the initial response with an error response.
+	if initial.HasNext == nil || !*initial.HasNext {
+		return ctx.Err()
+	}
+	for len(collector.work) > 0 {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		item := collector.work[0]
+		collector.work[0] = incrementalWork{}
+		collector.work = collector.work[1:]
+		payload := e.runIncrementalWork(ctx, item)
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		if err := emitPatch(payload, len(collector.work) > 0); err != nil {
+			return err
+		}
+	}
+	return ctx.Err()
 }
 
 func (e *Executor) runIncrementalWork(ctx context.Context, item incrementalWork) core.IncrementalPayload {
@@ -207,6 +252,17 @@ func (e *Executor) runIncrementalWork(ctx context.Context, item incrementalWork)
 	if item.stream {
 		value, errs := e.completeValue(ctx, item.itemType, item.itemVal, item.selections, item.fragments, item.path)
 		payload.Items = []any{value}
+		if value == nil {
+			nullPath := item.path
+			if !isNullableGraphQLType(item.itemType) {
+				payload.Items = nil
+				payload.ItemsNull = true
+				nullPath = item.path[:len(item.path)-1]
+			}
+			if collector := arenaCollector(lookupPathArena(ctx)); collector != nil {
+				collector.work = incrementalWorkOutsidePath(collector.work, nullPath)
+			}
+		}
 		if len(errs) > 0 {
 			payload.Errors = errs
 		}
@@ -214,8 +270,37 @@ func (e *Executor) runIncrementalWork(ctx context.Context, item incrementalWork)
 	}
 	data, errs := e.executeSelectionSet(ctx, item.object, item.source, item.selections, item.fragments, item.path)
 	payload.Data = data
+	if data == nil {
+		if collector := arenaCollector(lookupPathArena(ctx)); collector != nil {
+			collector.work = incrementalWorkOutsidePath(collector.work, item.path)
+		}
+	}
 	if len(errs) > 0 {
 		payload.Errors = errs
 	}
 	return payload
+}
+
+// incrementalWorkOutsidePath removes pending work below a failed response
+// position without discarding independent streams or deferred fragments.
+func incrementalWorkOutsidePath(work []incrementalWork, path []any) []incrementalWork {
+	remaining := make([]incrementalWork, 0, len(work))
+	for _, item := range work {
+		if !incrementalPathContains(path, item.path) {
+			remaining = append(remaining, item)
+		}
+	}
+	return remaining
+}
+
+func incrementalPathContains(parent, child []any) bool {
+	if len(child) < len(parent) {
+		return false
+	}
+	for index, part := range parent {
+		if child[index] != part {
+			return false
+		}
+	}
+	return true
 }

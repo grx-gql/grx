@@ -81,6 +81,7 @@ type sdlFieldDef struct {
 }
 
 type sdlArgDef struct {
+	directives   []directive
 	name         string
 	description  string
 	typeRef      sdlTypeRef
@@ -96,6 +97,7 @@ type sdlEnumValueDef struct {
 
 // sdlDef holds one parsed SDL definition (or extend).
 type sdlDef struct {
+	args        []sdlArgDef
 	kind        string // "scalar","type","interface","union","enum","input","schema","directive"
 	isExtend    bool
 	name        string
@@ -245,9 +247,12 @@ func (p *sdlParser) parseInterfaceDef(description string, isExtend bool) (sdlDef
 	if err != nil {
 		return sdlDef{}, err
 	}
-	fields, err := p.parseFieldDefs()
-	if err != nil {
-		return sdlDef{}, err
+	var fields []sdlFieldDef
+	if !isExtend || p.peek().kind == tokenBraceOpen {
+		fields, err = p.parseFieldDefs()
+		if err != nil {
+			return sdlDef{}, err
+		}
 	}
 	return sdlDef{kind: "interface", isExtend: isExtend, name: nameTok.value, description: description, interfaces: implements, directives: dirs, fields: fields}, nil
 }
@@ -291,6 +296,9 @@ func (p *sdlParser) parseEnumDef(description string, isExtend bool) (sdlDef, err
 	if err != nil {
 		return sdlDef{}, err
 	}
+	if isExtend && p.peek().kind != tokenBraceOpen {
+		return sdlDef{kind: "enum", isExtend: true, name: nameTok.value, directives: dirs}, nil
+	}
 	if _, err := p.expect(tokenBraceOpen); err != nil {
 		return sdlDef{}, err
 	}
@@ -327,9 +335,12 @@ func (p *sdlParser) parseInputDef(description string, isExtend bool) (sdlDef, er
 	if err != nil {
 		return sdlDef{}, err
 	}
-	fields, err := p.parseInputFieldDefs()
-	if err != nil {
-		return sdlDef{}, err
+	var fields []sdlFieldDef
+	if !isExtend || p.peek().kind == tokenBraceOpen {
+		fields, err = p.parseInputFieldDefs()
+		if err != nil {
+			return sdlDef{}, err
+		}
 	}
 	return sdlDef{kind: "input", isExtend: isExtend, name: nameTok.value, description: description, directives: dirs, fields: fields}, nil
 }
@@ -412,18 +423,13 @@ func (p *sdlParser) parseDirectiveDef(description string) (sdlDef, error) {
 			break
 		}
 	}
-	// Build args as sdlFieldDefs for storage in the sdlDef
-	argFields := make([]sdlFieldDef, 0, len(args))
-	for _, a := range args {
-		argFields = append(argFields, sdlFieldDef{name: a.name, description: a.description, typeRef: a.typeRef})
-	}
 	return sdlDef{
 		kind:         "directive",
 		name:         nameTok.value,
 		description:  description,
 		isRepeatable: isRepeatable,
 		locations:    locations,
-		fields:       argFields,
+		args:         args,
 	}, nil
 }
 
@@ -507,6 +513,7 @@ func (p *sdlParser) parseInputFieldDefs() ([]sdlFieldDef, error) {
 			// Reuse the executable parser's const-value parser via a temp parser.
 			ep := &parser{tokens: p.tokens, index: p.index, source: p.source}
 			defaultVal, err = ep.parseConstValue()
+			defaultVal = resolveValueVariableRef(defaultVal)
 			if err != nil {
 				return nil, err
 			}
@@ -563,29 +570,19 @@ func (p *sdlParser) parseSDLArgDefs() ([]sdlArgDef, error) {
 			p.next()
 			ep := &parser{tokens: p.tokens, index: p.index, source: p.source}
 			defaultVal, err = ep.parseConstValue()
+			defaultVal = resolveValueVariableRef(defaultVal)
 			if err != nil {
 				return nil, err
 			}
 			p.index = ep.index
 			hasDefault = true
 		}
-		// Discard directives on arg definitions.
-		dirs := make([]directive, 0)
-		for p.peek().kind == tokenAt {
-			p.next()
-			if _, err2 := p.expect(tokenName); err2 != nil {
-				return nil, err2
-			}
-			if p.peek().kind == tokenParenOpen {
-				ep := &parser{tokens: p.tokens, index: p.index, source: p.source}
-				if _, err2 := ep.parseArguments(); err2 != nil {
-					return nil, err2
-				}
-				p.index = ep.index
-			}
+		dirs, err := p.parseSDLDirectives()
+		if err != nil {
+			return nil, err
 		}
-		_ = dirs
-		args = append(args, sdlArgDef{name: nameTok.value, description: desc, typeRef: typeRef, defaultValue: defaultVal, hasDefault: hasDefault})
+
+		args = append(args, sdlArgDef{name: nameTok.value, description: desc, typeRef: typeRef, defaultValue: defaultVal, hasDefault: hasDefault, directives: dirs})
 	}
 	p.next() // consume )
 	return args, nil
@@ -638,7 +635,7 @@ func (p *sdlParser) parseSDLDirectives() ([]directive, error) {
 				return nil, err
 			}
 			p.index = ep.index
-			d.Args = args
+			d.Args = resolveValueVariableRef(args).(map[string]any)
 		}
 		out = append(out, d)
 	}
@@ -668,7 +665,7 @@ func buildSchemaFromDefs(defs []sdlDef) (*schema.Schema, error) {
 		}
 		switch def.kind {
 		case "scalar":
-			s := &schema.Scalar{TypeName: def.name, Description: def.description}
+			s := &schema.Scalar{TypeName: def.name, Description: def.description, Directives: appliedSDLDirectives(def.directives)}
 			for _, d := range def.directives {
 				if d.Name == "specifiedBy" {
 					if url, ok := stringArg(d.Args, "url"); ok {
@@ -682,10 +679,10 @@ func buildSchemaFromDefs(defs []sdlDef) (*schema.Schema, error) {
 		case "interface":
 			types[def.name] = &schema.Interface{TypeName: def.name, Description: def.description, Fields: map[string]*schema.Field{}}
 		case "union":
-			types[def.name] = &schema.Union{TypeName: def.name, Description: def.description}
+			types[def.name] = &schema.Union{TypeName: def.name, Description: def.description, Directives: appliedSDLDirectives(def.directives)}
 		case "enum":
 			ev := buildEnumValues(def.enumValues)
-			e := &schema.Enum{TypeName: def.name, Description: def.description, Values: ev}
+			e := &schema.Enum{TypeName: def.name, Description: def.description, Values: ev, Directives: appliedSDLDirectives(def.directives)}
 			types[def.name] = e
 		case "input":
 			types[def.name] = &schema.InputObject{TypeName: def.name, Description: def.description, Fields: map[string]*schema.Field{}}
@@ -708,6 +705,7 @@ func buildSchemaFromDefs(defs []sdlDef) (*schema.Schema, error) {
 			}
 		case "interface":
 			iface := types[def.name].(*schema.Interface)
+			iface.Directives = appliedSDLDirectives(def.directives)
 			if err := populateInterfaceFields(iface, def, types); err != nil {
 				return nil, err
 			}
@@ -742,13 +740,12 @@ func buildSchemaFromDefs(defs []sdlDef) (*schema.Schema, error) {
 				Locations:    def.locations,
 				IsRepeatable: def.isRepeatable,
 			}
-			for _, f := range def.fields {
-				argType, err := f.typeRef.resolve(types)
-				if err != nil {
-					return nil, err
-				}
-				dd.Args = append(dd.Args, schema.InputValue{Name: f.name, Description: f.description, Type: argType})
+			args, err := buildFieldArgs(def.args, types)
+			if err != nil {
+				return nil, err
 			}
+			dd.Args = args
+
 			dirDefs[def.name] = dd
 		}
 	}
@@ -758,21 +755,8 @@ func buildSchemaFromDefs(defs []sdlDef) (*schema.Schema, error) {
 		if !def.isExtend {
 			continue
 		}
-		switch def.kind {
-		case "type":
-			obj, ok := types[def.name].(*schema.Object)
-			if !ok {
-				return nil, fmt.Errorf("cannot extend unknown type %q", def.name)
-			}
-			if err := populateObjectFields(obj, def, types); err != nil {
-				return nil, err
-			}
-		case "input":
-			inputObj, ok := types[def.name].(*schema.InputObject)
-			if !ok {
-				return nil, fmt.Errorf("cannot extend unknown input type %q", def.name)
-			}
-			if err := populateInputFields(inputObj, def, types); err != nil {
+		if def.kind != "schema" {
+			if err := extendSDLType(def, types); err != nil {
 				return nil, err
 			}
 		}
@@ -784,6 +768,7 @@ func buildSchemaFromDefs(defs []sdlDef) (*schema.Schema, error) {
 	// First check for explicit schema definition.
 	for _, def := range defs {
 		if def.kind == "schema" {
+			s.Directives = append(s.Directives, appliedSDLDirectives(def.directives)...)
 			if def.schemaQuery != "" {
 				t, ok := types[def.schemaQuery]
 				if !ok {
@@ -933,7 +918,11 @@ func populateInterfaceFields(iface *schema.Interface, def sdlDef, types map[stri
 		if err != nil {
 			return err
 		}
-		iface.Fields[f.name] = &schema.Field{Name: f.name, Description: f.description, Type: fieldType}
+		args, err := buildFieldArgs(f.args, types)
+		if err != nil {
+			return err
+		}
+		iface.Fields[f.name] = &schema.Field{Name: f.name, Description: f.description, Type: fieldType, Args: args, Directives: appliedSDLDirectives(f.directives)}
 	}
 	// Wire up interface implements interface.
 	for _, ifaceName := range def.interfaces {
@@ -956,7 +945,7 @@ func populateInputFields(inputObj *schema.InputObject, def sdlDef, types map[str
 		if err != nil {
 			return err
 		}
-		schemaField := &schema.Field{Name: f.name, Description: f.description, Type: fieldType}
+		schemaField := &schema.Field{Name: f.name, Description: f.description, Type: fieldType, Directives: appliedSDLDirectives(f.directives)}
 		// Default value stored in args[0] for input fields (see parseInputFieldDefs).
 		if len(f.args) > 0 && f.args[0].hasDefault {
 			schemaField.DefaultValue = f.args[0].defaultValue
@@ -985,6 +974,17 @@ func buildFieldArgs(args []sdlArgDef, types map[string]schema.Type) ([]schema.In
 		if a.hasDefault {
 			iv.DefaultValue = a.defaultValue
 		}
+		for _, d := range a.directives {
+			iv.Directives = append(iv.Directives, schema.AppliedDirective{Name: d.Name, Args: d.Args})
+			if d.Name == "deprecated" {
+				iv.IsDeprecated = true
+				reason := "No longer supported"
+				if supplied, ok := stringArg(d.Args, "reason"); ok {
+					reason = supplied
+				}
+				iv.DeprecationReason = &reason
+			}
+		}
 		result = append(result, iv)
 	}
 	return result, nil
@@ -993,7 +993,7 @@ func buildFieldArgs(args []sdlArgDef, types map[string]schema.Type) ([]schema.In
 func buildEnumValues(defs []sdlEnumValueDef) []schema.EnumValue {
 	values := make([]schema.EnumValue, 0, len(defs))
 	for _, d := range defs {
-		ev := schema.EnumValue{Name: d.name, Description: d.description}
+		ev := schema.EnumValue{Name: d.name, Description: d.description, Directives: appliedSDLDirectives(d.directives)}
 		for _, dir := range d.directives {
 			if dir.Name == "deprecated" {
 				ev.IsDeprecated = true
@@ -1037,6 +1037,9 @@ func validateSDLTypeRefs(defs []sdlDef, types map[string]schema.Type) error {
 		}
 	}
 	for _, def := range defs {
+		for _, a := range def.args {
+			checkRef(a.typeRef)
+		}
 		for _, f := range def.fields {
 			if def.kind == "directive" {
 				checkRef(f.typeRef)

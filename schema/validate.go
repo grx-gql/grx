@@ -15,6 +15,7 @@ func (e SchemaError) Error() string { return e.Message }
 // ValidateSchema checks a built schema for common type-system constraint
 // violations. It is called automatically by [Build]; callers building
 // schemas manually (e.g. via an SDL parser) should call it explicitly.
+// Partial tooling schemas may omit operation roots; Build requires a query root.
 func ValidateSchema(s *Schema) []SchemaError {
 	if s == nil {
 		return nil
@@ -23,7 +24,7 @@ func ValidateSchema(s *Schema) []SchemaError {
 
 	for name := range s.Types {
 		// Reserved prefix: names starting with "__" are forbidden for user-defined types.
-		if strings.HasPrefix(name, "__") && !isBuiltinReservedType(name) {
+		if strings.HasPrefix(name, "__") && s.introspectionTypes[name] != s.Types[name] {
 			errs = append(errs, SchemaError{
 				Message: fmt.Sprintf("Type %q must not begin with \"__\", which is reserved by GraphQL introspection.", name),
 			})
@@ -31,7 +32,7 @@ func ValidateSchema(s *Schema) []SchemaError {
 	}
 
 	for name, t := range s.Types {
-		if strings.HasPrefix(name, "__") {
+		if strings.HasPrefix(name, "__") && s.introspectionTypes[name] == t {
 			continue
 		}
 		switch typed := t.(type) {
@@ -48,6 +49,13 @@ func ValidateSchema(s *Schema) []SchemaError {
 		}
 	}
 
+	for name, directive := range s.DirectiveDefinitions {
+		errs = append(errs, validateSchemaName("Directive", name)...)
+		for _, arg := range directive.Args {
+			errs = append(errs, validateInputValue("@"+name, arg)...)
+		}
+	}
+	errs = append(errs, validateRequiredInputCycles(s.Types)...)
 	return errs
 }
 
@@ -67,13 +75,8 @@ func validateObject(o *Object) []SchemaError {
 			Message: fmt.Sprintf("Object type %q must define one or more fields.", o.TypeName),
 		})
 	}
-	for fname := range o.Fields {
-		if strings.HasPrefix(fname, "__") {
-			errs = append(errs, SchemaError{
-				Message: fmt.Sprintf("Field %q on type %q must not begin with \"__\".", fname, o.TypeName),
-			})
-		}
-	}
+	errs = append(errs, validateOutputFields(o.TypeName, o.Fields)...)
+	errs = append(errs, validateImplementedInterfaces(o.TypeName, o.Fields, o.Interfaces)...)
 	return errs
 }
 
@@ -84,6 +87,8 @@ func validateInterface(i *Interface) []SchemaError {
 			Message: fmt.Sprintf("Interface type %q must define one or more fields.", i.TypeName),
 		})
 	}
+	errs = append(errs, validateOutputFields(i.TypeName, i.Fields)...)
+	errs = append(errs, validateImplementedInterfaces(i.TypeName, i.Fields, i.Interfaces)...)
 	return errs
 }
 
@@ -93,6 +98,15 @@ func validateInputObject(io *InputObject) []SchemaError {
 		errs = append(errs, SchemaError{
 			Message: fmt.Sprintf("Input object type %q must define one or more fields.", io.TypeName),
 		})
+	}
+	for name, field := range io.Fields {
+		errs = append(errs, validateInputValue(io.TypeName, InputValue{Name: name, Type: field.Type, DefaultValue: field.DefaultValue, IsDeprecated: field.IsDeprecated})...)
+		if io.IsOneOf {
+			_, required := field.Type.(*NonNull)
+			if required || field.DefaultValue != nil {
+				errs = append(errs, SchemaError{Message: fmt.Sprintf("OneOf field %s.%s must be nullable and have no default.", io.TypeName, name)})
+			}
+		}
 	}
 	return errs
 }
@@ -115,6 +129,7 @@ func validateEnum(e *Enum) []SchemaError {
 		})
 	}
 	for _, v := range e.Values {
+		errs = append(errs, validateSchemaName("Enum value", v.Name)...)
 		if v.Name == "true" || v.Name == "false" || v.Name == "null" {
 			errs = append(errs, SchemaError{
 				Message: fmt.Sprintf("Enum type %q cannot include value %q.", e.TypeName, v.Name),
