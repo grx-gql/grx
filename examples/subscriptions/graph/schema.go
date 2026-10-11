@@ -1,7 +1,7 @@
 package graph
 
 import (
-	"github.com/grx-gql/grx/memory-pubsub"
+	"github.com/grx-gql/grx/pubsub"
 	"github.com/grx-gql/grx/schema"
 )
 
@@ -9,15 +9,19 @@ import (
 type SchemaOption func(*schemaOptions)
 
 type schemaOptions struct {
-	bus pubsub.PubSub
+	events Events
 }
 
-// WithPubSub wires the typed pub/sub bridge used by mutation and subscription
-// resolvers. Required for this example schema, which publishes across
-// resolvers via [pubsub](https://pkg.go.dev/github.com/grx-gql/grx/memory-pubsub).
-func WithPubSub(bus pubsub.PubSub) SchemaOption {
+// Events holds the pub/sub bus used by mutation and subscription resolvers.
+type Events struct {
+	Bus pubsub.PubSub
+}
+
+// WithEvents wires the pub/sub bus used by mutation and subscription
+// resolvers. Required for this example schema.
+func WithEvents(events Events) SchemaOption {
 	return func(o *schemaOptions) {
-		o.bus = bus
+		o.events = events
 	}
 }
 
@@ -32,8 +36,8 @@ type Query struct {
 
 // Mutation is the schema's root mutation type. Embed each entity's
 // <Entity>Mutation struct to expose its mutation fields. Mutations
-// that publish domain events take a typed pubsub dependency so
-// subscriptions can fan the events out to connected clients.
+// that publish domain events take a pubsub dependency so subscriptions
+// can fan the events out to connected clients.
 type Mutation struct {
 	*UserMutation
 	PostMutation
@@ -42,45 +46,40 @@ type Mutation struct {
 
 // Subscription is the schema's root subscription type. Each entity
 // that publishes streams contributes its own <Entity>Subscription
-// struct, receiving the same typed bus instance as the matching
-// mutation so events flow end-to-end.
+// struct, receiving the same bus instance as the matching mutation
+// so events flow end-to-end.
 type Subscription struct {
 	UserSubscription
 	MessageSubscription
 }
 
-// New composes schema.Config using functional options such as [WithPubSub].
-// Which URL path listens for subscriptions (WebSocket/SSE vs POST JSON) is
-// configured on the HTTP server ([server.Config.SubscriptionPath]), not here.
+// New composes schema.Config using functional options such as [WithEvents].
 func New(opts ...SchemaOption) schema.Config {
 	var o schemaOptions
 	for _, apply := range opts {
 		apply(&o)
 	}
-	if o.bus == nil {
-		panic("graph: WithPubSub is required for this schema (mutations/subscriptions publish through pubsub)")
+	if o.events.Bus == nil {
+		panic("graph: WithEvents is required for this schema (mutations/subscriptions publish through pubsub)")
 	}
-	return wiredSchema(o.bus)
+	return wiredSchema(o.events)
 }
 
-func wiredSchema(bus pubsub.PubSub) schema.Config {
-	users := pubsub.NewTyped[*User](bus)
-	messages := pubsub.NewTyped[*Message](bus)
-
+func wiredSchema(events Events) schema.Config {
 	return schema.Config{
 		Query: Query{},
 		Mutation: Mutation{
-			UserMutation:    &UserMutation{Bus: users},
-			MessageMutation: &MessageMutation{Bus: messages},
+			UserMutation:    &UserMutation{Bus: events.Bus},
+			MessageMutation: &MessageMutation{Bus: events.Bus},
 		},
 		Subscription: Subscription{
-			UserSubscription:    UserSubscription{Bus: users},
-			MessageSubscription: MessageSubscription{Bus: messages},
+			UserSubscription:    UserSubscription{Bus: events.Bus},
+			MessageSubscription: MessageSubscription{Bus: events.Bus},
 		},
 	}
 }
 
-// NewSchema is equivalent to New(WithPubSub(bus)).
-func NewSchema(bus pubsub.PubSub) schema.Config {
-	return New(WithPubSub(bus))
+// NewSchema is equivalent to New(WithEvents(events)).
+func NewSchema(events Events) schema.Config {
+	return New(WithEvents(events))
 }

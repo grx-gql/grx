@@ -28,7 +28,7 @@ import (
 	subscriptiongraph "github.com/grx-gql/grx/examples/subscriptions/graph"
 	"github.com/grx-gql/grx/exec"
 	grxhttp "github.com/grx-gql/grx/http"
-	"github.com/grx-gql/grx/memory-pubsub"
+	"github.com/grx-gql/grx/in-memory"
 	"github.com/grx-gql/grx/middlewares"
 	"github.com/grx-gql/grx/plugins"
 	"github.com/grx-gql/grx/schema"
@@ -175,12 +175,17 @@ func TestServeHTTPPreservesSelectionOrderInJSONResponse(t *testing.T) {
 	assertOrderedSubstring(t, body, `"id":"user_42"`, `"email":"ada@example.com"`)
 }
 
+func newSubscriptionTestEvents(t *testing.T) subscriptiongraph.Events {
+	t.Helper()
+	bus := memory.New()
+	t.Cleanup(func() { _ = bus.Close() })
+	return subscriptiongraph.Events{Bus: bus}
+}
+
 func newTestServer(t *testing.T) *Server {
 	t.Helper()
 
-	bus := pubsub.NewMemory()
-	t.Cleanup(func() { _ = bus.Close() })
-	server, err := New(Config{Schema: subscriptiongraph.New(subscriptiongraph.WithPubSub(bus))})
+	server, err := New(Config{Schema: subscriptiongraph.New(subscriptiongraph.WithEvents(newSubscriptionTestEvents(t)))})
 	if err != nil {
 		t.Fatalf("new server: %v", err)
 	}
@@ -399,10 +404,9 @@ func readWebSocketHandshakeStatus(t *testing.T, baseURL string, requestPath stri
 }
 
 func TestSeparateSubscriptionPathWebSocketRouting(t *testing.T) {
-	bus := pubsub.NewMemory()
-	t.Cleanup(func() { _ = bus.Close() })
+	events := newSubscriptionTestEvents(t)
 	srv, err := New(Config{
-		Schema:           subscriptiongraph.New(subscriptiongraph.WithPubSub(bus)),
+		Schema:           subscriptiongraph.New(subscriptiongraph.WithEvents(events)),
 		SubscriptionPath: "/graphql/ws",
 		Transports:       []core.Transport{websocket.New()},
 	})
@@ -422,10 +426,9 @@ func TestSeparateSubscriptionPathWebSocketRouting(t *testing.T) {
 }
 
 func TestSubscriptionPathSeparateWithoutStreamingTransportErrors(t *testing.T) {
-	bus := pubsub.NewMemory()
-	t.Cleanup(func() { _ = bus.Close() })
+	events := newSubscriptionTestEvents(t)
 	_, err := New(Config{
-		Schema:           subscriptiongraph.New(subscriptiongraph.WithPubSub(bus)),
+		Schema:           subscriptiongraph.New(subscriptiongraph.WithEvents(events)),
 		SubscriptionPath: "/subs",
 		Transports:       nil,
 	})
@@ -450,10 +453,9 @@ func TestGraphQLOptionsReturnsAllow(t *testing.T) {
 }
 
 func TestDisableIntrospectionRejectsSchemaQuery(t *testing.T) {
-	bus := pubsub.NewMemory()
-	t.Cleanup(func() { _ = bus.Close() })
+	events := newSubscriptionTestEvents(t)
 	srv, err := New(Config{
-		Schema:               subscriptiongraph.New(subscriptiongraph.WithPubSub(bus)),
+		Schema:               subscriptiongraph.New(subscriptiongraph.WithEvents(events)),
 		DisableIntrospection: true,
 	})
 	if err != nil {
@@ -483,10 +485,9 @@ func (blockPlugin) ValidationStart(ctx context.Context, req core.Request) error 
 }
 
 func TestRequestTimeoutStopsSlowValidation(t *testing.T) {
-	bus := pubsub.NewMemory()
-	t.Cleanup(func() { _ = bus.Close() })
+	events := newSubscriptionTestEvents(t)
 	srv, err := New(Config{
-		Schema:         subscriptiongraph.New(subscriptiongraph.WithPubSub(bus)),
+		Schema:         subscriptiongraph.New(subscriptiongraph.WithEvents(events)),
 		Plugins:        []plugins.Plugin{blockPlugin{}},
 		RequestTimeout: 50 * time.Millisecond,
 	})
@@ -518,13 +519,12 @@ func (p *ridPlugin) ParsingStart(ctx context.Context, req core.Request) error {
 }
 
 func TestRequestIDMiddlewarePropagatesContext(t *testing.T) {
-	bus := pubsub.NewMemory()
-	t.Cleanup(func() { _ = bus.Close() })
+	events := newSubscriptionTestEvents(t)
 	p := &ridPlugin{t: t}
 	srv, err := New(Config{
-		Schema:     subscriptiongraph.New(subscriptiongraph.WithPubSub(bus)),
+		Schema:     subscriptiongraph.New(subscriptiongraph.WithEvents(events)),
 		Plugins:    []plugins.Plugin{p},
-		Middleware: []Middleware{Middleware(middlewares.RequestID("X-Request-Id"))},
+		Middleware: []Middleware{middlewares.RequestID("X-Request-Id")},
 	})
 	if err != nil {
 		t.Fatalf("new server: %v", err)
@@ -551,11 +551,10 @@ func (r *errorRecorder) Error(ctx context.Context, err error) {
 }
 
 func TestSecurityMasksResolverErrorsAndPreservesRawError(t *testing.T) {
-	bus := pubsub.NewMemory()
-	t.Cleanup(func() { _ = bus.Close() })
+	events := newSubscriptionTestEvents(t)
 	recorder := &errorRecorder{}
 	srv, err := New(Config{
-		Schema:             subscriptiongraph.New(subscriptiongraph.WithPubSub(bus)),
+		Schema:             subscriptiongraph.New(subscriptiongraph.WithEvents(events)),
 		Plugins:            []plugins.Plugin{recorder},
 		MaskInternalErrors: true,
 		ClientErrorMessage: "hidden",
@@ -578,10 +577,9 @@ func TestSecurityMasksResolverErrorsAndPreservesRawError(t *testing.T) {
 }
 
 func TestSecurityOperationAuthorizerRejectsOperation(t *testing.T) {
-	bus := pubsub.NewMemory()
-	t.Cleanup(func() { _ = bus.Close() })
+	events := newSubscriptionTestEvents(t)
 	srv, err := New(Config{
-		Schema: subscriptiongraph.New(subscriptiongraph.WithPubSub(bus)),
+		Schema: subscriptiongraph.New(subscriptiongraph.WithEvents(events)),
 		OperationAuthorizer: func(ctx context.Context, operation exec.OperationContext) error {
 			if operation.Kind == core.OperationMutation {
 				return errors.New("mutation denied")
@@ -604,10 +602,9 @@ func TestSecurityOperationAuthorizerRejectsOperation(t *testing.T) {
 }
 
 func TestSecurityFieldAuthorizerRejectsField(t *testing.T) {
-	bus := pubsub.NewMemory()
-	t.Cleanup(func() { _ = bus.Close() })
+	events := newSubscriptionTestEvents(t)
 	srv, err := New(Config{
-		Schema: subscriptiongraph.New(subscriptiongraph.WithPubSub(bus)),
+		Schema: subscriptiongraph.New(subscriptiongraph.WithEvents(events)),
 		FieldAuthorizer: func(ctx context.Context, field exec.FieldAuthorizationContext) error {
 			if field.ParentType == "User" && field.FieldName == "email" {
 				return errors.New("email denied")
@@ -635,10 +632,9 @@ func TestSecurityFieldAuthorizerRejectsField(t *testing.T) {
 }
 
 func TestSecurityRateLimiterRejectsOperation(t *testing.T) {
-	bus := pubsub.NewMemory()
-	t.Cleanup(func() { _ = bus.Close() })
+	events := newSubscriptionTestEvents(t)
 	srv, err := New(Config{
-		Schema: subscriptiongraph.New(subscriptiongraph.WithPubSub(bus)),
+		Schema: subscriptiongraph.New(subscriptiongraph.WithEvents(events)),
 		RateLimiter: func(ctx context.Context, operation exec.OperationContext) error {
 			return errors.New("rate limited")
 		},
@@ -658,10 +654,9 @@ func TestSecurityTrustedDocumentsRejectsUnknownQuery(t *testing.T) {
 	query := "{ __typename }"
 	sum := sha256.Sum256([]byte(query))
 	hash := hex.EncodeToString(sum[:])
-	bus := pubsub.NewMemory()
-	t.Cleanup(func() { _ = bus.Close() })
+	events := newSubscriptionTestEvents(t)
 	srv, err := New(Config{
-		Schema:           subscriptiongraph.New(subscriptiongraph.WithPubSub(bus)),
+		Schema:           subscriptiongraph.New(subscriptiongraph.WithEvents(events)),
 		TrustedDocuments: map[string]string{hash: query},
 	})
 	if err != nil {
@@ -682,10 +677,9 @@ func TestSecurityTrustedDocumentsRejectsUnknownQuery(t *testing.T) {
 }
 
 func TestSecurityRejectsUnknownVariables(t *testing.T) {
-	bus := pubsub.NewMemory()
-	t.Cleanup(func() { _ = bus.Close() })
+	events := newSubscriptionTestEvents(t)
 	srv, err := New(Config{
-		Schema:                 subscriptiongraph.New(subscriptiongraph.WithPubSub(bus)),
+		Schema:                 subscriptiongraph.New(subscriptiongraph.WithEvents(events)),
 		RejectUnknownVariables: true,
 	})
 	if err != nil {
@@ -1115,11 +1109,10 @@ func TestServeHTTPReturnsMutationValidationErrorForUnknownField(t *testing.T) {
 }
 
 func TestServeHTTPReturnsRequestIDInResponseExtensions(t *testing.T) {
-	bus := pubsub.NewMemory()
-	t.Cleanup(func() { _ = bus.Close() })
+	events := newSubscriptionTestEvents(t)
 	srv, err := New(Config{
-		Schema:     subscriptiongraph.New(subscriptiongraph.WithPubSub(bus)),
-		Middleware: []Middleware{Middleware(middlewares.RequestID("X-Request-Id"))},
+		Schema:     subscriptiongraph.New(subscriptiongraph.WithEvents(events)),
+		Middleware: []Middleware{middlewares.RequestID("X-Request-Id")},
 	})
 	if err != nil {
 		t.Fatalf("new server: %v", err)
@@ -1138,11 +1131,10 @@ func TestServeHTTPReturnsRequestIDInResponseExtensions(t *testing.T) {
 }
 
 func TestServeHTTPRequestErrorIncludesRequestIDInExtensions(t *testing.T) {
-	bus := pubsub.NewMemory()
-	t.Cleanup(func() { _ = bus.Close() })
+	events := newSubscriptionTestEvents(t)
 	srv, err := New(Config{
-		Schema:     subscriptiongraph.New(subscriptiongraph.WithPubSub(bus)),
-		Middleware: []Middleware{Middleware(middlewares.RequestID("X-Request-Id"))},
+		Schema:     subscriptiongraph.New(subscriptiongraph.WithEvents(events)),
+		Middleware: []Middleware{middlewares.RequestID("X-Request-Id")},
 	})
 	if err != nil {
 		t.Fatalf("new server: %v", err)

@@ -72,7 +72,7 @@ Contribution rules for this repository:
 
 ## Releases
 
-Tagged **[Go module](https://go.dev/doc/modules/publishing)** releases (no binaries). The nested **`redis-pubsub`** module is **not** in release-please — tag **`redis-pubsub/v*`** yourself (the same workflow warms **`proxy.golang.org`** for those tags).
+Tagged **[Go module](https://go.dev/doc/modules/publishing)** releases (no binaries). The nested **`redis`** module is **not** in release-please — tag **`redis/v*`** yourself (the same workflow warms **`proxy.golang.org`** for those tags).
 
 ## License
 

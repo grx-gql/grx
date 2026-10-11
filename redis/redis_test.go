@@ -7,19 +7,19 @@ import (
 	"time"
 
 	"github.com/alicebob/miniredis/v2"
-	pubsub "github.com/grx-gql/grx/memory-pubsub"
-	redispubsub "github.com/grx-gql/grx/redis-pubsub"
-	"github.com/redis/go-redis/v9"
+	"github.com/grx-gql/grx/pubsub"
+	redisps "github.com/grx-gql/grx/redis"
+	goredis "github.com/redis/go-redis/v9"
 )
 
-func newTestBus(t *testing.T, prefix string) (*redispubsub.PubSub, *miniredis.Miniredis) {
+func newTestBus(t *testing.T, prefix string) (*redisps.PubSub, *miniredis.Miniredis) {
 	t.Helper()
 
 	mr := miniredis.RunT(t)
-	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
+	rdb := goredis.NewClient(&goredis.Options{Addr: mr.Addr()})
 	t.Cleanup(func() { _ = rdb.Close() })
 
-	bus, err := redispubsub.New(redispubsub.Config{Client: rdb, Prefix: prefix})
+	bus, err := redisps.New(redisps.Config{Client: rdb, Prefix: prefix})
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -28,7 +28,7 @@ func newTestBus(t *testing.T, prefix string) (*redispubsub.PubSub, *miniredis.Mi
 }
 
 func TestNewRequiresClient(t *testing.T) {
-	if _, err := redispubsub.New(redispubsub.Config{}); err == nil {
+	if _, err := redisps.New(redisps.Config{}); err == nil {
 		t.Fatalf("expected error when Client is nil")
 	}
 }
@@ -78,39 +78,59 @@ func TestPrefixIsAppliedOnTheWire(t *testing.T) {
 	t.Fatalf("expected subscriber on prefixed channel grx:events")
 }
 
-func TestFiltersGateDelivery(t *testing.T) {
+func TestSubscribeIsolatedByTopic(t *testing.T) {
 	bus, _ := newTestBus(t, "")
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	only := pubsub.PayloadFunc(func(b []byte) bool { return string(b) == "ok" })
-
-	ch, err := bus.Subscribe(ctx, "topic", only)
+	chA, err := bus.Subscribe(ctx, "room.a")
+	if err != nil {
+		t.Fatalf("Subscribe: %v", err)
+	}
+	chB, err := bus.Subscribe(ctx, "room.b")
 	if err != nil {
 		t.Fatalf("Subscribe: %v", err)
 	}
 
-	for _, p := range []string{"skip", "ok", "skip", "ok"} {
-		if err := bus.Publish(context.Background(), "topic", []byte(p)); err != nil {
-			t.Fatalf("Publish: %v", err)
-		}
+	if err := bus.Publish(context.Background(), "room.a", []byte("alpha")); err != nil {
+		t.Fatalf("Publish: %v", err)
 	}
 
-	got := []string{}
-	deadline := time.After(2 * time.Second)
-loop:
-	for len(got) < 2 {
-		select {
-		case msg := <-ch:
-			got = append(got, string(msg.Payload))
-		case <-deadline:
-			break loop
+	select {
+	case msg := <-chA:
+		if string(msg.Payload) != "alpha" {
+			t.Fatalf("room.a got %q", msg.Payload)
 		}
+	case <-time.After(2 * time.Second):
+		t.Fatalf("room.a did not receive message")
 	}
 
-	if len(got) != 2 || got[0] != "ok" || got[1] != "ok" {
-		t.Fatalf("expected only ok messages, got %v", got)
+	select {
+	case msg := <-chB:
+		t.Fatalf("room.b should not receive message; got %+v", msg)
+	case <-time.After(50 * time.Millisecond):
+	}
+}
+
+func TestSubscribeNilContextDefaultsToBackground(t *testing.T) {
+	bus, _ := newTestBus(t, "")
+
+	ch, err := bus.Subscribe(nil, "topic")
+	if err != nil {
+		t.Fatalf("Subscribe: %v", err)
+	}
+	if err := bus.Publish(context.Background(), "topic", []byte("ok")); err != nil {
+		t.Fatalf("Publish: %v", err)
+	}
+
+	select {
+	case msg := <-ch:
+		if string(msg.Payload) != "ok" {
+			t.Fatalf("got %q", msg.Payload)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatalf("subscriber did not receive message")
 	}
 }
 
@@ -149,50 +169,5 @@ func TestCloseRejectsFurtherCalls(t *testing.T) {
 	}
 	if err := bus.Close(); err != nil {
 		t.Fatalf("second Close should be a no-op, got %v", err)
-	}
-}
-
-func TestTypedRoundTripOverRedis(t *testing.T) {
-	bus, _ := newTestBus(t, "")
-
-	type chatEvent struct {
-		Room string `json:"room"`
-		Body string `json:"body"`
-	}
-
-	typed := pubsub.NewTyped[chatEvent](bus)
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	ch, err := typed.Subscribe(ctx, "chat", func(e chatEvent) bool { return e.Room == "general" })
-	if err != nil {
-		t.Fatalf("Subscribe: %v", err)
-	}
-
-	for _, e := range []chatEvent{
-		{Room: "random", Body: "noise"},
-		{Room: "general", Body: "hi"},
-		{Room: "general", Body: "bye"},
-	} {
-		if err := typed.Publish(context.Background(), "chat", e); err != nil {
-			t.Fatalf("Publish: %v", err)
-		}
-	}
-
-	got := []chatEvent{}
-	deadline := time.After(2 * time.Second)
-loop:
-	for len(got) < 2 {
-		select {
-		case e := <-ch:
-			got = append(got, e)
-		case <-deadline:
-			break loop
-		}
-	}
-
-	if len(got) != 2 || got[0].Body != "hi" || got[1].Body != "bye" {
-		t.Fatalf("unexpected events %+v", got)
 	}
 }

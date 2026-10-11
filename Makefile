@@ -26,12 +26,12 @@ build: ## go build all packages.
 .PHONY: test
 test: ## go test all packages (root module + submodules).
 	$(GO) test ./...
-	cd redis-pubsub && $(GO) test ./...
+	cd redis && $(GO) test ./...
 
 .PHONY: test-race
 test-race: ## go test -race all packages (root module + submodules).
 	$(GO) test -race ./...
-	cd redis-pubsub && $(GO) test -race ./...
+	cd redis && $(GO) test -race ./...
 
 .PHONY: test-cover-lib
 test-coverage: ## Library packages only (exclude ./examples/...); enforce COVER_MIN %% stmts coverage each.
@@ -48,10 +48,10 @@ fmt: ## gofmt every Go file in place.
 ## ---- Go modules -----------------------------------------------------------
 
 .PHONY: mod-tidy
-mod-tidy: ## go mod tidy (root module, benchmark/, redis-pubsub).
+mod-tidy: ## go mod tidy (root module, benchmark/, redis).
 	$(GO) mod tidy
 	cd benchmark && $(GO) mod tidy
-	cd redis-pubsub && $(GO) mod tidy
+	cd redis && $(GO) mod tidy
 
 ## ---- Git hooks -----------------------------------------------------------
 

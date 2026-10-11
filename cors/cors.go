@@ -6,6 +6,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/grx-gql/grx/core"
 )
 
 // Config configures CORS middleware.
@@ -19,7 +21,7 @@ type Config struct {
 }
 
 // New returns middleware that handles HTTP CORS and WebSocket Origin checks.
-func New(config Config) func(http.Handler) http.Handler {
+func New(config Config) core.Middleware {
 	policy := newPolicy(config)
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

@@ -22,7 +22,7 @@ import (
 )
 
 // Middleware wraps the HTTP handler exposed by Server.
-type Middleware func(http.Handler) http.Handler
+type Middleware = core.Middleware
 
 // Config tunes a [Server]. Schema is required; the remaining fields have
 // safe zero-value defaults.

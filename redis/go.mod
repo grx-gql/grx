@@ -1,11 +1,11 @@
-module github.com/grx-gql/grx/redis-pubsub
+module github.com/grx-gql/grx/redis
 
 go 1.25
 
 // The Redis pubsub backend lives in its own Go module so the root grx
 // module remains free of third-party runtime dependencies. The replace
 // directive points at the working tree so local development picks up
-// in-tree changes to the memory-pubsub interfaces without a publish
+// in-tree changes to the pubsub interface without a publish
 // round-trip.
 replace github.com/grx-gql/grx => ../
 

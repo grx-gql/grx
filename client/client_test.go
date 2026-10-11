@@ -13,15 +13,17 @@ import (
 	"github.com/grx-gql/grx/core"
 	subscriptiongraph "github.com/grx-gql/grx/examples/subscriptions/graph"
 	"github.com/grx-gql/grx/client"
-	"github.com/grx-gql/grx/memory-pubsub"
+	"github.com/grx-gql/grx/in-memory"
 )
 
 func TestClientExecQueryAgainstServer(t *testing.T) {
-	bus := pubsub.NewMemory()
+	bus := memory.New()
 	t.Cleanup(func() { _ = bus.Close() })
 
 	srv, err := grx.NewServer(
-		grx.WithSchema(subscriptiongraph.New(subscriptiongraph.WithPubSub(bus))),
+		grx.WithSchema(subscriptiongraph.New(subscriptiongraph.WithEvents(subscriptiongraph.Events{
+			Bus: bus,
+		}))),
 	)
 	if err != nil {
 		t.Fatalf("new server: %v", err)

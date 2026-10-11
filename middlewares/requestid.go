@@ -14,14 +14,11 @@ import (
 // randRead injects entropy for request IDs (overridden in tests).
 var randRead = rand.Read
 
-// Middleware wraps an HTTP handler.
-type Middleware func(http.Handler) http.Handler
-
 // RequestID returns middleware that ensures each request carries a request ID
 // in context ([core.RequestIDFromContext]) and echoes it on the response.
 // When header is empty, "X-Request-Id" is used. If the incoming request omits
 // the header, a random ID is generated.
-func RequestID(header string) Middleware {
+func RequestID(header string) core.Middleware {
 	if strings.TrimSpace(header) == "" {
 		header = "X-Request-Id"
 	}

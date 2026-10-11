@@ -18,19 +18,20 @@ The authoritative feature scope and roadmap live in **`README.md`** and **`ROADM
 
 | Path | Purpose |
 | --- | --- |
-| `core/` | Shared transport-agnostic types: `Request`, `Response`, `Error`, the `Executor` interface, the `Transport` interface, and HTTP helpers (`GraphQLBody`, `DecodeGraphQLBody`, `WriteJSON`, `HeaderContains`). Anything imported by both `server` and `exec` belongs here. |
+| `core/` | Shared transport-agnostic types: `Request`, `Response`, `Error`, the `Executor` interface, the `Transport` interface, the `Middleware` function type, and HTTP helpers (`GraphQLBody`, `DecodeGraphQLBody`, `WriteJSON`, `HeaderContains`). Anything imported by both `server` and `exec` belongs here. |
 | `http/` | `core.Transport` implementation of the canonical GraphQL-over-HTTP+JSON `POST /graphql` wire format. The package name is `http`; consumers that also import `net/http` alias it (for example `grxhttp`). |
 | `sse/` | `core.Transport` implementation of the GraphQL over Server-Sent Events protocol. |
 | `websocket/` | RFC 6455 WebSocket framing (`conn.go`) plus a `core.Transport` implementation of the `graphql-transport-ws` subprotocol (`dispatcher.go`). Production knobs (init timeout, read/write deadlines, max message size, origin allowlist, `OnConnect` auth hook, server-side ping interval) live on `websocket.Config`. The legacy Apollo `subscriptions-transport-ws` (`graphql-ws`) subprotocol is intentionally not supported. |
 | `client/` | Outbound GraphQL-over-HTTP client (`POST` JSON) backed by `net/http`; useful from services and `httptest` integration tests. |
 | `cors/` | Lightweight CORS `Middleware` helpers used by docs/examples. |
-| `memory-pubsub/` | `pubsub.PubSub` interface and in-memory backend used by subscription resolvers for cross-resolver fan-out. Imported as **`github.com/grx-gql/grx/memory-pubsub`** (`package pubsub`). |
-| `redis-pubsub/` | Nested Go module (**`github.com/grx-gql/grx/redis-pubsub`**) providing a Redis-backed `PubSub` without pulling Redis into the root `go.mod`. |
+| `pubsub/` | Transport-agnostic [`PubSub`](pubsub/pubsub.go) interface and filters. Import **`github.com/grx-gql/grx/pubsub`** for the contract resolvers depend on. |
+| `in-memory/` | In-process [`pubsub.PubSub`](in-memory/memory.go) backend. Import **`github.com/grx-gql/grx/in-memory`** only at startup wiring. |
+| `redis/` | Nested Go module (**`github.com/grx-gql/grx/redis`**) providing a Redis-backed [`pubsub.PubSub`](redis/redis.go) without pulling Redis into the root `go.mod`. |
 | `schema/` | Schema builder. Reflects user Go types (root `Query`, `Mutation`, input structs, output structs) into the internal type metadata used by the executor. |
 | `exec/` | GraphQL lexer, parser, AST, executor, and introspection fast-path. The hot execution path lives here. |
 | `server/` | HTTP entry point, GraphiQL playground, transport dispatch (`Config.Transports`). Implements `http.Handler`. The default HTTP+JSON transport from `http` is appended automatically to the chain so plain `POST /graphql` keeps working out of the box. |
 | `plugins/` | Plugin lifecycle interface (`RequestStart`, `ParsingStart`, `ValidationStart`, `ExecutionStart`, `FieldResolveStart`, `ResponseSend`, `Error`) and built-in plugins like `Logger`. Embed `plugins.Base` for partial implementations. |
-| `middlewares/` | HTTP middleware helpers such as request ID propagation. Middleware runs before transports decode GraphQL requests. |
+| `middlewares/` | HTTP [core.Middleware](core/middleware.go) helpers such as request ID propagation. Middleware runs before transports decode GraphQL requests. |
 | `examples/basic/` | End-to-end example wiring resolvers, schema, plugin, transports, and server. Mirror this structure when adding new examples. |
 
 Human-facing documentation: **`https://grx-gql.github.io/grx/`**
@@ -41,7 +42,7 @@ Run from the repo root. Preferred shortcuts:
 
 ```bash
 make build
-make test           # root module + redis-pubsub submodule
+make test           # root module + redis submodule
 make test-race      # before risky concurrency changes
 make vet
 make fmt            # gofmt -w repository tree
@@ -72,6 +73,33 @@ go test -race ./...
 - **`exec` owns parsing, validation, execution, introspection.** It must remain transport-agnostic.
 - **`schema` is the only package allowed to use reflection-heavy schema introspection** for building metadata. Keep reflection out of the per-request hot path; precompute and cache in `schema` so `exec` can stay allocation-aware.
 - **Plugins receive `context.Context` and may return a derived context from `RequestStart`.** Use `plugins.Base` to provide no-op defaults when implementing only a subset.
+
+## Pub/Sub (subscriptions)
+
+GraphQL subscription resolvers publish domain events through a small byte-oriented bus; the executor and transports never import concrete backends.
+
+| Package | Role |
+| --- | --- |
+| `pubsub/` | [`PubSub`](pubsub/pubsub.go) interface and [`Message`](pubsub/pubsub.go). Topic-based filtering only — subscribe to an exact topic string. Resolvers depend on **`pubsub.PubSub`**, not on `in-memory` or `redis`. |
+| `in-memory/` | Zero-serialization in-process backend (`memory.New()`). Hot path: ~14 ns/op with no subscribers, **0 allocs/op** on publish when subscribers exist (forwards the payload slice; see ownership below). |
+| `redis/` | Separate module (`github.com/grx-gql/grx/redis`) for cross-replica fan-out via Redis PUBLISH/SUBSCRIBE. Payloads are opaque bytes on the wire. |
+
+**Wiring pattern** (see `examples/subscriptions/`):
+
+- Construct one `pubsub.PubSub` at startup (`memory.New()` locally, `redis.New(cfg)` in production).
+- Pass it into mutation/subscription resolver structs (for example `Events{Bus: bus}`).
+- **Publish:** `json.Marshal` the domain value, then `bus.Publish(ctx, topic, payload)`.
+- **Subscribe:** `bus.Subscribe(ctx, topic)`, decode `msg.Payload` in the resolver goroutine, return `<-chan *T` to GraphQL. Scope streams with hierarchical topic names (for example `message.posted.<roomId>`).
+
+There is no generic `PubSub[T]`, no `Typed` wrapper, and no codec inside the bus — encoding stays at the resolver boundary so backends stay interchangeable.
+
+**Payload ownership** (documented on [`pubsub.Message`](pubsub/pubsub.go)):
+
+- After `Publish` returns, the caller **must not** mutate `payload` or return its backing array to a pool.
+- Subscribers **must treat** `msg.Payload` as read-only; multiple subscribers may share one backing array (in-memory).
+- Copy bytes when you need to retain or modify them after receive.
+
+**HTTP middleware:** [`core.Middleware`](core/middleware.go) (`func(http.Handler) http.Handler`) is the shared contract for `server`, `cors`, and `middlewares` packages — same “wire at startup” pattern as pub/sub.
 
 ## Resolver and Schema Patterns
 

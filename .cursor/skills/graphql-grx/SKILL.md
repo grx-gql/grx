@@ -49,7 +49,14 @@ Audience: engineers building applications **with** **`grx`**, not necessarily co
 ## Things to avoid (common hallucinations)
 
 - Do not invent SDL-first workflows unless the user deliberately layers SDL on top—the runtime contract is structs + **`gql` tags** plus **`schema.Config`**.
-- Do not substitute Apollo Server / Node patterns for Go package layout; **`grx`** wires **`exec`**, **`schema`**, **`server`**, and small root-level transport packages (**`http`**, **`sse`**, **`websocket`**, **`memory-pubsub`**, **`redis-pubsub`**)—app code usually imports **`github.com/grx-gql/grx`** plus optional siblings.
+- Do not substitute Apollo Server / Node patterns for Go package layout; **`grx`** wires **`exec`**, **`schema`**, **`server`**, and small root-level transport packages (**`http`**, **`sse`**, **`websocket`**, **`pubsub`**, **`in-memory`**, **`redis`**)—app code usually imports **`github.com/grx-gql/grx`** plus optional siblings.
+
+## Subscriptions and pub/sub
+
+- Resolvers depend on **`pubsub.PubSub`** (byte payloads), not on **`in-memory`** or **`redis`** — wire a concrete backend only at startup.
+- **Publish:** `payload, _ := json.Marshal(value)` then `bus.Publish(ctx, "topic.name", payload)`. Do not mutate or pool-reuse `payload` after `Publish`.
+- **Subscribe:** `msgs, _ := bus.Subscribe(ctx, "topic.name")`, decode `msg.Payload` in a goroutine, stream `*T` on a channel for GraphQL. Use distinct topics per stream scope (for example one topic per chat room).
+- Mirror **`examples/subscriptions/`** for wiring (`Events{Bus: memory.New()}` or Redis in production).
 - Do not claim **`graphql-ws`** (legacy Apollo subprotocol)—only **`graphql-transport-ws`** is supported for WebSockets.
 
 ## Validate changes

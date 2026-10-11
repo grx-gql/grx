@@ -2,10 +2,11 @@ package graph
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"sync/atomic"
 
-	"github.com/grx-gql/grx/memory-pubsub"
+	"github.com/grx-gql/grx/pubsub"
 )
 
 // userCreatedTopic is the bus topic on which User events are published.
@@ -51,7 +52,7 @@ func (UserQuery) ErrorExample(ctx context.Context) (string, error) {
 // The Bus dependency is wired by NewSchema so the mutation can publish
 // domain events that subscriptions consume.
 type UserMutation struct {
-	Bus    *pubsub.Typed[*User]
+	Bus    pubsub.PubSub
 	nextID atomic.Uint64
 }
 
@@ -63,7 +64,11 @@ func (m *UserMutation) CreateUser(ctx context.Context, args UserCreateArgs) (*Us
 		Email: args.Input.Email,
 	}
 	if m.Bus != nil {
-		if err := m.Bus.Publish(ctx, userCreatedTopic, user); err != nil {
+		payload, err := json.Marshal(user)
+		if err != nil {
+			return nil, err
+		}
+		if err := m.Bus.Publish(ctx, userCreatedTopic, payload); err != nil {
 			return nil, err
 		}
 	}
@@ -74,9 +79,29 @@ func (m *UserMutation) CreateUser(ctx context.Context, args UserCreateArgs) (*Us
 // Bus dependency is wired by NewSchema; UserCreated relays User events
 // published by CreateUser to every active GraphQL subscription.
 type UserSubscription struct {
-	Bus *pubsub.Typed[*User]
+	Bus pubsub.PubSub
 }
 
 func (s UserSubscription) UserCreated(ctx context.Context) (<-chan *User, error) {
-	return s.Bus.Subscribe(ctx, userCreatedTopic)
+	msgs, err := s.Bus.Subscribe(ctx, userCreatedTopic)
+	if err != nil {
+		return nil, err
+	}
+	out := make(chan *User)
+	go func() {
+		defer close(out)
+		for msg := range msgs {
+			var user User
+			if err := json.Unmarshal(msg.Payload, &user); err != nil {
+				continue
+			}
+			u := user
+			select {
+			case <-ctx.Done():
+				return
+			case out <- &u:
+			}
+		}
+	}()
+	return out, nil
 }
