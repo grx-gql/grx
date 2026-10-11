@@ -150,6 +150,9 @@ func (e *Executor) completeListStreamed(ctx context.Context, itemType schema.Typ
 		items = append(items, item)
 		if len(itemErrors) > 0 {
 			errs = append(errs, itemErrors...)
+			if item == nil && !isNullableGraphQLType(itemType) {
+				return nil, errs
+			}
 		}
 	}
 

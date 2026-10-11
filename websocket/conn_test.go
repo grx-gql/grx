@@ -291,7 +291,7 @@ func TestConnReadPayloadLengthEncodings(t *testing.T) {
 	if n, err := readPayloadLength(bufio.NewReader(bytes.NewReader([]byte{0x01, 0x00})), 126); err != nil || n != 256 {
 		t.Fatalf("16-bit: n=%d err=%v", n, err)
 	}
-	if n, err := readPayloadLength(bufio.NewReader(bytes.NewReader([]byte{0, 0, 0, 0, 0, 0, 0x01, 0x00})), 127); err != nil || n != 256 {
+	if n, err := readPayloadLength(bufio.NewReader(bytes.NewReader([]byte{0, 0, 0, 0, 0, 1, 0, 0})), 127); err != nil || n != 65536 {
 		t.Fatalf("64-bit: n=%d err=%v", n, err)
 	}
 	if _, err := readPayloadLength(bufio.NewReader(bytes.NewReader([]byte{0x01})), 126); err == nil {
@@ -548,7 +548,7 @@ func TestConnFrameLengthAndWriteBranches(t *testing.T) {
 	}{
 		{5, nil, 5},
 		{126, []byte{1, 2}, 258},
-		{127, []byte{0, 0, 0, 0, 0, 0, 1, 2}, 258},
+		{127, []byte{0, 0, 0, 0, 0, 1, 0, 2}, 65538},
 	}
 	for _, tc := range lengths {
 		reader := bufio.NewReader(bytes.NewReader(tc.extra))

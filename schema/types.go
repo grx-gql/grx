@@ -60,6 +60,7 @@ type Scalar struct {
 	Description    string
 	SpecifiedByURL string
 	serializeFn    func(any) (any, error)
+	Directives     []AppliedDirective
 }
 
 // Name returns the scalar type name.
@@ -126,6 +127,7 @@ type Enum struct {
 	Values      []EnumValue
 	valueByName map[string]any
 	nameByValue map[string]string
+	Directives  []AppliedDirective
 }
 
 // Name returns the enum type name.
@@ -206,6 +208,7 @@ type InputValue struct {
 	DefaultValue      any
 	IsDeprecated      bool
 	DeprecationReason *string
+	Directives        []AppliedDirective
 }
 
 // Object describes a GraphQL object type. Fields is keyed by GraphQL

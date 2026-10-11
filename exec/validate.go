@@ -2,50 +2,48 @@ package exec
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/grx-gql/grx/core"
 	"github.com/grx-gql/grx/schema"
 )
 
-// ValidateDocument runs GraphQL validation rules on the selected operation.
-// Error messages follow graphql-js conventions.
-func ValidateDocument(s *schema.Schema, bundle documentBundle, op document) []validationError {
+// ValidateDocument validates every operation in the executable document.
+// The selected operation is retained in the signature for executor compatibility.
+func ValidateDocument(s *schema.Schema, bundle documentBundle, _ document) []validationError {
 	if s == nil {
 		return nil
 	}
-
 	var errs []validationError
 	errs = append(errs, validateUniqueOperationNames(bundle)...)
 	errs = append(errs, validateLoneAnonymousOperation(bundle)...)
-	errs = append(errs, validateVariables(bundle, op)...)
-	errs = append(errs, validateVariableDefinitions(s, op)...)
 	errs = append(errs, validateFragmentDefinitions(s, bundle.fragments)...)
-	errs = append(errs, validateDeferStreamLabels(op)...)
-
-	root, rootErr := rootObjectForKind(s, op.Kind)
-	if rootErr != nil {
-		errs = append(errs, newValidationError(core.Location{Line: 1, Column: 1}, "%s", rootErr.Error()))
-		return errs
-	}
-
-	if op.Kind == operationSubscription {
-		errs = append(errs, validateSubscriptionRoot(op)...)
-	}
-
 	usedFragments := make(map[string]bool)
-	errs = append(errs, validateSelections(s, root, op.Selections, op.Fragments, usedFragments, nil, root.Name(), op.VariableTypes)...)
-
-	for name := range op.Fragments {
+	for _, op := range bundle.operations {
+		reachable := reachableFragments(op.Selections, bundle.fragments)
+		for name := range reachable {
+			usedFragments[name] = true
+		}
+		errs = append(errs, validateDefinitionDirectives(s, bundle, op, reachable)...)
+		errs = append(errs, validateVariables(op, bundle.fragments, reachable)...)
+		errs = append(errs, validateVariableDefinitions(s, op)...)
+		errs = append(errs, validateDeferStreamLabels(op)...)
+		root, rootErr := rootObjectForKind(s, op.Kind)
+		if rootErr != nil {
+			errs = append(errs, newValidationError(op.Location, "%s", rootErr.Error()))
+			continue
+		}
+		if op.Kind == operationSubscription {
+			errs = append(errs, validateSubscriptionRoot(op)...)
+		}
+		errs = append(errs, validateSelections(s, root, op.Selections, bundle.fragments, usedFragments, nil, root.Name(), variableScope{Types: op.VariableTypes, Definitions: op.VariableDefinitions})...)
+	}
+	for name, fragment := range bundle.fragments {
 		if !usedFragments[name] {
-			fd := op.Fragments[name]
-			errs = append(errs, newValidationError(
-				locationForOffset(bundle.source, fd.NameOffset),
-				`Fragment "%s" is never used.`, name,
-			))
+			errs = append(errs, newValidationError(locationForOffset(bundle.source, fragment.NameOffset), `Fragment "%s" is never used.`, name))
 		}
 	}
-
 	return errs
 }
 
@@ -123,13 +121,13 @@ func validateSubscriptionRoot(op document) []validationError {
 
 func validateSelections(
 	s *schema.Schema,
-	parent *schema.Object,
+	parent schema.Type,
 	selections []selection,
 	fragments map[string]*fragmentDef,
 	usedFragments map[string]bool,
 	spreadStack []string,
 	parentTypeName string,
-	variableTypes map[string]string,
+	variables variableScope,
 ) []validationError {
 	var errs []validationError
 	errs = append(errs, validateFieldMergeConflicts(selections)...)
@@ -137,11 +135,11 @@ func validateSelections(
 	for _, sel := range selections {
 		switch {
 		case sel.isFragmentSpread():
-			errs = append(errs, validateFragmentSpread(s, parent, sel, fragments, usedFragments, spreadStack, parentTypeName, variableTypes)...)
+			errs = append(errs, validateFragmentSpread(s, parent, sel, fragments, usedFragments, spreadStack, parentTypeName, variables)...)
 		case sel.isInlineFragment():
-			errs = append(errs, validateInlineFragment(s, parent, sel, fragments, usedFragments, spreadStack, variableTypes)...)
+			errs = append(errs, validateInlineFragment(s, parent, sel, fragments, usedFragments, spreadStack, variables)...)
 		case sel.isField():
-			errs = append(errs, validateField(s, parent, sel, fragments, usedFragments, spreadStack, variableTypes)...)
+			errs = append(errs, validateField(s, parent, sel, fragments, usedFragments, spreadStack, variables)...)
 		default:
 			errs = append(errs, newValidationError(sel.Location, "Invalid selection."))
 		}
@@ -152,13 +150,13 @@ func validateSelections(
 
 func validateFragmentSpread(
 	s *schema.Schema,
-	parent *schema.Object,
+	parent schema.Type,
 	sel selection,
 	fragments map[string]*fragmentDef,
 	usedFragments map[string]bool,
 	spreadStack []string,
 	parentTypeName string,
-	variableTypes map[string]string,
+	variables variableScope,
 ) []validationError {
 	name := sel.FragmentSpread
 	fd, ok := fragments[name]
@@ -175,46 +173,39 @@ func validateFragmentSpread(
 	}
 
 	var errs []validationError
-	errs = append(errs, validateDirectives(sel, "FRAGMENT_SPREAD")...)
-
-	if parent != nil && !fragmentTypeMatches(parent, fd.TypeCondition) {
-		errs = append(errs, newValidationError(sel.Location,
-			`Fragment cannot be spread here as objects of type "%s" can never be of type "%s".`,
-			parentTypeName, fd.TypeCondition))
-	}
+	errs = append(errs, validateDirectives(s, sel, "FRAGMENT_SPREAD", variables)...)
 
 	condType, ok := s.Types[fd.TypeCondition]
-	if !ok {
+	if !ok || !isCompositeType(condType) {
 		return errs
 	}
-	objectParent := objectTypeForSelection(condType)
-	if objectParent == nil {
-		return errs
+	if parent != nil && !compositeTypesOverlap(parent, condType) {
+		return append(errs, newValidationError(sel.Location, `Fragment cannot be spread here as objects of type "%s" can never be of type "%s".`, parentTypeName, fd.TypeCondition))
 	}
 
 	nextStack := append(append([]string{}, spreadStack...), name)
-	errs = append(errs, validateSelections(s, objectParent, fd.Selections, fragments, usedFragments, nextStack, fd.TypeCondition, variableTypes)...)
+	errs = append(errs, validateSelections(s, condType, fd.Selections, fragments, usedFragments, nextStack, fd.TypeCondition, variables)...)
 	return errs
 }
 
 func validateInlineFragment(
 	s *schema.Schema,
-	parent *schema.Object,
+	parent schema.Type,
 	sel selection,
 	fragments map[string]*fragmentDef,
 	usedFragments map[string]bool,
 	spreadStack []string,
-	variableTypes map[string]string,
+	variables variableScope,
 ) []validationError {
 	var errs []validationError
-	errs = append(errs, validateDirectives(sel, "INLINE_FRAGMENT")...)
+	errs = append(errs, validateDirectives(s, sel, "INLINE_FRAGMENT", variables)...)
 
 	cond := sel.InlineFragmentOn
 	if cond == "" {
 		if parent == nil {
 			return errs
 		}
-		return append(errs, validateSelections(s, parent, sel.Selections, fragments, usedFragments, spreadStack, parent.Name(), variableTypes)...)
+		return append(errs, validateSelections(s, parent, sel.Selections, fragments, usedFragments, spreadStack, parent.Name(), variables)...)
 	}
 
 	typeValue, ok := s.Types[cond]
@@ -225,37 +216,34 @@ func validateInlineFragment(
 		return append(errs, newValidationError(sel.Location,
 			`Fragment cannot condition on non composite type "%s".`, cond))
 	}
-	if parent != nil && !fragmentTypeMatches(parent, cond) {
+	if parent != nil && !compositeTypesOverlap(parent, typeValue) {
 		return append(errs, newValidationError(sel.Location,
 			`Fragment cannot be spread here as objects of type "%s" can never be of type "%s".`,
 			parent.Name(), cond))
 	}
 
-	objectParent := objectTypeForSelection(typeValue)
-	if objectParent == nil {
-		return errs
-	}
-	return append(errs, validateSelections(s, objectParent, sel.Selections, fragments, usedFragments, spreadStack, cond, variableTypes)...)
+	return append(errs, validateSelections(s, typeValue, sel.Selections, fragments, usedFragments, spreadStack, cond, variables)...)
 }
 
 func validateField(
 	s *schema.Schema,
-	parent *schema.Object,
+	parent schema.Type,
 	sel selection,
 	fragments map[string]*fragmentDef,
 	usedFragments map[string]bool,
 	spreadStack []string,
-	variableTypes map[string]string,
+	variables variableScope,
 ) []validationError {
 	if parent == nil {
 		return []validationError{newValidationError(sel.Location, "Cannot select field on abstract parent without type condition.")}
 	}
 
 	var errs []validationError
-	errs = append(errs, validateDirectives(sel, "FIELD")...)
+	errs = append(errs, validateDirectives(s, sel, "FIELD", variables)...)
 
 	fieldName := sel.Name
 	if fieldName == "__typename" {
+		errs = append(errs, validateArguments(sel, &schema.Field{}, parent.Name(), variables)...)
 		if len(sel.Selections) > 0 {
 			errs = append(errs, newValidationError(sel.Location,
 				`Field "%s" must not have a selection since type "String" has no subfields.`, sel.responseKey()))
@@ -263,13 +251,13 @@ func validateField(
 		return errs
 	}
 
-	field, ok := parent.Fields[fieldName]
+	field, ok := selectionField(parent, fieldName)
 	if !ok {
 		return append(errs, newValidationError(sel.Location,
 			`Cannot query field "%s" on type "%s".`, fieldName, parent.Name()))
 	}
 
-	errs = append(errs, validateArguments(sel, field, parent.Name(), variableTypes)...)
+	errs = append(errs, validateArguments(sel, field, parent.Name(), variables)...)
 
 	fieldType := field.Type
 	if isLeafType(fieldType) {
@@ -288,31 +276,12 @@ func validateField(
 		return errs
 	}
 
-	childParent := objectTypeForFieldType(s, fieldType)
-	if childParent == nil {
-		for _, child := range sel.Selections {
-			if child.isField() && child.Name == "__typename" && len(child.Selections) == 0 {
-				continue
-			}
-			if child.isInlineFragment() || child.isFragmentSpread() {
-				if child.isFragmentSpread() {
-					errs = append(errs, validateFragmentSpread(s, nil, child, fragments, usedFragments, spreadStack, typeString(fieldType), variableTypes)...)
-				} else {
-					errs = append(errs, validateInlineFragment(s, nil, child, fragments, usedFragments, spreadStack, variableTypes)...)
-				}
-				continue
-			}
-			errs = append(errs, newValidationError(child.Location,
-				`Field "%s" of type "%s" must have a sub selection of subfields. Did you mean "%s { ... }"?`,
-				sel.responseKey(), typeString(fieldType), sel.responseKey()))
-		}
-		return errs
-	}
-	errs = append(errs, validateSelections(s, childParent, sel.Selections, fragments, usedFragments, spreadStack, typeString(fieldType), variableTypes)...)
+	childParent := innerNamedType(fieldType)
+	errs = append(errs, validateSelections(s, childParent, sel.Selections, fragments, usedFragments, spreadStack, typeString(fieldType), variables)...)
 	return errs
 }
 
-func validateArguments(sel selection, field *schema.Field, parentType string, variableTypes map[string]string) []validationError {
+func validateArguments(sel selection, field *schema.Field, parentType string, variables variableScope) []validationError {
 	var errs []validationError
 	seenArgs := make(map[string]bool)
 
@@ -330,15 +299,7 @@ func validateArguments(sel selection, field *schema.Field, parentType string, va
 				`Unknown argument "%s" on field "%s" of type "%s".`, argName, sel.Name, parentType))
 			continue
 		}
-		if ref, ok := sel.Arguments[argName].(variableRef); ok {
-			declaredType := variableTypes[ref.Name]
-			if declaredType != "" && !variableTypeAllowed(declaredType, arg.Type.Name()) {
-				errs = append(errs, newValidationError(sel.Location,
-					`Variable "$%s" of type "%s" used in position expecting type "%s".`,
-					ref.Name, declaredType, arg.Type.Name()))
-			}
-			continue
-		}
+		errs = append(errs, validateVariablePositions(arg.Type, sel.Arguments[argName], arg.DefaultValue, sel.Location, variables)...)
 		errs = append(errs, validateInputValue(arg.Type, sel.Arguments[argName], sel.Location, argName)...)
 	}
 
@@ -359,24 +320,28 @@ func validateArguments(sel selection, field *schema.Field, parentType string, va
 	return errs
 }
 
-func validateVariables(bundle documentBundle, op document) []validationError {
+func validateVariables(op document, fragments map[string]*fragmentDef, reachable map[string]bool) []validationError {
 	declared := make(map[string]bool, len(op.Variables))
-	for _, variable := range op.Variables {
-		declared[variable] = false
+	for _, name := range op.Variables {
+		declared[name] = false
 	}
 	var errs []validationError
-	for _, variable := range bundle.variableUses {
-		if _, ok := declared[variable.Name]; !ok {
-			errs = append(errs, newValidationError(variable.Location,
-				`Variable "$%s" is not defined by operation "%s".`, variable.Name, op.Name))
-			continue
+	checkUses := func(uses []variableUse) {
+		for _, variable := range uses {
+			if _, ok := declared[variable.Name]; !ok {
+				errs = append(errs, newValidationError(variable.Location, `Variable "$%s" is not defined by operation "%s".`, variable.Name, op.Name))
+			} else {
+				declared[variable.Name] = true
+			}
 		}
-		declared[variable.Name] = true
+	}
+	checkUses(op.VariableUses)
+	for name := range reachable {
+		checkUses(fragments[name].VariableUses)
 	}
 	for name, used := range declared {
 		if !used {
-			errs = append(errs, newValidationError(core.Location{Line: 1, Column: 1},
-				`Variable "$%s" is never used in operation "%s".`, name, op.Name))
+			errs = append(errs, newValidationError(op.Location, `Variable "$%s" is never used in operation "%s".`, name, op.Name))
 		}
 	}
 	return errs
@@ -442,21 +407,18 @@ var executableDirectiveLocations = map[string]map[string]bool{
 	"stream":  {"FIELD": true},
 }
 
-// repeatableExecutableDirectives lists directives that may appear more than
-// once on the same location in an executable document.
-var repeatableExecutableDirectives = map[string]bool{}
-
-func validateDirectives(sel selection, location string) []validationError {
+func validateDirectives(s *schema.Schema, sel selection, location string, variables variableScope) []validationError {
 	var errs []validationError
 	seen := make(map[string]bool)
 	for _, d := range sel.Directives {
 		allowedLocs, known := executableDirectiveLocations[d.Name]
-		if !known {
+		definition := s.DirectiveDefinitions[d.Name]
+		if !known && definition == nil {
 			errs = append(errs, newValidationError(sel.Location, `Unknown directive "@%s".`, d.Name))
 			continue
 		}
 
-		isRepeatable := repeatableExecutableDirectives[d.Name]
+		isRepeatable := definition != nil && definition.IsRepeatable
 		if seen[d.Name] && !isRepeatable {
 			errs = append(errs, newValidationError(sel.Location,
 				`Directive "@%s" may not be used more than once at this location.`, d.Name))
@@ -464,54 +426,76 @@ func validateDirectives(sel selection, location string) []validationError {
 		}
 		seen[d.Name] = true
 
-		if !allowedLocs[location] {
+		allowed := allowedLocs[location]
+		if definition != nil {
+			allowed = slices.Contains(definition.Locations, location)
+		}
+		if !allowed {
 			errs = append(errs, newValidationError(sel.Location,
 				`Directive "@%s" may not be used on %s.`, d.Name, location))
 		}
-		errs = append(errs, validateDirectiveArguments(sel.Location, d)...)
+		if definition != nil {
+			errs = append(errs, validateDefinedDirectiveArguments(sel.Location, d, definition, variables)...)
+		} else {
+			errs = append(errs, validateDirectiveArguments(sel.Location, d)...)
+			for name, value := range d.Args {
+				if inputType := builtinDirectiveArgumentTypes[d.Name][name]; inputType != nil {
+					errs = append(errs, validateVariablePositions(inputType, value, nil, sel.Location, variables)...)
+				}
+			}
+		}
 	}
 	return errs
 }
 
+var builtinDirectiveArgumentTypes = map[string]map[string]schema.Type{
+	"skip":    {"if": &schema.NonNull{OfType: &schema.Scalar{TypeName: "Boolean"}}},
+	"include": {"if": &schema.NonNull{OfType: &schema.Scalar{TypeName: "Boolean"}}},
+	"defer":   {"if": &schema.Scalar{TypeName: "Boolean"}, "label": &schema.Scalar{TypeName: "String"}},
+	"stream":  {"if": &schema.Scalar{TypeName: "Boolean"}, "label": &schema.Scalar{TypeName: "String"}, "initialCount": &schema.Scalar{TypeName: "Int"}},
+}
+
 func validateDirectiveArguments(loc core.Location, d directive) []validationError {
+	for name := range d.Args {
+		if builtinDirectiveArgumentTypes[d.Name][name] == nil {
+			return []validationError{newValidationError(loc, `Unknown argument "%s" on directive "@%s".`, name, d.Name)}
+		}
+	}
 	switch d.Name {
 	case "skip", "include":
 		raw, ok := d.Args["if"]
 		if !ok {
 			return []validationError{newValidationError(loc, `Directive "@%s" argument "if" of type "Boolean!" is required, but it was not provided.`, d.Name)}
 		}
-		if ref, ok := raw.(variableRef); ok {
-			if !ref.HasValue {
-				return []validationError{newValidationError(loc, `Argument "if" on directive "@%s" variable "$%s" is missing.`, d.Name, ref.Name)}
-			}
-			raw = ref.Value
+		if _, ok := raw.(variableRef); ok {
+			return nil
 		}
 		if _, ok := raw.(bool); !ok {
 			return []validationError{newValidationError(loc, `Argument "if" on directive "@%s" must be Boolean.`, d.Name)}
 		}
 	case "defer":
-		if raw, ok := d.Args["if"]; ok {
+		if raw, ok := directiveArgumentValue(d.Args, "if"); ok {
 			if _, ok := raw.(bool); !ok {
 				return []validationError{newValidationError(loc, `Argument "if" on directive "@defer" must be Boolean.`)}
 			}
 		}
-		if raw, ok := d.Args["label"]; ok {
+		if raw, ok := directiveArgumentValue(d.Args, "label"); ok {
 			if _, ok := raw.(string); !ok {
 				return []validationError{newValidationError(loc, `Argument "label" on directive "@defer" must be String.`)}
 			}
 		}
 	case "stream":
-		if raw, ok := d.Args["if"]; ok {
+		if raw, ok := directiveArgumentValue(d.Args, "if"); ok {
 			if _, ok := raw.(bool); !ok {
 				return []validationError{newValidationError(loc, `Argument "if" on directive "@stream" must be Boolean.`)}
 			}
 		}
-		if raw, ok := d.Args["label"]; ok {
+		if raw, ok := directiveArgumentValue(d.Args, "label"); ok {
 			if _, ok := raw.(string); !ok {
 				return []validationError{newValidationError(loc, `Argument "label" on directive "@stream" must be String.`)}
 			}
 		}
-		if raw, ok := d.Args["initialCount"]; ok {
+		if raw, ok := directiveArgumentValue(d.Args, "initialCount"); ok {
 			if _, ok := raw.(int); !ok {
 				return []validationError{newValidationError(loc, `Argument "initialCount" on directive "@stream" must be Int.`)}
 			}
@@ -544,9 +528,7 @@ func validateVariableDefinitions(s *schema.Schema, op document) []validationErro
 		}
 		t, ok := s.Types[base]
 		if !ok {
-			// The schema builder permits loose type-name references (suffix
-			// matching), so an unregistered name is not necessarily unknown.
-			// Only types we can resolve are checked for input-type validity.
+			errs = append(errs, newValidationError(core.Location{Line: 1, Column: 1}, `Unknown type "%s".`, base))
 			continue
 		}
 		if !isInputType(t) {
@@ -759,20 +741,18 @@ func variableTypeAllowed(declared string, expected string) bool {
 	if declared == expected {
 		return true
 	}
-	if strings.HasSuffix(declared, "!") && strings.TrimSuffix(declared, "!") == expected {
-		return true
+	if strings.HasSuffix(expected, "!") {
+		return strings.HasSuffix(declared, "!") && variableTypeAllowed(strings.TrimSuffix(declared, "!"), strings.TrimSuffix(expected, "!"))
 	}
-	declaredName := looseTypeName(declared)
-	expectedName := looseTypeName(expected)
-	if declaredName != "" && strings.HasSuffix(expectedName, declaredName) {
-		return true
+	if strings.HasSuffix(declared, "!") {
+		return variableTypeAllowed(strings.TrimSuffix(declared, "!"), expected)
+	}
+	if strings.HasPrefix(expected, "[") {
+		return strings.HasPrefix(declared, "[") && strings.HasSuffix(declared, "]") && strings.HasSuffix(expected, "]") && variableTypeAllowed(declared[1:len(declared)-1], expected[1:len(expected)-1])
 	}
 	return false
 }
 
-// looseTypeNameReplacer strips list/non-null wrappers from a type reference.
-// It is built once: strings.NewReplacer is safe for concurrent use and
-// rebuilding it per call dominated validation allocations.
 var looseTypeNameReplacer = strings.NewReplacer("[", "", "]", "", "!", "")
 
 func looseTypeName(typeName string) string {

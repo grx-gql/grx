@@ -499,6 +499,11 @@ func (e *Executor) executeSelectionSet(ctx context.Context, object *schema.Objec
 		if len(fieldErrors) > 0 {
 			errors = append(errors, fieldErrors...)
 		}
+		if len(fieldErrors) > 0 && value == nil {
+			if field := object.Fields[selected.Name]; field != nil && !isNullableGraphQLType(field.Type) {
+				return nil, errors
+			}
+		}
 		if !wire {
 			continue
 		}
@@ -542,7 +547,7 @@ func (e *Executor) resolveSelectedField(ctx context.Context, object *schema.Obje
 		})
 		if err != nil {
 			e.notifyError(ctx, err)
-			return key, nil, []core.Error{newFieldError(e.maskError(err, false).Error(), fieldPath, selected.Location)}, false
+			return key, nil, []core.Error{newFieldError(e.maskError(err, false).Error(), fieldPath, selected.Location)}, true
 		}
 	}
 
@@ -560,7 +565,7 @@ func (e *Executor) resolveSelectedField(ctx context.Context, object *schema.Obje
 	for _, hook := range e.Plugins {
 		if err := hook.FieldResolveStart(ctx, fieldCtx); err != nil {
 			e.notifyError(ctx, err)
-			return key, nil, []core.Error{newFieldError(e.maskError(err, false).Error(), fieldPath, selected.Location)}, false
+			return key, nil, []core.Error{newFieldError(e.maskError(err, false).Error(), fieldPath, selected.Location)}, true
 		}
 	}
 
@@ -572,10 +577,10 @@ func (e *Executor) resolveSelectedField(ctx context.Context, object *schema.Obje
 	args, err := coerceArguments(field.Args, selected.Arguments)
 	if err != nil {
 		e.notifyError(ctx, err)
-		return key, nil, []core.Error{newFieldError(e.maskError(err, false).Error(), fieldPath, selected.Location)}, false
+		return key, nil, []core.Error{newFieldError(e.maskError(err, false).Error(), fieldPath, selected.Location)}, true
 	}
 
-	value, resolverErr := e.invokeResolver(ctx, arena, field, selected, source, args)
+	value, resolverErr := e.invokeResolver(ctx, arena, field, source, args)
 	var resolverMsgs []core.Error
 	if resolverErr != nil {
 		e.notifyError(ctx, resolverErr)
@@ -594,10 +599,10 @@ func (e *Executor) resolveSelectedField(ctx context.Context, object *schema.Obje
 			}
 		}
 	}
-	if !streamed {
+	if !streamed && resolverErr == nil {
 		resolved, nestedErrors = e.completeValue(ctx, field.Type, value, selected.Selections, fragments, fieldPath)
 	}
-	errs := append(resolverMsgs, nestedErrors...)
+	errs := append(resolverMsgs, completionErrorLocations(nestedErrors, selected.Location)...)
 
 	if traceFields {
 		for _, ender := range e.fieldEnders {
@@ -608,49 +613,14 @@ func (e *Executor) resolveSelectedField(ctx context.Context, object *schema.Obje
 		}
 	}
 
-	var wire bool
-	switch {
-	case resolverErr != nil:
-		wire = false // omit nullable key so root can serialize as full data:null
-	case len(errs) == 0:
-		wire = true
-	case resolved == nil && !isNullableGraphQLType(field.Type):
-		wire = false
-	default:
-		wire = true
-	}
-	return key, resolved, errs, wire
-}
-
-// resolveAbstractType resolves the concrete object type for an interface or
-// union value, consulting the configured AbstractTypeResolver first and falling
-// back to the schema's default reflection-based resolver.
-func (e *Executor) resolveAbstractType(abstractName string, value any, fallback func(any) (*schema.Object, error)) (*schema.Object, error) {
-	if e.abstractTypeResolver != nil {
-		name, err := e.abstractTypeResolver(value)
-		if err != nil {
-			return nil, err
-		}
-		if name != "" {
-			typ, ok := e.Schema.Types[name]
-			if !ok {
-				return nil, fmt.Errorf("abstract type resolver returned unknown type %q for %s", name, abstractName)
-			}
-			object, ok := typ.(*schema.Object)
-			if !ok {
-				return nil, fmt.Errorf("abstract type resolver returned non-object type %q for %s", name, abstractName)
-			}
-			return object, nil
-		}
-	}
-	return fallback(value)
+	return key, resolved, errs, true
 }
 
 // invokeResolver runs a field resolver, applying request-scoped memoization
 // when enabled and unwrapping any returned [schema.Thunk] (deferred value).
-func (e *Executor) invokeResolver(ctx context.Context, arena *pathArena, field *schema.Field, selected selection, source any, args map[string]any) (any, error) {
+func (e *Executor) invokeResolver(ctx context.Context, arena *pathArena, field *schema.Field, source any, args map[string]any) (any, error) {
 	if arena != nil && arena.resolverCache != nil {
-		if key, ok := resolverCacheKey(field, source, selected.Arguments); ok {
+		if key, ok := resolverCacheKey(field, source, args); ok {
 			if entry, hit := arena.resolverCache[key]; hit {
 				return entry.value, entry.err
 			}
@@ -662,8 +632,15 @@ func (e *Executor) invokeResolver(ctx context.Context, arena *pathArena, field *
 	return e.callResolver(ctx, field, source, args)
 }
 
-func (e *Executor) callResolver(ctx context.Context, field *schema.Field, source any, args map[string]any) (any, error) {
-	value, err := field.Resolver(ctx, schema.ResolveParams{Source: source, Args: args})
+func (e *Executor) callResolver(ctx context.Context, field *schema.Field, source any, args map[string]any) (value any, err error) {
+	defer func() {
+		if recovered := recover(); recovered != nil {
+			value = nil
+			err = fmt.Errorf("panic during GraphQL field resolution: %v", recovered)
+			e.notifyError(ctx, fmt.Errorf("panic stack: %s", debug.Stack()))
+		}
+	}()
+	value, err = field.Resolver(ctx, schema.ResolveParams{Source: source, Args: args})
 	if err != nil {
 		return nil, err
 	}
@@ -681,17 +658,6 @@ func resolveThunk(value any) (any, error) {
 	default:
 		return value, nil
 	}
-}
-
-// resolverCacheKey builds a memoization key from the field, source identity, and
-// arguments. It returns ok=false when the source has no stable identity (so the
-// call must not be cached).
-func resolverCacheKey(field *schema.Field, source any, args map[string]any) (string, bool) {
-	sourceKey, ok := sourceIdentity(source)
-	if !ok {
-		return "", false
-	}
-	return field.Name + "\x00" + sourceKey + "\x00" + fmt.Sprint(args), true
 }
 
 func sourceIdentity(source any) (string, bool) {
@@ -730,31 +696,31 @@ func (e *Executor) completeValue(ctx context.Context, fieldType schema.Type, val
 	switch typed := fieldType.(type) {
 	case *schema.NonNull:
 		inner, errs := e.completeValue(ctx, typed.OfType, value, selections, fragments, path)
-		if len(errs) > 0 || inner == nil {
+		if inner == nil {
 			if len(errs) == 0 {
 				errs = []core.Error{newFieldError("non-null field resolved to null", path, core.Location{})}
 			}
 			return nil, errs
 		}
-		return inner, nil
+		return inner, errs
 	case *schema.List:
 		return e.completeList(ctx, typed.OfType, value, selections, fragments, path)
 	case *schema.Object:
-		return e.executeSelectionSet(ctx, typed, value, selections, fragments, path)
+		return e.completeObjectValue(ctx, typed, value, selections, fragments, path)
 	case *schema.Interface:
 		objectType, err := e.resolveAbstractType(typed.Name(), value, typed.Resolve)
 		if err != nil {
 			e.notifyError(ctx, err)
 			return nil, []core.Error{newFieldError(e.maskError(err, true).Error(), path, core.Location{})}
 		}
-		return e.executeSelectionSet(ctx, objectType, value, selections, fragments, path)
+		return e.completeObjectValue(ctx, objectType, value, selections, fragments, path)
 	case *schema.Union:
 		objectType, err := e.resolveAbstractType(typed.Name(), value, typed.Resolve)
 		if err != nil {
 			e.notifyError(ctx, err)
 			return nil, []core.Error{newFieldError(e.maskError(err, true).Error(), path, core.Location{})}
 		}
-		return e.executeSelectionSet(ctx, objectType, value, selections, fragments, path)
+		return e.completeObjectValue(ctx, objectType, value, selections, fragments, path)
 	case *schema.Enum:
 		serialized, err := typed.Serialize(value)
 		if err != nil {
@@ -784,6 +750,14 @@ func (e *Executor) completeValue(ctx context.Context, fieldType schema.Type, val
 	}
 }
 
+func (e *Executor) completeObjectValue(ctx context.Context, object *schema.Object, value any, selections []selection, fragments map[string]*fragmentDef, path []any) (any, []core.Error) {
+	data, errs := e.executeSelectionSet(ctx, object, value, selections, fragments, path)
+	if data == nil {
+		return nil, errs
+	}
+	return data, errs
+}
+
 func (e *Executor) completeList(ctx context.Context, itemType schema.Type, value any, selections []selection, fragments map[string]*fragmentDef, path []any) (any, []core.Error) {
 	arena := lookupPathArena(ctx)
 
@@ -810,10 +784,19 @@ func (e *Executor) completeList(ctx context.Context, itemType schema.Type, value
 					return objs[:index], append(errors, newFieldError(err.Error(), path, core.Location{}))
 				}
 				itemPath := extendAppendedPath(arena, path, index)
+				if raw.Index(index).IsNil() {
+					if !isNullableGraphQLType(itemType) {
+						return nil, append(errors, newFieldError("non-null field resolved to null", itemPath, core.Location{}))
+					}
+					continue
+				}
 				item, itemErrors := e.executeSelectionSet(ctx, gqlObj, raw.Index(index).Interface(), selections, fragments, itemPath)
 				objs[index] = item
 				if len(itemErrors) > 0 {
 					errors = append(errors, itemErrors...)
+					if item == nil && !isNullableGraphQLType(itemType) {
+						return nil, errors
+					}
 				}
 			}
 			return objs, errors
@@ -831,6 +814,9 @@ func (e *Executor) completeList(ctx context.Context, itemType schema.Type, value
 		items[index] = item
 		if len(itemErrors) > 0 {
 			errors = append(errors, itemErrors...)
+			if item == nil && !isNullableGraphQLType(itemType) {
+				return nil, errors
+			}
 		}
 	}
 	return items, errors
