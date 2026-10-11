@@ -21,13 +21,20 @@ func ValidateDocument(s *schema.Schema, bundle documentBundle, _ document) []val
 	errs = append(errs, validateFragmentDefinitions(s, bundle.fragments)...)
 	usedFragments := make(map[string]bool)
 	for _, op := range bundle.operations {
-		reachable := make(map[string]bool)
+		reachable := usedFragments
+		if len(bundle.operations) > 1 {
+			reachable = make(map[string]bool)
+		}
 		collectReachableFragments(op.Selections, bundle.fragments, reachable)
-		for name := range reachable {
-			usedFragments[name] = true
+		if len(bundle.operations) > 1 {
+			for name := range reachable {
+				usedFragments[name] = true
+			}
 		}
 		errs = append(errs, validateDefinitionDirectives(s, bundle, op, reachable)...)
-		errs = append(errs, validateVariables(op, bundle.fragments, reachable)...)
+		if len(op.Variables) > 0 || bundle.hasVariableRefs {
+			errs = append(errs, validateVariables(op, bundle.fragments, reachable)...)
+		}
 		errs = append(errs, validateVariableDefinitions(s, op)...)
 		errs = append(errs, validateDeferStreamLabels(op)...)
 		root, rootErr := rootObjectForKind(s, op.Kind)

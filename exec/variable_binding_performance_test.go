@@ -45,3 +45,21 @@ func TestParserBindingKeepsVariableContainersIsolated(t *testing.T) {
 		t.Fatal("parser binding aliases caller or another argument container")
 	}
 }
+
+func TestFragmentValidationFastPathsStillCheckVariables(t *testing.T) {
+	e := scopedVariableExecutor(t)
+	for _, query := range []string{
+		`query Q { ...F } fragment F on Query { echo(value:$undefined) }`,
+		`query Q($unused:String) { ...F } fragment F on Query { echo }`,
+		`query Q { ...F } fragment F on Query @skip(if:true) { echo }`,
+		`query A { ...F } query B { echo } fragment F on Query { echo(value:$undefined) }`,
+	} {
+		bundle, err := parseDocumentBundle(query, nil, 0)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if errs := ValidateDocument(e.Schema, bundle, bundle.operations[0]); len(errs) == 0 {
+			t.Fatalf("invalid document accepted: %s", query)
+		}
+	}
+}
