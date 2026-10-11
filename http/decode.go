@@ -21,34 +21,42 @@ const defaultMultipartMemory = 32 << 20 // 32 MiB
 // decodeGraphQLHTTP decodes one or more GraphQL operations from an HTTP
 // request. POST bodies may be a single JSON object or a JSON array (Apollo-style
 // batching). GET requests always yield exactly one body.
-func decodeGraphQLHTTP(r *nethttp.Request, config Config) ([]core.GraphQLBody, error) {
+type decodedRequest struct {
+	bodies []core.GraphQLBody
+	batch  bool
+}
+
+func decodeGraphQLHTTP(r *nethttp.Request, config Config) (decodedRequest, error) {
 	switch r.Method {
 	case nethttp.MethodPost:
 		if core.IsMultipartRequest(r) {
-			return parseMultipartGraphQL(r, config)
+			bodies, err := parseMultipartGraphQL(r, config)
+			return decodedRequest{bodies: bodies, batch: strings.HasPrefix(strings.TrimSpace(r.FormValue("operations")), "[")}, err
 		}
 		raw, err := io.ReadAll(r.Body)
 		if err != nil {
-			return nil, fmt.Errorf("reading request body: %w", err)
+			return decodedRequest{}, fmt.Errorf("reading request body: %w", err)
 		}
-		return parsePostGraphQLJSON(raw, config)
+		raw = bytes.TrimSpace(raw)
+		bodies, err := parsePostGraphQLJSON(raw, config)
+		return decodedRequest{bodies: bodies, batch: len(raw) > 0 && raw[0] == '['}, err
 	case nethttp.MethodGet:
 		body, err := core.DecodeGraphQLRequest(r)
 		if err != nil {
-			return nil, err
+			return decodedRequest{}, err
 		}
 		if err := validateVariableBytes(body.Variables, config.MaxVariableBytes); err != nil {
-			return nil, err
+			return decodedRequest{}, err
 		}
 		if err := resolvePersistedQuery(&body, config); err != nil {
-			return nil, err
+			return decodedRequest{}, err
 		}
 		if strings.TrimSpace(body.Query) == "" {
-			return nil, fmt.Errorf("missing GraphQL query")
+			return decodedRequest{}, fmt.Errorf("missing GraphQL query")
 		}
-		return []core.GraphQLBody{body}, nil
+		return decodedRequest{bodies: []core.GraphQLBody{body}}, nil
 	default:
-		return nil, fmt.Errorf("unsupported HTTP method %s", r.Method)
+		return decodedRequest{}, fmt.Errorf("unsupported HTTP method %s", r.Method)
 	}
 }
 

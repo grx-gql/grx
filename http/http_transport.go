@@ -172,7 +172,7 @@ func (t *Transport) Serve(w nethttp.ResponseWriter, r *nethttp.Request, executor
 		}
 	}
 
-	bodies, err := decodeGraphQLHTTP(r, t.config)
+	decoded, err := decodeGraphQLHTTP(r, t.config)
 	if err != nil {
 		status := nethttp.StatusBadRequest
 		if t.config.maxRequestBytes() > 0 && requestBodyTooLarge(err) {
@@ -182,7 +182,8 @@ func (t *Transport) Serve(w nethttp.ResponseWriter, r *nethttp.Request, executor
 		return
 	}
 
-	if len(bodies) == 1 {
+	bodies := decoded.bodies
+	if !decoded.batch {
 		gqlReq := core.Request{
 			Query:         bodies[0].Query,
 			OperationName: bodies[0].OperationName,
