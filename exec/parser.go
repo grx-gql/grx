@@ -190,13 +190,18 @@ func (p *parser) parseSelectionSet(depth int) ([]selection, error) {
 func (p *parser) parseSelection(depth int) (selection, error) {
 	if p.peek().kind == tokenSpread {
 		spread := p.next() // ...
-		if p.peek().kind == tokenBraceOpen {
+		if p.peek().kind == tokenBraceOpen || p.peek().kind == tokenAt {
+			dirs, err := p.parseDirectives()
+			if err != nil {
+				return selection{}, err
+			}
 			nested, err := p.parseSelectionSet(depth + 1)
 			if err != nil {
 				return selection{}, err
 			}
 			return selection{
 				Selections: nested,
+				Directives: dirs,
 				Location:   locationForOffset(p.source, spread.offset),
 			}, nil
 		}
