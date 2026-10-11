@@ -3,10 +3,9 @@ package exec
 // documentBundle holds every operation and fragment definition in a parsed
 // GraphQL document before an operation is selected for execution.
 type documentBundle struct {
-	source       string
-	operations   []document
-	fragments    map[string]*fragmentDef
-	variableUses []variableUse
+	source     string
+	operations []document
+	fragments  map[string]*fragmentDef
 }
 
 // parseDocumentBundle parses query into a bundle of executable operations plus
@@ -38,6 +37,7 @@ func parseDocumentBundleWithLexer(e *Executor, query string, variables map[strin
 	var operations []document
 
 	for p.peek().kind != tokenEOF {
+		useStart := len(p.variableUses)
 		if p.peek().kind == tokenName && p.peek().value == "fragment" {
 			fd, err := p.parseFragmentDefinition()
 			if err != nil {
@@ -47,11 +47,12 @@ func parseDocumentBundleWithLexer(e *Executor, query string, variables map[strin
 				return documentBundle{}, newParseError(p.source, fd.NameOffset,
 					`There can be only one fragment named "%s".`, fd.Name)
 			}
+			fd.VariableUses = p.variableUses[useStart:]
 			fragments[fd.Name] = fd
 			continue
 		}
 
-		kind, name, variables, variableTypes, err := p.parseOperationHeader()
+		op, err := p.parseOperationHeader()
 		if err != nil {
 			return documentBundle{}, err
 		}
@@ -59,21 +60,17 @@ func parseDocumentBundleWithLexer(e *Executor, query string, variables map[strin
 		if err != nil {
 			return documentBundle{}, err
 		}
-		operations = append(operations, document{
-			Kind:          kind,
-			Name:          name,
-			Variables:     variables,
-			VariableTypes: variableTypes,
-			Selections:    selections,
-			Fragments:     fragments,
-		})
+		op.VariableUses = p.variableUses[useStart:]
+		op.Selections = selections
+		op.Fragments = fragments
+		operations = append(operations, op)
 	}
 
 	if len(operations) == 0 {
 		return documentBundle{}, newParseError(source, 0, "document contains no operations")
 	}
 
-	return documentBundle{source: source, operations: operations, fragments: fragments, variableUses: p.variableUses}, nil
+	return documentBundle{source: source, operations: operations, fragments: fragments}, nil
 }
 
 func selectOperation(bundle documentBundle, operationName string) (document, error) {
@@ -134,9 +131,11 @@ func resolveValueMapVariableRefs(values map[string]any) map[string]any {
 
 func resolveValueVariableRef(value any) any {
 	switch typed := value.(type) {
+	case enumLiteral:
+		return string(typed)
 	case variableRef:
 		if typed.HasValue {
-			return typed.Value
+			return resolveValueVariableRef(typed.Value)
 		}
 		return nil
 	case map[string]any:
