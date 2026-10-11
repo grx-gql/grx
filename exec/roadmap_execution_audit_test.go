@@ -114,3 +114,25 @@ func TestRoadmapObjectListNonNullElementBubbles(t *testing.T) {
 		t.Fatalf("data=%s errors=%+v", got, r.Errors)
 	}
 }
+func TestRoadmapPanicRecoveryPreservesPartialData(t *testing.T) {
+	s := roadmapAuditSchema(t)
+	s.Query.Fields["broken"] = &schema.Field{Name: "broken", Type: s.Types["String"], Resolver: func(context.Context, schema.ResolveParams) (any, error) { panic("broken") }}
+	r := New(s, nil).Execute(context.Background(), core.Request{Query: `{ ok broken }`})
+	if got := roadmapAuditJSON(t, r.Data); got != `{"ok":"ok","broken":null}` {
+		t.Fatalf("recover nullable resolver panic as field error with partial data; got %s", roadmapAuditJSON(t, r))
+	}
+}
+
+func TestRoadmapIncrementalResolverPanicRecovered(t *testing.T) {
+	s := roadmapAuditSchema(t)
+	s.Query.Fields["broken"] = &schema.Field{Name: "broken", Type: s.Types["String"], Resolver: func(context.Context, schema.ResolveParams) (any, error) { panic("broken") }}
+	defer func() {
+		if value := recover(); value != nil {
+			t.Fatalf("ExecuteIncremental leaked resolver panic: %v", value)
+		}
+	}()
+	initial, patches := New(s, nil).ExecuteIncremental(context.Background(), core.Request{Query: `{ ok ... on Query @defer { broken } }`})
+	if len(patches) != 1 || len(patches[0].Errors) != 1 {
+		t.Fatalf("expected deferred field error; got initial=%+v patches=%+v", initial, patches)
+	}
+}

@@ -656,8 +656,15 @@ func (e *Executor) invokeResolver(ctx context.Context, arena *pathArena, field *
 	return e.callResolver(ctx, field, source, args)
 }
 
-func (e *Executor) callResolver(ctx context.Context, field *schema.Field, source any, args map[string]any) (any, error) {
-	value, err := field.Resolver(ctx, schema.ResolveParams{Source: source, Args: args})
+func (e *Executor) callResolver(ctx context.Context, field *schema.Field, source any, args map[string]any) (value any, err error) {
+	defer func() {
+		if recovered := recover(); recovered != nil {
+			value = nil
+			err = fmt.Errorf("panic during GraphQL field resolution: %v", recovered)
+			e.notifyError(ctx, fmt.Errorf("panic stack: %s", debug.Stack()))
+		}
+	}()
+	value, err = field.Resolver(ctx, schema.ResolveParams{Source: source, Args: args})
 	if err != nil {
 		return nil, err
 	}
