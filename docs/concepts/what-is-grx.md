@@ -43,7 +43,7 @@ These are concrete capabilities surfaced by the codebase and documented here - n
 | **GraphQL over HTTP** | Default handler accepts JSON bodies on your configured path - [**Transports**](/concepts/transports). |
 | **Optional GraphiQL** | **`WithPlaygroundPath`** serves the bundled sandbox for dev - turn it off in production ([**Introspection**](/guides/introspection)). |
 | **Router-neutral** | Everything is **`http.Handler`** - mount anywhere ([**Get started**](/getting-started/)). |
-| **CORS wiring** | Middleware helper (**[`grx.Cors`](https://pkg.go.dev/github.com/grx-gql/grx#Cors)**) for browsers and WebSocket origins. |
+| **CORS wiring** | Configure CORS in the host HTTP server or framework around the returned `http.Handler`. |
 | **Gzip responses** | Optional **`WithResponseGzip`** for JSON payloads. |
 
 ### Realtime graph
@@ -51,7 +51,7 @@ These are concrete capabilities surfaced by the codebase and documented here - n
 | Capability | Meaning |
 | --- | --- |
 | **`Subscription`** resolvers | Go methods returning **`<-chan YourType`**; runtime streams payloads per event. |
-| **WebSocket + SSE transports** | First-class [**subscriptions**](/guides/subscriptions) doc + optional **`memory-pubsub`** (Redis adapter for multi-node fan-out cases). |
+| **WebSocket + SSE transports** | First-class [**subscriptions**](/guides/subscriptions) doc + optional **Memory** backend (Redis adapter for multi-node fan-out cases). |
 
 ### Safety and operations
 

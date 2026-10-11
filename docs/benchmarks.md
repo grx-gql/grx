@@ -83,7 +83,7 @@ _Migrating from older docs:_ scenarios used to be named `BenchmarkSimpleQuery` /
 The benchmark loop measures **steady-state executor cost on this machine**:
 
 - **`ns/op`** is how long **one isolated iteration** takes (typically one OS thread spinning the benchmark loop) - **not** the same thing as inverse server QPS once you stack HTTP framing, middleware, pooling, contention, profiling, tracing, TLS, geo latency, databases, caches, saturation, retries, timeouts, serialization at the edges, fleet size and autoscaling, **and concurrent client load**.
-- The harness uses **deterministic in-memory fixtures** (“zero-I/O” resolvers returning shared pointers). In real deployments, **`p99` is usually bounded by backends** (RPC, PostgreSQL, Redis, entitlement checks) - the GraphQL engine is often a **small fraction** of wall time unless you are intentionally CPU-heavy on trivial data.
+- The harness uses **deterministic process-local fixtures** (“zero-I/O” resolvers returning shared pointers). In real deployments, **`p99` is usually bounded by backends** (RPC, PostgreSQL, Redis, entitlement checks) - the GraphQL engine is often a **small fraction** of wall time unless you are intentionally CPU-heavy on trivial data.
 - `go test -bench` is a **controlled micro-environment**. Treat results as answering: “for this query shape with **no datastore**, how expensive is parsing + validation + execution + encoding relative to alternatives?” - then **reproduce on your workloads** (`go test`/Netflix/load tests, `-trace`, CPU profiles).
 
 A **rough heuristic** engineers sometimes misuse: if you pretend one core were 100 % saturated doing only GraphQL-shaped work shown here, \(\text{near upper bound ops/s} \approx 10^{9} / (\text{ns/op})\) - that still ignores everything above **and ignores that production uses many cores unevenly**.
@@ -92,7 +92,7 @@ A **rough heuristic** engineers sometimes misuse: if you pretend one core were 1
 
 ## Why grx often measures faster than `graphql-go/graphql` and `graph-gophers/graphql-go`
 
-Libraries differ in runtime shape; “faster microbench” is not universal at every workload. Below is why **these** workloads tend to skew toward grx - they match how the sibling module is deliberately built (`benchmark/` parity schemas, in-memory resolves).
+Libraries differ in runtime shape; “faster microbench” is not universal at every workload. Below is why **these** workloads tend to skew toward grx - they match how the sibling module is deliberately built (`benchmark/` parity schemas, process-local resolves).
 
 ### 1. **Less material in grx’s hot path**
 

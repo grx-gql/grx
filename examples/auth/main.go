@@ -65,7 +65,6 @@ func main() {
 	srv, err := grx.NewServer(
 		grx.WithSchema(graph.NewSchema()),
 		grx.WithPlaygroundPath("/"),
-		grx.WithMiddleware(bearerAuth),
 		grx.WithFieldAuthorizer(requireViewerField()),
 	)
 	if err != nil {
@@ -74,5 +73,5 @@ func main() {
 
 	log.Println(`GraphQL playground: http://localhost:4010/`)
 	log.Println(`For { viewer { id } } add header Authorization: Bearer ` + demoBearerToken)
-	log.Fatal(http.ListenAndServe(":4010", srv))
+	log.Fatal(http.ListenAndServe(":4010", bearerAuth(srv)))
 }

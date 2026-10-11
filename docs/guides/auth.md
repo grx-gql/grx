@@ -16,7 +16,7 @@ only carries GraphQL payloads (document, operation name, variables).
 To authenticate users:
 
 1. **HTTP layer**  -  read `Authorization` (or cookies) inside
-   [`grx.WithMiddleware`](/reference/grx/) middleware (or Chi/Gin adapters that wrap the [`grx.Server`](https://pkg.go.dev/github.com/grx-gql/grx#Server) handler).
+   host HTTP middleware wrapping the [`grx.Server`](https://pkg.go.dev/github.com/grx-gql/grx#Server) handler (or Chi/Gin adapters).
 2. **Attach identity**  -  put a verified subject/session on the context (`context.WithValue`).
 3. **Authorize**  -  use [`WithFieldAuthorizer`](#field-level-guards),
    [`WithOperationAuthorizer`](#operation-level-rules), resolver checks - or a [`plugins.Plugin`](/reference/plugins/)
@@ -144,13 +144,12 @@ func requireViewerField() grx.FieldAuthorizer {
 func wireServerWithFieldAuth() error {
 	srv, err := grx.NewServer(
 		grx.WithSchema(graph.NewSchema()),
-		grx.WithMiddleware(bearerAuth),
 		grx.WithFieldAuthorizer(requireViewerField()),
 	)
 	if err != nil {
 		return err
 	}
-	_ = srv // listen with http.ListenAndServe in your entrypoint
+	_ = bearerAuth(srv) // pass the wrapped handler to your HTTP server
 	return nil
 }
 ```

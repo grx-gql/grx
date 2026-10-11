@@ -79,7 +79,7 @@ Zero disables each limit. These are coarse guards against denial-of-service
 shapes; they are not a full GraphQL "cost" or complexity analysis.
 
 For **variable-free** requests, `exec.WithDocumentCache` /
-`server.Config.DocumentCacheSize` enables a bounded in-memory cache of parsed
+`server.Config.DocumentCacheSize` enables a bounded process-local cache of parsed
 document bundles (eviction is FIFO by insertion order when full). Requests that
 supply a variable map skip the cache because variable defaults are still applied
 during parsing.

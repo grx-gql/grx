@@ -481,7 +481,7 @@ func (e *Executor) executeSelectionSet(ctx context.Context, object *schema.Objec
 		collector = arena.collector
 	}
 
-	flat, defers, flatErrs := e.flattenSelections(collector != nil, object, selections, fragments)
+	flat, defers, flatErrs := e.prepareSelections(arena, object, selections, fragments)
 	var errors []core.Error
 	if len(flatErrs) > 0 {
 		errors = append(errors, flatErrs...)

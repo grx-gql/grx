@@ -313,9 +313,9 @@ and executor caps that complement subscription transports.
 
 ### Fan-out isolation
 
-When using **[pub/sub](/concepts/pubsub)**, keep predicates and topic naming
-structured so tenants cannot subscribe to each other’s events - defense in depth
-beyond transport auth.
+When using [pub/sub](/concepts/pubsub), authorize the requested room or tenant
+before subscribing to its exact topic. Topic names route events; they do not
+grant access.
 
 ## Cross-resolver fan-out with `pubsub`
 
@@ -323,102 +323,29 @@ The ticker pattern above is fine for demos but not for real workloads.
 Most subscriptions stream events that **mutation resolvers** publish
 elsewhere  -  e.g. a `messagePosted` subscription that fans out values
 produced by a `postMessage` mutation. grx ships
-[`memory-pubsub`](/concepts/pubsub) (`package pubsub`) for exactly this  -  use **in-memory** for single-process setups and **`redis-pubsub`** once you scale horizontally; **[Choosing a backend](/concepts/pubsub#choosing-a-backend)** explains the trade-offs.
+[`pubsub.PubSub`](/concepts/pubsub) for exactly this - use **Memory** for single-process setups and **`pubsub/redis`** once you scale horizontally; **[Choosing a backend](/concepts/pubsub#choosing-a-backend)** explains the trade-offs.
 
-### Wire a typed bus
+### Encode payloads at the resolver boundary
 
-```go
-package graph
+The bus carries bytes. The publisher encodes each message as JSON, and the
+subscription resolver decodes it into the channel's element type. Both use
+`message.posted.<roomId>` so each subscriber receives only its room's events.
 
-import (
-	"context"
-	"fmt"
-	"strings"
-	"sync/atomic"
-	"time"
+This is the message resolver from the runnable subscription example:
 
-	"github.com/grx-gql/grx/memory-pubsub"
-)
-
-const messagePostedTopic = "message.posted"
-
-type Message struct {
-    ID       string `gql:"id,nonNull"`
-    RoomID   string `gql:"roomId,nonNull"`
-    Author   string `gql:"author,nonNull"`
-    Body     string `gql:"body,nonNull"`
-    PostedAt string `gql:"postedAt,nonNull"`
-}
-
-type PostMessageInput struct {
-    RoomID string `gql:"roomId,nonNull"`
-    Author string `gql:"author,nonNull"`
-    Body   string `gql:"body,nonNull"`
-}
-
-type PostMessageArgs struct{ Input PostMessageInput `gql:"input,nonNull"` }
-type PostMessagePayload struct{ Message *Message `gql:"message,nonNull"` }
-type MessagePostedArgs struct{ RoomID string `gql:"roomId,nonNull"` }
-
-type MessageMutation struct {
-    Bus    *pubsub.Typed[*Message]
-    nextID atomic.Uint64
-}
-
-func (m *MessageMutation) PostMessage(ctx context.Context, args PostMessageArgs) (*PostMessagePayload, error) {
-    if strings.TrimSpace(args.Input.RoomID) == "" {
-        return nil, fmt.Errorf("roomId is required")
-    }
-    msg := &Message{
-        ID:       fmt.Sprintf("msg_%d", m.nextID.Add(1)),
-        RoomID:   args.Input.RoomID,
-        Author:   args.Input.Author,
-        Body:     args.Input.Body,
-        PostedAt: time.Now().UTC().Format(time.RFC3339Nano),
-    }
-    if err := m.Bus.Publish(ctx, messagePostedTopic, msg); err != nil {
-        return nil, err
-    }
-    return &PostMessagePayload{Message: msg}, nil
-}
-
-type MessageSubscription struct{ Bus *pubsub.Typed[*Message] }
-
-// One topic carries every room's traffic; each subscriber filters
-// down to its requested RoomID via a typed predicate. Predicates run
-// on the publish path, so other rooms' messages never wake this
-// goroutine.
-func (s MessageSubscription) MessagePosted(ctx context.Context, args MessagePostedArgs) (<-chan *Message, error) {
-    return s.Bus.Subscribe(ctx, messagePostedTopic, func(m *Message) bool {
-        return m != nil && m.RoomID == args.RoomID
-    })
-}
-```
+<<< @/../examples/subscriptions/graph/message.go
 
 ### Construct the bus once and share it
 
-```go
-package graph
+The example's `graph.New(bus)` wires the same bus into mutations and
+subscriptions. `graph.New()` or `graph.New(nil)` exposes only queries and
+`createPost`; no subscription root or event-publishing mutations are registered.
+The composed user and post resolvers are shown in [Examples](/examples/#examples-subscriptions).
 
-import (
-	"github.com/grx-gql/grx/memory-pubsub"
-	"github.com/grx-gql/grx/schema"
-)
+<<< @/../examples/subscriptions/graph/schema.go
 
-func NewSchema(bus pubsub.PubSub) schema.Config {
-	messages := pubsub.NewTyped[*Message](bus)
-
-	return schema.Config{
-		Query: Query{},
-		Mutation: Mutation{
-			MessageMutation: &MessageMutation{Bus: messages},
-		},
-		Subscription: Subscription{
-			MessageSubscription: MessageSubscription{Bus: messages},
-		},
-	}
-}
-```
+The server below imports that example graph package. In your application,
+replace it with your own graph package after defining the same resolver types.
 
 ```go
 package main
@@ -428,10 +355,10 @@ import (
 	"net/http"
 	"time"
 
-	"example.com/hello-grx/graph"
+	"github.com/grx-gql/grx/examples/subscriptions/graph"
 
 	"github.com/grx-gql/grx"
-	"github.com/grx-gql/grx/memory-pubsub"
+	"github.com/grx-gql/grx/pubsub/memory"
 	"github.com/grx-gql/grx/sse"
 	"github.com/grx-gql/grx/websocket"
 )
@@ -442,11 +369,11 @@ func allowOrigin(r *http.Request) bool {
 }
 
 func main() {
-	bus := pubsub.NewMemory()
+	bus := memory.New()
 	defer bus.Close()
 
 	srv, err := grx.NewServer(
-		grx.WithSchema(graph.NewSchema(bus)),
+		grx.WithSchema(graph.New(bus)),
 		grx.WithTransports(
 			websocket.New(websocket.Config{ReadIdleTimeout: 60 * time.Second, CheckOrigin: allowOrigin}),
 			sse.New(),
@@ -455,7 +382,7 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	_ = srv
+	log.Fatal(http.ListenAndServe(":4000", srv))
 }
 
 ```
@@ -480,14 +407,13 @@ mutation {
 }
 ```
 
-The first tab receives the value immediately. Posting to a *different*
-room does not wake the subscriber because the predicate runs on the
-publish path.
+The first tab receives the value. Posting to a different room uses a different
+topic, so the subscriber does not receive that message.
 
 ### Going multi-replica
 
-When you outgrow a single process, swap `pubsub.NewMemory()` for the
-Redis-backed bus  -  resolver code and `Typed[T]` wiring stay the same
+When you outgrow a single process, swap `memory.New()` for the
+Redis-backed bus - resolver code and payload encoding stay the same
 ([**memory vs Redis**](/concepts/pubsub#choosing-a-backend)):
 
 ```go
@@ -496,7 +422,7 @@ package main
 import (
 	"log"
 
-	redisps "github.com/grx-gql/grx/redis-pubsub"
+	redisps "github.com/grx-gql/grx/pubsub/redis"
 
 	rd "github.com/redis/go-redis/v9"
 )

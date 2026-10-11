@@ -10,18 +10,18 @@ import (
 	"testing"
 
 	"github.com/grx-gql/grx"
+	"github.com/grx-gql/grx/client"
 	"github.com/grx-gql/grx/core"
 	subscriptiongraph "github.com/grx-gql/grx/examples/subscriptions/graph"
-	"github.com/grx-gql/grx/client"
-	"github.com/grx-gql/grx/memory-pubsub"
+	"github.com/grx-gql/grx/pubsub/memory"
 )
 
 func TestClientExecQueryAgainstServer(t *testing.T) {
-	bus := pubsub.NewMemory()
+	bus := memory.New()
 	t.Cleanup(func() { _ = bus.Close() })
 
 	srv, err := grx.NewServer(
-		grx.WithSchema(subscriptiongraph.New(subscriptiongraph.WithPubSub(bus))),
+		grx.WithSchema(subscriptiongraph.New(bus)),
 	)
 	if err != nil {
 		t.Fatalf("new server: %v", err)

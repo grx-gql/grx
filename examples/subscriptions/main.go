@@ -5,13 +5,11 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
-	"time"
 
 	"github.com/grx-gql/grx"
-	"github.com/grx-gql/grx/cors"
 	"github.com/grx-gql/grx/examples/subscriptions/graph"
-	"github.com/grx-gql/grx/memory-pubsub"
 	"github.com/grx-gql/grx/plugins/logger"
+	"github.com/grx-gql/grx/pubsub/memory"
 	"github.com/grx-gql/grx/sse"
 	"github.com/grx-gql/grx/websocket"
 )
@@ -29,22 +27,13 @@ func main() {
 		log.Fatal(err)
 	}
 
-	bus := pubsub.NewMemory()
+	bus := memory.New()
 	defer bus.Close()
 
 	srv, err := grx.NewServer(
-		grx.WithSchema(graph.New(graph.WithPubSub(bus))),
+		grx.WithSchema(graph.New(bus)),
 		grx.WithPlugins(loggerPlugin),
 		grx.WithPlaygroundPath(playgroundPath),
-		grx.WithMiddleware(cors.New(cors.Config{
-			AllowedOrigins: []string{
-				"http://localhost:" + port,
-				"http://127.0.0.1:" + port,
-			},
-			AllowedMethods: []string{http.MethodGet, http.MethodPost, http.MethodOptions},
-			AllowedHeaders: []string{"Content-Type", "Authorization"},
-			MaxAge:         10 * time.Minute,
-		})),
 		grx.WithTransports(
 			websocket.New(),
 			sse.New(),

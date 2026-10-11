@@ -108,22 +108,28 @@ SSE auth uses standard HTTP middleware in front of the server.
 Real subscription resolvers rarely produce values themselves; they fan
 out events that **mutation resolvers** publish elsewhere in the
 process (or in a sibling replica, when running behind a load balancer).
-grx ships [`memory-pubsub`](/concepts/pubsub) for exactly this:
+grx ships a backend-neutral [`pubsub.PubSub`](/concepts/pubsub) contract for exactly this:
 
 ```go
-bus := pubsub.NewMemory()                         // in-process default
-events := pubsub.NewTyped[*Message](bus)          // type-safe wrapper
+bus := memory.New()
 
 // inside the mutation resolver
-_ = events.Publish(ctx, "message.posted", msg)
+payload, err := json.Marshal(msg)
+if err != nil {
+	return err
+}
+if err := bus.Publish(ctx, "message.posted."+msg.RoomID, payload); err != nil {
+	return err
+}
 
-// inside the subscription resolver  -  predicates run on the publish
-// path so uninteresting messages never wake the consumer goroutine.
-return events.Subscribe(ctx, "message.posted", func(m *Message) bool {
-    return m.RoomID == args.RoomID
-})
+// Inside the subscription resolver, use the same room-specific topic.
+// Other rooms' messages are never delivered to this subscriber.
+msgs, err := bus.Subscribe(ctx, "message.posted."+args.RoomID)
+if err != nil {
+	return nil, err
+}
 ```
 
-For **multi-replica** deployments (mutations on one pod, WebSocket clients on another), swap `pubsub.NewMemory()` for [`redis-pubsub`](/reference/redis-pubsub/); semantics and resolver code stay aligned with **[Choosing a backend](/concepts/pubsub#choosing-a-backend)** on the Pub/Sub concept page.
+For **multi-replica** deployments (mutations on one pod, WebSocket clients on another), swap `memory.New()` for the Redis backend documented in **[Choosing a backend](/concepts/pubsub#choosing-a-backend)**.
 
 See **[Pub/Sub](/concepts/pubsub)** for the full surface and [Realtime subscriptions](/guides/subscriptions) for an end-to-end chat-room example.

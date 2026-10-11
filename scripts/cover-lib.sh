@@ -13,6 +13,10 @@ while IFS= read -r pkg; do
 	out="$(go test -cover -count=1 "$pkg" 2>&1)" || true
 	pct="$(echo "$out" | sed -n 's/.*coverage: \([0-9.]*\)% of statements.*/\1/p' | head -1)"
 	if [[ -z "$pct" ]]; then
+		if echo "$out" | grep -q 'coverage: \[no statements\]'; then
+			echo "==> $pkg — n/a (interface-only, no statements)"
+			continue
+		fi
 		echo "==> $pkg — could not parse coverage"
 		echo "$out"
 		fail=1

@@ -2,18 +2,22 @@ package graph
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 	"sync/atomic"
 	"time"
 
-	"github.com/grx-gql/grx/memory-pubsub"
+	"github.com/grx-gql/grx/pubsub"
 )
 
-// messagePostedTopic is the bus topic for chat message events. A single
-// topic is used; subscribers filter by RoomID via a typed predicate so
-// consumers never see messages from other rooms.
-const messagePostedTopic = "message.posted"
+// messagePostedTopicPrefix is the bus topic prefix for chat message events.
+// Each room gets its own topic so subscribers receive only that room's traffic.
+const messagePostedTopicPrefix = "message.posted."
+
+func messagePostedTopic(roomID string) string {
+	return messagePostedTopicPrefix + roomID
+}
 
 type Message struct {
 	ID       string `gql:"id,nonNull"`
@@ -43,9 +47,9 @@ type MessagePostedArgs struct {
 
 // MessageMutation owns the write side of the Message entity. It assigns
 // a monotonic ID, stamps the server time, and publishes the new message
-// on the shared typed bus so room subscribers can fan it out.
+// on the room's topic so subscribers for that room receive it.
 type MessageMutation struct {
-	Bus    *pubsub.Typed[*Message]
+	Bus    pubsub.PubSub
 	nextID atomic.Uint64
 }
 
@@ -66,7 +70,11 @@ func (m *MessageMutation) PostMessage(ctx context.Context, args PostMessageArgs)
 		PostedAt: time.Now().UTC().Format(time.RFC3339Nano),
 	}
 	if m.Bus != nil {
-		if err := m.Bus.Publish(ctx, messagePostedTopic, message); err != nil {
+		payload, err := json.Marshal(message)
+		if err != nil {
+			return nil, err
+		}
+		if err := m.Bus.Publish(ctx, messagePostedTopic(message.RoomID), payload); err != nil {
 			return nil, err
 		}
 	}
@@ -74,20 +82,35 @@ func (m *MessageMutation) PostMessage(ctx context.Context, args PostMessageArgs)
 }
 
 // MessageSubscription owns the streaming side of the Message entity.
-// MessagePosted demonstrates argument-driven filtering: a single topic
-// carries every room's traffic, but each subscriber only forwards
-// events that match its requested RoomID via a typed predicate. This
-// is the standard pattern for chat rooms, ticker symbols, channel
-// feeds, etc.
+// MessagePosted subscribes to the room-specific topic so each GraphQL
+// subscription receives only messages for its requested roomId.
 type MessageSubscription struct {
-	Bus *pubsub.Typed[*Message]
+	Bus pubsub.PubSub
 }
 
 func (s MessageSubscription) MessagePosted(ctx context.Context, args MessagePostedArgs) (<-chan *Message, error) {
 	if strings.TrimSpace(args.RoomID) == "" {
 		return nil, fmt.Errorf("roomId is required")
 	}
-	return s.Bus.Subscribe(ctx, messagePostedTopic, func(m *Message) bool {
-		return m != nil && m.RoomID == args.RoomID
-	})
+	msgs, err := s.Bus.Subscribe(ctx, messagePostedTopic(args.RoomID))
+	if err != nil {
+		return nil, err
+	}
+	out := make(chan *Message)
+	go func() {
+		defer close(out)
+		for msg := range msgs {
+			var message Message
+			if err := json.Unmarshal(msg.Payload, &message); err != nil {
+				continue
+			}
+			m := message
+			select {
+			case <-ctx.Done():
+				return
+			case out <- &m:
+			}
+		}
+	}()
+	return out, nil
 }

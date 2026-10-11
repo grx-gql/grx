@@ -21,9 +21,6 @@ import (
 	"github.com/grx-gql/grx/websocket"
 )
 
-// Middleware wraps the HTTP handler exposed by Server.
-type Middleware func(http.Handler) http.Handler
-
 // Config tunes a [Server]. Schema is required; the remaining fields have
 // safe zero-value defaults.
 type Config struct {
@@ -68,10 +65,6 @@ type Config struct {
 	// *sse transports are routed only to SubscriptionPath; other transports
 	// stay on GraphQLPath.
 	Transports []core.Transport
-
-	// Middleware wraps the final HTTP handler. Middleware is applied in the
-	// order supplied, so the first middleware sees each request first.
-	Middleware []Middleware
 
 	// RequestTimeout, when non-zero, applies a deadline to the context of each
 	// GraphQL request handled by the built-in transports.
@@ -327,7 +320,7 @@ func New(config Config) (*Server, error) {
 		subChain:         sub,
 		requestTimeout:   config.RequestTimeout,
 	}
-	srv.handler = applyMiddleware(http.HandlerFunc(srv.serveHTTP), config.Middleware)
+	srv.handler = http.HandlerFunc(srv.serveHTTP)
 	return srv, nil
 }
 
@@ -337,13 +330,6 @@ func applySSEServerLimits(transport core.Transport, config Config) {
 		return
 	}
 	sseTransport.ApplyServerLimits(config.MaxHTTPRequestBytes, config.MaxVariableBytes)
-}
-
-func applyMiddleware(handler http.Handler, middleware []Middleware) http.Handler {
-	for i := len(middleware) - 1; i >= 0; i-- {
-		handler = middleware[i](handler)
-	}
-	return handler
 }
 
 func normalizePath(path string, defaultPath string) string {

@@ -1,4 +1,4 @@
-package pubsub
+package memory
 
 import (
 	"context"
@@ -7,10 +7,12 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/grx-gql/grx/pubsub"
 )
 
 func TestMemoryPublishToSubscriber(t *testing.T) {
-	bus := NewMemory()
+	bus := New()
 	t.Cleanup(func() { _ = bus.Close() })
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -35,60 +37,17 @@ func TestMemoryPublishToSubscriber(t *testing.T) {
 	}
 }
 
-func TestMemoryFiltersGateDelivery(t *testing.T) {
-	bus := NewMemory()
-	t.Cleanup(func() { _ = bus.Close() })
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	even := PayloadFunc(func(b []byte) bool {
-		n, err := strconv.Atoi(string(b))
-		return err == nil && n%2 == 0
-	})
-
-	ch, err := bus.Subscribe(ctx, "numbers", even)
-	if err != nil {
-		t.Fatalf("Subscribe: %v", err)
-	}
-
-	for i := 1; i <= 4; i++ {
-		if err := bus.Publish(context.Background(), "numbers", []byte(strconv.Itoa(i))); err != nil {
-			t.Fatalf("Publish: %v", err)
-		}
-	}
-
-	got := []string{}
-	deadline := time.After(500 * time.Millisecond)
-loop:
-	for {
-		select {
-		case msg := <-ch:
-			got = append(got, string(msg.Payload))
-			if len(got) == 2 {
-				break loop
-			}
-		case <-deadline:
-			break loop
-		}
-	}
-
-	if len(got) != 2 || got[0] != "2" || got[1] != "4" {
-		t.Fatalf("expected only even payloads, got %v", got)
-	}
-}
-
 func TestMemorySubscribeOnlyDeliversToTopic(t *testing.T) {
-	bus := NewMemory()
+	bus := New()
 	t.Cleanup(func() { _ = bus.Close() })
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	chA, _ := bus.Subscribe(ctx, "a")
-	chB, _ := bus.Subscribe(ctx, "b")
+	chA, _ := bus.Subscribe(ctx, "message.posted.room-a")
+	chB, _ := bus.Subscribe(ctx, "message.posted.room-b")
 
-	_ = bus.Publish(context.Background(), "a", []byte("alpha"))
+	_ = bus.Publish(context.Background(), "message.posted.room-a", []byte("alpha"))
 
 	select {
 	case msg := <-chA:
@@ -107,7 +66,7 @@ func TestMemorySubscribeOnlyDeliversToTopic(t *testing.T) {
 }
 
 func TestMemorySubscribeUnsubscribesOnContextCancel(t *testing.T) {
-	bus := NewMemory()
+	bus := New()
 	t.Cleanup(func() { _ = bus.Close() })
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -130,7 +89,7 @@ func TestMemorySubscribeUnsubscribesOnContextCancel(t *testing.T) {
 }
 
 func TestMemorySlowSubscriberDropsMessages(t *testing.T) {
-	bus := NewMemory(MemoryConfig{Buffer: 1})
+	bus := New(Config{Buffer: 1})
 	t.Cleanup(func() { _ = bus.Close() })
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -150,7 +109,7 @@ func TestMemorySlowSubscriberDropsMessages(t *testing.T) {
 	select {
 	case msg := <-ch:
 		if len(msg.Payload) != 1 || msg.Payload[0] != 0 {
-			t.Fatalf("expected first published payload, got %+v", msg)
+			t.Fatalf("expected first published payload, got %+v", msg.Payload)
 		}
 	case <-time.After(time.Second):
 		t.Fatalf("expected at least one message")
@@ -158,11 +117,11 @@ func TestMemorySlowSubscriberDropsMessages(t *testing.T) {
 }
 
 func TestMemoryCloseStopsSubscribers(t *testing.T) {
-	bus := NewMemory()
+	bus := New()
 	ctx := context.Background()
 
 	const n = 5
-	channels := make([]<-chan Message, n)
+	channels := make([]<-chan pubsub.Message, n)
 	for i := 0; i < n; i++ {
 		ch, err := bus.Subscribe(ctx, "topic")
 		if err != nil {
@@ -178,7 +137,7 @@ func TestMemoryCloseStopsSubscribers(t *testing.T) {
 	var wg sync.WaitGroup
 	for _, ch := range channels {
 		wg.Add(1)
-		go func(ch <-chan Message) {
+		go func(ch <-chan pubsub.Message) {
 			defer wg.Done()
 			for range ch {
 			}
@@ -193,10 +152,10 @@ func TestMemoryCloseStopsSubscribers(t *testing.T) {
 		t.Fatalf("Close did not drain subscribers")
 	}
 
-	if err := bus.Publish(context.Background(), "topic", []byte("x")); !errors.Is(err, ErrClosed) {
+	if err := bus.Publish(context.Background(), "topic", []byte("x")); !errors.Is(err, pubsub.ErrClosed) {
 		t.Fatalf("expected ErrClosed after Close, got %v", err)
 	}
-	if _, err := bus.Subscribe(context.Background(), "topic"); !errors.Is(err, ErrClosed) {
+	if _, err := bus.Subscribe(context.Background(), "topic"); !errors.Is(err, pubsub.ErrClosed) {
 		t.Fatalf("expected ErrClosed on Subscribe after Close, got %v", err)
 	}
 	if err := bus.Close(); err != nil {
@@ -205,9 +164,9 @@ func TestMemoryCloseStopsSubscribers(t *testing.T) {
 }
 
 func TestMemoryCloseWhileSubscribersCancel(t *testing.T) {
-	bus := NewMemory()
+	bus := New()
 	const n = 32
-	channels := make([]<-chan Message, n)
+	channels := make([]<-chan pubsub.Message, n)
 	var pendingCancel []context.CancelFunc
 	defer func() {
 		for _, c := range pendingCancel {
@@ -240,7 +199,7 @@ func TestMemoryCloseWhileSubscribersCancel(t *testing.T) {
 }
 
 func TestMemoryConcurrentPublishSubscribe(t *testing.T) {
-	bus := NewMemory(MemoryConfig{Buffer: 64})
+	bus := New(Config{Buffer: 64})
 	t.Cleanup(func() { _ = bus.Close() })
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -248,7 +207,7 @@ func TestMemoryConcurrentPublishSubscribe(t *testing.T) {
 
 	const subscribers = 16
 	const messages = 64
-	channels := make([]<-chan Message, subscribers)
+	channels := make([]<-chan pubsub.Message, subscribers)
 	for i := 0; i < subscribers; i++ {
 		ch, err := bus.Subscribe(ctx, "t")
 		if err != nil {
@@ -278,13 +237,59 @@ func TestMemoryConcurrentPublishSubscribe(t *testing.T) {
 				}
 				count++
 			case <-time.After(50 * time.Millisecond):
-				if count == messages {
-
-				}
 			}
 		}
 		if count != messages {
 			t.Fatalf("subscriber received %d/%d messages", count, messages)
+		}
+	}
+}
+
+func TestMemoryPublishConcurrentCloseDoesNotPanic(t *testing.T) {
+	const (
+		attempts    = 20
+		publishers  = 8
+		publishes   = 32
+		subscribers = 1024
+	)
+
+	for attempt := 0; attempt < attempts; attempt++ {
+		bus := New(Config{Buffer: publishers * publishes})
+		for i := 0; i < subscribers; i++ {
+			if _, err := bus.Subscribe(context.Background(), "topic"); err != nil {
+				t.Fatalf("Subscribe: %v", err)
+			}
+		}
+
+		start := make(chan struct{})
+		panics := make(chan any, publishers)
+		var wg sync.WaitGroup
+		for i := 0; i < publishers; i++ {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				defer func() {
+					if recovered := recover(); recovered != nil {
+						panics <- recovered
+					}
+				}()
+				<-start
+				for j := 0; j < publishes; j++ {
+					_ = bus.Publish(context.Background(), "topic", []byte("payload"))
+				}
+			}()
+		}
+
+		close(start)
+		if err := bus.Close(); err != nil {
+			t.Fatalf("Close: %v", err)
+		}
+		wg.Wait()
+
+		select {
+		case recovered := <-panics:
+			t.Fatalf("concurrent Publish and Close panicked: %v", recovered)
+		default:
 		}
 	}
 }

@@ -198,7 +198,7 @@ Omit `**/*_test.go` if you run `go test` inside the Docker build stage; otherwis
 
 ### Compose (API + Redis for pub/sub)
 
-If you use **[`redis-pubsub`](/reference/redis-pubsub/)** for multi-replica subscriptions, wire the same network and env vars your Go code expects:
+If you use the **[`redis`](/reference/redis/)** module for multi-replica subscriptions, wire the same network and env vars your Go code expects:
 
 ```yaml
 services:

@@ -28,9 +28,9 @@ import (
 	subscriptiongraph "github.com/grx-gql/grx/examples/subscriptions/graph"
 	"github.com/grx-gql/grx/exec"
 	grxhttp "github.com/grx-gql/grx/http"
-	"github.com/grx-gql/grx/memory-pubsub"
-	"github.com/grx-gql/grx/middlewares"
 	"github.com/grx-gql/grx/plugins"
+	"github.com/grx-gql/grx/pubsub"
+	"github.com/grx-gql/grx/pubsub/memory"
 	"github.com/grx-gql/grx/schema"
 	"github.com/grx-gql/grx/sse"
 	"github.com/grx-gql/grx/websocket"
@@ -175,12 +175,17 @@ func TestServeHTTPPreservesSelectionOrderInJSONResponse(t *testing.T) {
 	assertOrderedSubstring(t, body, `"id":"user_42"`, `"email":"ada@example.com"`)
 }
 
+func newSubscriptionTestEvents(t *testing.T) pubsub.PubSub {
+	t.Helper()
+	bus := memory.New()
+	t.Cleanup(func() { _ = bus.Close() })
+	return bus
+}
+
 func newTestServer(t *testing.T) *Server {
 	t.Helper()
 
-	bus := pubsub.NewMemory()
-	t.Cleanup(func() { _ = bus.Close() })
-	server, err := New(Config{Schema: subscriptiongraph.New(subscriptiongraph.WithPubSub(bus))})
+	server, err := New(Config{Schema: subscriptiongraph.New(newSubscriptionTestEvents(t))})
 	if err != nil {
 		t.Fatalf("new server: %v", err)
 	}
@@ -399,10 +404,9 @@ func readWebSocketHandshakeStatus(t *testing.T, baseURL string, requestPath stri
 }
 
 func TestSeparateSubscriptionPathWebSocketRouting(t *testing.T) {
-	bus := pubsub.NewMemory()
-	t.Cleanup(func() { _ = bus.Close() })
+	events := newSubscriptionTestEvents(t)
 	srv, err := New(Config{
-		Schema:           subscriptiongraph.New(subscriptiongraph.WithPubSub(bus)),
+		Schema:           subscriptiongraph.New(events),
 		SubscriptionPath: "/graphql/ws",
 		Transports:       []core.Transport{websocket.New()},
 	})
@@ -422,10 +426,9 @@ func TestSeparateSubscriptionPathWebSocketRouting(t *testing.T) {
 }
 
 func TestSubscriptionPathSeparateWithoutStreamingTransportErrors(t *testing.T) {
-	bus := pubsub.NewMemory()
-	t.Cleanup(func() { _ = bus.Close() })
+	events := newSubscriptionTestEvents(t)
 	_, err := New(Config{
-		Schema:           subscriptiongraph.New(subscriptiongraph.WithPubSub(bus)),
+		Schema:           subscriptiongraph.New(events),
 		SubscriptionPath: "/subs",
 		Transports:       nil,
 	})
@@ -450,10 +453,9 @@ func TestGraphQLOptionsReturnsAllow(t *testing.T) {
 }
 
 func TestDisableIntrospectionRejectsSchemaQuery(t *testing.T) {
-	bus := pubsub.NewMemory()
-	t.Cleanup(func() { _ = bus.Close() })
+	events := newSubscriptionTestEvents(t)
 	srv, err := New(Config{
-		Schema:               subscriptiongraph.New(subscriptiongraph.WithPubSub(bus)),
+		Schema:               subscriptiongraph.New(events),
 		DisableIntrospection: true,
 	})
 	if err != nil {
@@ -483,10 +485,9 @@ func (blockPlugin) ValidationStart(ctx context.Context, req core.Request) error 
 }
 
 func TestRequestTimeoutStopsSlowValidation(t *testing.T) {
-	bus := pubsub.NewMemory()
-	t.Cleanup(func() { _ = bus.Close() })
+	events := newSubscriptionTestEvents(t)
 	srv, err := New(Config{
-		Schema:         subscriptiongraph.New(subscriptiongraph.WithPubSub(bus)),
+		Schema:         subscriptiongraph.New(events),
 		Plugins:        []plugins.Plugin{blockPlugin{}},
 		RequestTimeout: 50 * time.Millisecond,
 	})
@@ -505,42 +506,6 @@ func TestRequestTimeoutStopsSlowValidation(t *testing.T) {
 	}
 }
 
-type ridPlugin struct {
-	plugins.Base
-	t *testing.T
-}
-
-func (p *ridPlugin) ParsingStart(ctx context.Context, req core.Request) error {
-	if core.RequestIDFromContext(ctx) == "" {
-		p.t.Fatal("expected request id in context")
-	}
-	return nil
-}
-
-func TestRequestIDMiddlewarePropagatesContext(t *testing.T) {
-	bus := pubsub.NewMemory()
-	t.Cleanup(func() { _ = bus.Close() })
-	p := &ridPlugin{t: t}
-	srv, err := New(Config{
-		Schema:     subscriptiongraph.New(subscriptiongraph.WithPubSub(bus)),
-		Plugins:    []plugins.Plugin{p},
-		Middleware: []Middleware{Middleware(middlewares.RequestID("X-Request-Id"))},
-	})
-	if err != nil {
-		t.Fatalf("new server: %v", err)
-	}
-	h := wrapServerInHarness(t, srv)
-	httpResp, _ := execGraphQLHTTP(t, h, &grxclient.Request{Query: "{ __typename }"}, map[string]string{
-		"X-Request-Id": "upstream-1",
-	})
-	if httpResp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d", httpResp.StatusCode)
-	}
-	if got := httpResp.Header.Get("X-Request-Id"); got != "upstream-1" {
-		t.Fatalf("response X-Request-Id = %q", got)
-	}
-}
-
 type errorRecorder struct {
 	plugins.Base
 	errors []error
@@ -551,11 +516,10 @@ func (r *errorRecorder) Error(ctx context.Context, err error) {
 }
 
 func TestSecurityMasksResolverErrorsAndPreservesRawError(t *testing.T) {
-	bus := pubsub.NewMemory()
-	t.Cleanup(func() { _ = bus.Close() })
+	events := newSubscriptionTestEvents(t)
 	recorder := &errorRecorder{}
 	srv, err := New(Config{
-		Schema:             subscriptiongraph.New(subscriptiongraph.WithPubSub(bus)),
+		Schema:             subscriptiongraph.New(events),
 		Plugins:            []plugins.Plugin{recorder},
 		MaskInternalErrors: true,
 		ClientErrorMessage: "hidden",
@@ -578,10 +542,9 @@ func TestSecurityMasksResolverErrorsAndPreservesRawError(t *testing.T) {
 }
 
 func TestSecurityOperationAuthorizerRejectsOperation(t *testing.T) {
-	bus := pubsub.NewMemory()
-	t.Cleanup(func() { _ = bus.Close() })
+	events := newSubscriptionTestEvents(t)
 	srv, err := New(Config{
-		Schema: subscriptiongraph.New(subscriptiongraph.WithPubSub(bus)),
+		Schema: subscriptiongraph.New(events),
 		OperationAuthorizer: func(ctx context.Context, operation exec.OperationContext) error {
 			if operation.Kind == core.OperationMutation {
 				return errors.New("mutation denied")
@@ -604,10 +567,9 @@ func TestSecurityOperationAuthorizerRejectsOperation(t *testing.T) {
 }
 
 func TestSecurityFieldAuthorizerRejectsField(t *testing.T) {
-	bus := pubsub.NewMemory()
-	t.Cleanup(func() { _ = bus.Close() })
+	events := newSubscriptionTestEvents(t)
 	srv, err := New(Config{
-		Schema: subscriptiongraph.New(subscriptiongraph.WithPubSub(bus)),
+		Schema: subscriptiongraph.New(events),
 		FieldAuthorizer: func(ctx context.Context, field exec.FieldAuthorizationContext) error {
 			if field.ParentType == "User" && field.FieldName == "email" {
 				return errors.New("email denied")
@@ -635,10 +597,9 @@ func TestSecurityFieldAuthorizerRejectsField(t *testing.T) {
 }
 
 func TestSecurityRateLimiterRejectsOperation(t *testing.T) {
-	bus := pubsub.NewMemory()
-	t.Cleanup(func() { _ = bus.Close() })
+	events := newSubscriptionTestEvents(t)
 	srv, err := New(Config{
-		Schema: subscriptiongraph.New(subscriptiongraph.WithPubSub(bus)),
+		Schema: subscriptiongraph.New(events),
 		RateLimiter: func(ctx context.Context, operation exec.OperationContext) error {
 			return errors.New("rate limited")
 		},
@@ -658,10 +619,9 @@ func TestSecurityTrustedDocumentsRejectsUnknownQuery(t *testing.T) {
 	query := "{ __typename }"
 	sum := sha256.Sum256([]byte(query))
 	hash := hex.EncodeToString(sum[:])
-	bus := pubsub.NewMemory()
-	t.Cleanup(func() { _ = bus.Close() })
+	events := newSubscriptionTestEvents(t)
 	srv, err := New(Config{
-		Schema:           subscriptiongraph.New(subscriptiongraph.WithPubSub(bus)),
+		Schema:           subscriptiongraph.New(events),
 		TrustedDocuments: map[string]string{hash: query},
 	})
 	if err != nil {
@@ -682,10 +642,9 @@ func TestSecurityTrustedDocumentsRejectsUnknownQuery(t *testing.T) {
 }
 
 func TestSecurityRejectsUnknownVariables(t *testing.T) {
-	bus := pubsub.NewMemory()
-	t.Cleanup(func() { _ = bus.Close() })
+	events := newSubscriptionTestEvents(t)
 	srv, err := New(Config{
-		Schema:                 subscriptiongraph.New(subscriptiongraph.WithPubSub(bus)),
+		Schema:                 subscriptiongraph.New(events),
 		RejectUnknownVariables: true,
 	})
 	if err != nil {
@@ -1112,55 +1071,6 @@ func TestServeHTTPReturnsMutationValidationErrorForUnknownField(t *testing.T) {
 		t.Fatalf("unexpected error message: %#v", errorValue["message"])
 	}
 	assertErrorLocations(t, errorValue, 1, 60)
-}
-
-func TestServeHTTPReturnsRequestIDInResponseExtensions(t *testing.T) {
-	bus := pubsub.NewMemory()
-	t.Cleanup(func() { _ = bus.Close() })
-	srv, err := New(Config{
-		Schema:     subscriptiongraph.New(subscriptiongraph.WithPubSub(bus)),
-		Middleware: []Middleware{Middleware(middlewares.RequestID("X-Request-Id"))},
-	})
-	if err != nil {
-		t.Fatalf("new server: %v", err)
-	}
-	h := wrapServerInHarness(t, srv)
-
-	httpResp, resp := execGraphQLHTTP(t, h, &grxclient.Request{Query: "{ __typename }"}, map[string]string{
-		"X-Request-Id": "upstream-1",
-	})
-	if httpResp.StatusCode != 200 {
-		t.Fatalf("status = %d", httpResp.StatusCode)
-	}
-	if resp.Extensions == nil || resp.Extensions["requestId"] != "upstream-1" {
-		t.Fatalf("expected requestId in response extensions, got %#v", resp.Extensions)
-	}
-}
-
-func TestServeHTTPRequestErrorIncludesRequestIDInExtensions(t *testing.T) {
-	bus := pubsub.NewMemory()
-	t.Cleanup(func() { _ = bus.Close() })
-	srv, err := New(Config{
-		Schema:     subscriptiongraph.New(subscriptiongraph.WithPubSub(bus)),
-		Middleware: []Middleware{Middleware(middlewares.RequestID("X-Request-Id"))},
-	})
-	if err != nil {
-		t.Fatalf("new server: %v", err)
-	}
-	h := wrapServerInHarness(t, srv)
-
-	_, resp := execGraphQLHTTP(t, h, &grxclient.Request{
-		Query: "query Broken { user(id: ) { id } }",
-	}, map[string]string{"X-Request-Id": "upstream-1"})
-	if len(resp.Errors) != 1 {
-		t.Fatalf("expected one error, got %#v", resp.Errors)
-	}
-	if resp.Data != nil {
-		t.Fatalf("expected request error to omit data, got %#v", resp.Data)
-	}
-	if resp.Extensions == nil || resp.Extensions["requestId"] != "upstream-1" {
-		t.Fatalf("expected requestId in response extensions, got %#v", resp.Extensions)
-	}
 }
 
 func TestServeHTTPRequestErrorResponseOmitsDataKeyOnWire(t *testing.T) {

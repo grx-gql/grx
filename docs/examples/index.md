@@ -111,7 +111,7 @@ Try inside GraphiQL:
 
 ### Bearer token + field authorizer {#examples-auth}
 
-Shows how **`WithMiddleware`** turns `Authorization: Bearer …` into a request-scoped **subject**, and how **`WithFieldAuthorizer`** blocks `viewer` until that subject exists - the same narrative as [**Authentication & authorization**](/guides/auth). Runs on **`http://localhost:4010/`** with playground at **`/`**.
+Shows how host HTTP middleware turns `Authorization: Bearer …` into a request-scoped **subject**, and how **`WithFieldAuthorizer`** blocks `viewer` until that subject exists - the same narrative as [**Authentication & authorization**](/guides/auth). Runs on **`http://localhost:4010/`** with playground at **`/`**.
 
 #### `examples/auth/session/context.go`
 
@@ -241,7 +241,6 @@ func main() {
 	srv, err := grx.NewServer(
 		grx.WithSchema(graph.NewSchema()),
 		grx.WithPlaygroundPath("/"),
-		grx.WithMiddleware(bearerAuth),
 		grx.WithFieldAuthorizer(requireViewerField()),
 	)
 	if err != nil {
@@ -250,7 +249,7 @@ func main() {
 
 	log.Println(`GraphQL playground: http://localhost:4010/`)
 	log.Println(`For { viewer { id } } add header Authorization: Bearer ` + demoBearerToken)
-	log.Fatal(http.ListenAndServe(":4010", srv))
+	log.Fatal(http.ListenAndServe(":4010", bearerAuth(srv)))
 }
 ```
 
@@ -281,397 +280,33 @@ Then query:
 
 ### Subscriptions (WebSocket + SSE) {#examples-subscriptions}
 
-Memory pub/sub feeds [**`graphql-transport-ws`**](https://github.com/graphql/graphql-ws) - plus bundled SSE - with CORS guarded for **`localhost`** below.
+Memory pub/sub feeds [**`graphql-transport-ws`**](https://github.com/graphql/graphql-ws) - plus bundled SSE. Configure browser CORS at the host HTTP layer as shown in [**CORS & browsers**](/guides/cors-browsers).
 
 #### `examples/subscriptions/main.go`
 
-```go
-package main
+<<< @/../examples/subscriptions/main.go
 
-import (
-	"log"
-	"log/slog"
-	"net/http"
-	"os"
-	"time"
-
-	"github.com/grx-gql/grx"
-	"github.com/grx-gql/grx/examples/subscriptions/graph"
-	"github.com/grx-gql/grx/cors"
-	"github.com/grx-gql/grx/memory-pubsub"
-	"github.com/grx-gql/grx/sse"
-	"github.com/grx-gql/grx/websocket"
-	"github.com/grx-gql/grx/plugins/logger"
-)
-
-const (
-	port           = "4000"
-	playgroundPath = "/"
-)
-
-func main() {
-	loggerPlugin, err := logger.New(logger.Config{
-		Logger: slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug})),
-	})
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	bus := pubsub.NewMemory()
-	defer bus.Close()
-
-	srv, err := grx.NewServer(
-		grx.WithSchema(graph.New(graph.WithPubSub(bus))),
-		grx.WithPlugins(loggerPlugin),
-		grx.WithPlaygroundPath(playgroundPath),
-		grx.WithMiddleware(cors.New(cors.Config{
-			AllowedOrigins: []string{
-				"http://localhost:" + port,
-				"http://127.0.0.1:" + port,
-			},
-			AllowedMethods: []string{http.MethodGet, http.MethodPost, http.MethodOptions},
-			AllowedHeaders: []string{"Content-Type", "Authorization"},
-			MaxAge:         10 * time.Minute,
-		})),
-		grx.WithTransports(
-			websocket.New(),
-			sse.New(),
-		),
-	)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	log.Println("Server is running on port ", port)
-	log.Println("GraphQL Playground is available at http://localhost:" + port + srv.PlaygroundPath)
-	log.Println("GraphQL HTTP (queries/mutations): POST http://localhost:" + port + srv.GraphqlPath)
-	log.Println("Subscriptions (WebSocket/SSE): http://localhost:" + port + srv.SubscriptionPath)
-	log.Fatal(http.ListenAndServe(":"+port, srv))
-}
-```
+With `graph.New()`, only queries and `createPost` are exposed. Passing a bus with
+`graph.New(bus)` also exposes `createUser`, `postMessage`, and the subscription root.
+The snippets below are included from the tested example source.
 
 #### `examples/subscriptions/graph/schema.go`
 
-```go
-package graph
-
-import (
-	"github.com/grx-gql/grx/memory-pubsub"
-	"github.com/grx-gql/grx/schema"
-)
-
-// SchemaOption configures [New].
-type SchemaOption func(*schemaOptions)
-
-type schemaOptions struct {
-	bus pubsub.PubSub
-}
-
-// WithPubSub wires the typed pub/sub bridge used by mutation and subscription
-// resolvers. Required for this example schema, which publishes across
-// resolvers via [memory-pubsub](/concepts/pubsub).
-func WithPubSub(bus pubsub.PubSub) SchemaOption {
-	return func(o *schemaOptions) {
-		o.bus = bus
-	}
-}
-
-// Query is the schema's root query type. Each entity contributes its own
-// resolver struct (e.g. UserQuery, PostQuery) which is embedded here so its
-// methods become fields on the root Query type. To add a new entity, define
-// its <Entity>Query struct in its own file and embed it below.
-type Query struct {
-	UserQuery
-	PostQuery
-}
-
-// Mutation is the schema's root mutation type. Embed each entity's
-// <Entity>Mutation struct to expose its mutation fields. Mutations
-// that publish domain events take a typed pubsub dependency so
-// subscriptions can fan the events out to connected clients.
-type Mutation struct {
-	*UserMutation
-	PostMutation
-	*MessageMutation
-}
-
-// Subscription is the schema's root subscription type. Each entity
-// that publishes streams contributes its own <Entity>Subscription
-// struct, receiving the same typed bus instance as the matching
-// mutation so events flow end-to-end.
-type Subscription struct {
-	UserSubscription
-	MessageSubscription
-}
-
-// New composes schema.Config using functional options such as [WithPubSub].
-// Which URL path listens for subscriptions (WebSocket/SSE vs POST JSON) is
-// configured on the HTTP server ([server.Config.SubscriptionPath]), not here.
-func New(opts ...SchemaOption) schema.Config {
-	var o schemaOptions
-	for _, apply := range opts {
-		apply(&o)
-	}
-	if o.bus == nil {
-		panic("graph: WithPubSub is required for this schema (mutations/subscriptions publish through pubsub)")
-	}
-	return wiredSchema(o.bus)
-}
-
-func wiredSchema(bus pubsub.PubSub) schema.Config {
-	users := pubsub.NewTyped[*User](bus)
-	messages := pubsub.NewTyped[*Message](bus)
-
-	return schema.Config{
-		Query: Query{},
-		Mutation: Mutation{
-			UserMutation:    &UserMutation{Bus: users},
-			MessageMutation: &MessageMutation{Bus: messages},
-		},
-		Subscription: Subscription{
-			UserSubscription:    UserSubscription{Bus: users},
-			MessageSubscription: MessageSubscription{Bus: messages},
-		},
-	}
-}
-
-// NewSchema is equivalent to New(WithPubSub(bus)).
-func NewSchema(bus pubsub.PubSub) schema.Config {
-	return New(WithPubSub(bus))
-}
-```
+<<< @/../examples/subscriptions/graph/schema.go
 
 #### `examples/subscriptions/graph/user.go`
 
-```go
-package graph
+<<< @/../examples/subscriptions/graph/user.go
 
-import (
-	"context"
-	"fmt"
-	"sync/atomic"
-
-	"github.com/grx-gql/grx/memory-pubsub"
-)
-
-// userCreatedTopic is the bus topic on which User events are published.
-// Centralising it here avoids drift between publisher and subscriber.
-const userCreatedTopic = "user.created"
-
-type User struct {
-	ID    string  `gql:"id,nonNull"`
-	Name  string  `gql:"name,nonNull"`
-	Email *string `gql:"email"`
-}
-
-type UserArgs struct {
-	ID string `gql:"id,nonNull"`
-}
-
-type UserCreateInput struct {
-	Name  string  `gql:"name,nonNull"`
-	Email *string `gql:"email"`
-}
-
-type UserCreateArgs struct {
-	Input UserCreateInput `gql:"input,nonNull"`
-}
-
-type UserCreatePayload struct {
-	User *User `gql:"user,nonNull"`
-}
-
-// UserQuery groups every read-side resolver for the User entity.
-type UserQuery struct{}
-
-func (UserQuery) User(ctx context.Context, args UserArgs) (*User, error) {
-	email := "ada@example.com"
-	return &User{ID: args.ID, Name: "Ada Lovelace", Email: &email}, nil
-}
-
-func (UserQuery) ErrorExample(ctx context.Context) (string, error) {
-	return "", fmt.Errorf("example error from basic server")
-}
-
-// UserMutation groups every write-side resolver for the User entity.
-// The Bus dependency is wired by NewSchema so the mutation can publish
-// domain events that subscriptions consume.
-type UserMutation struct {
-	Bus    *pubsub.Typed[*User]
-	nextID atomic.Uint64
-}
-
-func (m *UserMutation) CreateUser(ctx context.Context, args UserCreateArgs) (*UserCreatePayload, error) {
-	id := m.nextID.Add(1)
-	user := &User{
-		ID:    fmt.Sprintf("user_%d", id),
-		Name:  args.Input.Name,
-		Email: args.Input.Email,
-	}
-	if m.Bus != nil {
-		if err := m.Bus.Publish(ctx, userCreatedTopic, user); err != nil {
-			return nil, err
-		}
-	}
-	return &UserCreatePayload{User: user}, nil
-}
-
-// UserSubscription groups every stream resolver for the User entity. The
-// Bus dependency is wired by NewSchema; UserCreated relays User events
-// published by CreateUser to every active GraphQL subscription.
-type UserSubscription struct {
-	Bus *pubsub.Typed[*User]
-}
-
-func (s UserSubscription) UserCreated(ctx context.Context) (<-chan *User, error) {
-	return s.Bus.Subscribe(ctx, userCreatedTopic)
-}
-```
-
-Post feeds the root **`Query`**, while **`message.go`** publishes room-scoped payloads with a **`Subscribe`** predicate - both match the **`user.go`** pattern (`embed` structs on each root).
+Post provides queries and non-event mutations. Message publishes JSON payloads to a separate topic for each room; its subscription uses the same topic name.
 
 #### `examples/subscriptions/graph/post.go`
 
-```go
-package graph
-
-import "context"
-
-type Post struct {
-	ID     string `gql:"id,nonNull"`
-	Title  string `gql:"title,nonNull"`
-	Body   string `gql:"body,nonNull"`
-	Author *User  `gql:"author,nonNull"`
-}
-
-type PostArgs struct {
-	ID string `gql:"id,nonNull"`
-}
-
-type PostCreateInput struct {
-	Title    string `gql:"title,nonNull"`
-	Body     string `gql:"body,nonNull"`
-	AuthorID string `gql:"authorId,nonNull"`
-}
-
-type PostCreateArgs struct {
-	Input PostCreateInput `gql:"input,nonNull"`
-}
-
-type PostCreatePayload struct {
-	Post *Post `gql:"post,nonNull"`
-}
-
-type PostQuery struct{}
-
-func (PostQuery) Post(ctx context.Context, args PostArgs) (*Post, error) {
-	email := "ada@example.com"
-	return &Post{
-		ID:     args.ID,
-		Title:  "Hello, grx",
-		Body:   "Composing root types from per-entity resolver structs.",
-		Author: &User{ID: "user_1", Name: "Ada Lovelace", Email: &email},
-	}, nil
-}
-
-type PostMutation struct{}
-
-func (PostMutation) CreatePost(ctx context.Context, args PostCreateArgs) (*PostCreatePayload, error) {
-	post := &Post{
-		ID:     "post_1",
-		Title:  args.Input.Title,
-		Body:   args.Input.Body,
-		Author: &User{ID: args.Input.AuthorID, Name: "Ada Lovelace"},
-	}
-	return &PostCreatePayload{Post: post}, nil
-}
-```
+<<< @/../examples/subscriptions/graph/post.go
 
 #### `examples/subscriptions/graph/message.go`
 
-```go
-package graph
-
-import (
-	"context"
-	"fmt"
-	"strings"
-	"sync/atomic"
-	"time"
-
-	"github.com/grx-gql/grx/memory-pubsub"
-)
-
-const messagePostedTopic = "message.posted"
-
-type Message struct {
-	ID       string `gql:"id,nonNull"`
-	RoomID   string `gql:"roomId,nonNull"`
-	Author   string `gql:"author,nonNull"`
-	Body     string `gql:"body,nonNull"`
-	PostedAt string `gql:"postedAt,nonNull"`
-}
-
-type PostMessageInput struct {
-	RoomID string `gql:"roomId,nonNull"`
-	Author string `gql:"author,nonNull"`
-	Body   string `gql:"body,nonNull"`
-}
-
-type PostMessageArgs struct {
-	Input PostMessageInput `gql:"input,nonNull"`
-}
-
-type PostMessagePayload struct {
-	Message *Message `gql:"message,nonNull"`
-}
-
-type MessagePostedArgs struct {
-	RoomID string `gql:"roomId,nonNull"`
-}
-
-type MessageMutation struct {
-	Bus    *pubsub.Typed[*Message]
-	nextID atomic.Uint64
-}
-
-func (m *MessageMutation) PostMessage(ctx context.Context, args PostMessageArgs) (*PostMessagePayload, error) {
-	if strings.TrimSpace(args.Input.RoomID) == "" {
-		return nil, fmt.Errorf("roomId is required")
-	}
-	if strings.TrimSpace(args.Input.Body) == "" {
-		return nil, fmt.Errorf("body is required")
-	}
-
-	id := m.nextID.Add(1)
-	message := &Message{
-		ID:       fmt.Sprintf("msg_%d", id),
-		RoomID:   args.Input.RoomID,
-		Author:   args.Input.Author,
-		Body:     args.Input.Body,
-		PostedAt: time.Now().UTC().Format(time.RFC3339Nano),
-	}
-	if m.Bus != nil {
-		if err := m.Bus.Publish(ctx, messagePostedTopic, message); err != nil {
-			return nil, err
-		}
-	}
-	return &PostMessagePayload{Message: message}, nil
-}
-
-type MessageSubscription struct {
-	Bus *pubsub.Typed[*Message]
-}
-
-func (s MessageSubscription) MessagePosted(ctx context.Context, args MessagePostedArgs) (<-chan *Message, error) {
-	if strings.TrimSpace(args.RoomID) == "" {
-		return nil, fmt.Errorf("roomId is required")
-	}
-	return s.Bus.Subscribe(ctx, messagePostedTopic, func(m *Message) bool {
-		return m != nil && m.RoomID == args.RoomID
-	})
-}
-```
+<<< @/../examples/subscriptions/graph/message.go
 
 ```bash
 go run ./examples/subscriptions

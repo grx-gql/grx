@@ -12,7 +12,8 @@ import (
 type pathArenaCtxKey struct{}
 
 type pathArena struct {
-	buf []any
+	buf            []any
+	selectionPlans selectionPlanCache
 	// collector is non-nil only while an incremental-delivery request is in
 	// flight; it gathers deferred/streamed work without per-field ctx lookups.
 	collector *incrementalCollector
@@ -47,6 +48,8 @@ func recyclePathArena(ctx context.Context) {
 	if !ok {
 		return
 	}
+	// Do not retain parsed documents or request variables in the pool.
+	a.selectionPlans = selectionPlanCache{}
 	pathArenaPool.Put(a)
 }
 
