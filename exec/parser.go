@@ -169,6 +169,9 @@ func (p *parser) parseSelectionSet(depth int) ([]selection, error) {
 		return nil, err
 	}
 
+	if p.peek().kind == tokenBraceClose {
+		return nil, newParseError(p.source, p.peek().offset, "selection set must contain at least one selection")
+	}
 	selections := make([]selection, 0, 4)
 	for p.peek().kind != tokenBraceClose {
 		if p.peek().kind == tokenEOF {
@@ -344,6 +347,9 @@ func (p *parser) parseDirectives() ([]directive, error) {
 
 func (p *parser) parseArguments() (map[string]any, error) {
 	p.next() // consume (
+	if p.peek().kind == tokenParenClose {
+		return nil, newParseError(p.source, p.peek().offset, "arguments must contain at least one argument")
+	}
 	args := make(map[string]any, 4)
 	for p.peek().kind != tokenParenClose {
 		if p.peek().kind == tokenEOF {
@@ -473,6 +479,9 @@ func (p *parser) parseListLiteral() ([]any, error) {
 func (p *parser) parseVariableDefinitions() ([]string, map[string]string, error) {
 	if err := p.expect(tokenParenOpen); err != nil {
 		return nil, nil, err
+	}
+	if p.peek().kind == tokenParenClose {
+		return nil, nil, newParseError(p.source, p.peek().offset, "variable definitions must contain at least one variable")
 	}
 	variables := make([]string, 0, 4)
 	variableTypes := make(map[string]string)
