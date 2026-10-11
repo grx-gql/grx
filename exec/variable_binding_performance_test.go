@@ -28,3 +28,20 @@ func TestVariableBindingReusesArgumentFreeSelections(t *testing.T) {
 		t.Fatal("binding mutated original syntax")
 	}
 }
+
+func TestParserBindingKeepsVariableContainersIsolated(t *testing.T) {
+	type namedInput map[string]any
+	type namedList []any
+	original := namedInput{"items": namedList{"original"}}
+	provided := map[string]any{"value": original}
+	doc, err := parseDocument(`query Q($value:JSON){ first:echo(value:$value) second:echo(value:$value) }`, provided)
+	if err != nil {
+		t.Fatal(err)
+	}
+	first := doc.Selections[0].Arguments["value"].(namedInput)
+	second := doc.Selections[1].Arguments["value"].(namedInput)
+	first["items"].(namedList)[0] = "changed"
+	if original["items"].(namedList)[0] != "original" || second["items"].(namedList)[0] != "original" {
+		t.Fatal("parser binding aliases caller or another argument container")
+	}
+}
