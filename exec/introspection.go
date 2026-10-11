@@ -39,8 +39,24 @@ func introspectionSchema(schemaValue *schema.Schema, includeDeprecated bool) *co
 	result.Set("mutationType", introspectionRootType(schemaValue.Mutation))
 	result.Set("subscriptionType", introspectionRootType(schemaValue.Subscription))
 	result.Set("types", introspectionTypes(schemaValue, includeDeprecated))
-	result.Set("directives", introspectionBuiltinDirectives())
+	result.Set("directives", introspectionDirectives(schemaValue))
 	return result
+}
+
+func introspectionDirectives(schemaValue *schema.Schema) []any {
+	values := introspectionBuiltinDirectives()
+	names := make([]string, 0, len(schemaValue.DirectiveDefinitions))
+	for name := range schemaValue.DirectiveDefinitions {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	for _, name := range names {
+		definition := schemaValue.DirectiveDefinitions[name]
+		entry := introspectionDirectiveRepeatable(definition.Name, definition.Locations, definition.Args, definition.IsRepeatable)
+		entry.Set("description", nullableString(definition.Description))
+		values = append(values, entry)
+	}
+	return values
 }
 
 func introspectionBuiltinDirectives() []any {
@@ -170,7 +186,7 @@ func introspectionType(typeValue schema.Type, includeDeprecated bool) *core.Orde
 	result.Set("description", nil)
 	result.Set("fields", nil)
 	result.Set("inputFields", nil)
-	result.Set("interfaces", []any{})
+	result.Set("interfaces", nil)
 	result.Set("enumValues", nil)
 	result.Set("possibleTypes", nil)
 	result.Set("specifiedByURL", nil)
@@ -187,13 +203,12 @@ func introspectionType(typeValue schema.Type, includeDeprecated bool) *core.Orde
 		result.Set("interfaces", introspectionInterfaces(typed.Interfaces))
 	case *schema.Interface:
 		result.Set("description", nullableString(typed.Description))
+		result.Set("interfaces", introspectionInterfaces(typed.Interfaces))
 		result.Set("fields", introspectionFields(typed.Fields, includeDeprecated))
 		result.Set("possibleTypes", introspectionPossibleTypes(typed.PossibleTypes))
 	case *schema.InputObject:
 		result.Set("description", nullableString(typed.Description))
-		if typed.IsOneOf {
-			result.Set("isOneOf", true)
-		}
+		result.Set("isOneOf", typed.IsOneOf)
 		result.Set("inputFields", introspectionInputFields(typed.Fields))
 	case *schema.Union:
 		result.Set("description", nullableString(typed.Description))
@@ -234,6 +249,8 @@ func introspectionInputValues(inputValues []schema.InputValue) []any {
 		entry.Set("description", nullableString(inputValue.Description))
 		entry.Set("type", introspectionTypeRef(inputValue.Type))
 		entry.Set("defaultValue", introspectionDefaultValue(inputValue.Type, inputValue.DefaultValue))
+		entry.Set("isDeprecated", inputValue.IsDeprecated)
+		entry.Set("deprecationReason", inputValue.DeprecationReason)
 		values = append(values, entry)
 	}
 	return values
@@ -249,6 +266,8 @@ func introspectionInputFields(fields map[string]*schema.Field) []any {
 		entry.Set("description", nullableString(field.Description))
 		entry.Set("type", introspectionTypeRef(field.Type))
 		entry.Set("defaultValue", introspectionDefaultValue(field.Type, field.DefaultValue))
+		entry.Set("isDeprecated", field.IsDeprecated)
+		entry.Set("deprecationReason", field.DeprecationReason)
 		values = append(values, entry)
 	}
 	return values
