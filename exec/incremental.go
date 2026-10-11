@@ -252,6 +252,17 @@ func (e *Executor) runIncrementalWork(ctx context.Context, item incrementalWork)
 	if item.stream {
 		value, errs := e.completeValue(ctx, item.itemType, item.itemVal, item.selections, item.fragments, item.path)
 		payload.Items = []any{value}
+		if value == nil {
+			nullPath := item.path
+			if !isNullableGraphQLType(item.itemType) {
+				payload.Items = nil
+				payload.ItemsNull = true
+				nullPath = item.path[:len(item.path)-1]
+			}
+			if collector := arenaCollector(lookupPathArena(ctx)); collector != nil {
+				collector.work = incrementalWorkOutsidePath(collector.work, nullPath)
+			}
+		}
 		if len(errs) > 0 {
 			payload.Errors = errs
 		}
@@ -259,8 +270,37 @@ func (e *Executor) runIncrementalWork(ctx context.Context, item incrementalWork)
 	}
 	data, errs := e.executeSelectionSet(ctx, item.object, item.source, item.selections, item.fragments, item.path)
 	payload.Data = data
+	if data == nil {
+		if collector := arenaCollector(lookupPathArena(ctx)); collector != nil {
+			collector.work = incrementalWorkOutsidePath(collector.work, item.path)
+		}
+	}
 	if len(errs) > 0 {
 		payload.Errors = errs
 	}
 	return payload
+}
+
+// incrementalWorkOutsidePath removes pending work below a failed response
+// position without discarding independent streams or deferred fragments.
+func incrementalWorkOutsidePath(work []incrementalWork, path []any) []incrementalWork {
+	remaining := make([]incrementalWork, 0, len(work))
+	for _, item := range work {
+		if !incrementalPathContains(path, item.path) {
+			remaining = append(remaining, item)
+		}
+	}
+	return remaining
+}
+
+func incrementalPathContains(parent, child []any) bool {
+	if len(child) < len(parent) {
+		return false
+	}
+	for index, part := range parent {
+		if child[index] != part {
+			return false
+		}
+	}
+	return true
 }

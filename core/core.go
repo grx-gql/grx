@@ -57,10 +57,12 @@ type Location struct {
 // IncrementalPayload is a single GraphQL incremental delivery patch.
 // It is shared across HTTP, SSE, and WebSocket transports.
 type IncrementalPayload struct {
-	Label      string         `json:"label,omitempty"`
-	Path       []any          `json:"path,omitempty"`
-	Data       any            `json:"data,omitempty"`
-	Items      []any          `json:"items,omitempty"`
+	Label string `json:"label,omitempty"`
+	Path  []any  `json:"path,omitempty"`
+	Data  any    `json:"data,omitempty"`
+	Items []any  `json:"items,omitempty"`
+	// ItemsNull marks a failed stream boundary, encoded as items:null.
+	ItemsNull  bool           `json:"-"`
 	Errors     []Error        `json:"errors,omitempty"`
 	Extensions map[string]any `json:"extensions,omitempty"`
 }

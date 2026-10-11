@@ -22,7 +22,7 @@ func writeGraphQLJSON(buf *bytes.Buffer, v any) error {
 	case string:
 		writeEscapedJSONString(buf, v)
 	case int:
-		buf.Write(strconv.AppendInt(nil, int64(v), 10))
+		buf.Write(strconv.AppendInt(buf.AvailableBuffer(), int64(v), 10))
 	case int8:
 		buf.Write(strconv.AppendInt(nil, int64(v), 10))
 	case int16:
