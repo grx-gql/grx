@@ -50,4 +50,6 @@ Treat APQ alongside **timeouts**, **`MaxHTTPRequestBytes`**, and **`WithDisableI
 ## See also
 
 - **[Limits  -  persisted & trusted corpus](/guides/request-limits#persisted-trusted-corpus)**
-- Roadmap ✅ automatic persisted queries in **[Roadmap](/roadmap)**
+- Automatic persisted query negotiation is not part of the current persisted
+  query guide. Use persisted and trusted documents when the server can define
+  the allowed query corpus.

@@ -10,7 +10,7 @@ Introspection’s **`__schema.directives`** list is fixed to **seven** built-ins
 
 ::: tip Executable directives beyond this list  
 
-Arbitrary **`directive @example on FIELD` declarations** that attach custom semantics (like gqlgen/SDL plugins) are **not** part of **`schema.Build`** ergonomics yet - track broader extensibility on the **[Roadmap](/roadmap)**.
+Arbitrary **`directive @example on FIELD` declarations** that attach custom semantics (like gqlgen or SDL plugins) are not part of **`schema.Build`** yet. Use the built-in directives documented on this page or extend resolver behavior in Go.
 
 :::
 

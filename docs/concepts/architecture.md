@@ -110,4 +110,3 @@ If you benchmark or profile, distinguish **cold parse** versus **steady-state** 
 - [Hooks & plugins](/concepts/plugins)  -  lifecycle and plugin vs HTTP middleware  
 - [Pub/Sub](/concepts/pubsub)  -  bridging mutations and subscriptions  
 - [API reference overview](/reference/)  -  package finder  
-- [Roadmap](/roadmap)  -  spec surface and internals tracker  

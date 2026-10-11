@@ -448,7 +448,7 @@ See **[Benchmarks](/benchmarks)** for scenarios, methodology, and latest tables.
 ## Source {#examples-source}
 
 - [**GitHub repository**](https://github.com/grx-gql/grx)  -  history, CI, **`examples/`** tree mirroring these snippets.
-- [**Discussions**](https://github.com/grx-gql/grx/discussions)  -  integrations, roadmap questions.
+- [**Discussions**](https://github.com/grx-gql/grx/discussions)  -  integrations and project questions.
 
 ---
 

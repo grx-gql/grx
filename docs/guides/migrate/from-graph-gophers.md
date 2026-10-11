@@ -72,10 +72,9 @@ the next steps *are* the schema; grx derives the equivalent SDL from
 them at startup. Delete the SDL.
 
 ::: warning Builtin directives in SDL
-If your SDL carries **`@deprecated`**, **`@specifiedBy`**, or similar built-in directives, see the
-[Roadmap](/roadmap#built-in-directives)  -  directive support and
-description metadata aren't through the executor yet. You'll lose them
-in the migration today.
+If your SDL carries **`@deprecated`**, **`@specifiedBy`**, or similar built-in
+directives, verify the current directive and description support before
+migrating. Unsupported metadata will not be preserved automatically.
 :::
 
 ## Step 2  -  Object resolver structs collapse into data types
@@ -354,8 +353,8 @@ http.ListenAndServe(":4000", corsMiddleware(srv))
 
 ## Things that aren't yet supported
 
-If your graph-gophers schema uses any of these, check the
-[Roadmap](/roadmap) before committing:
+If your graph-gophers schema uses any of these, check the current grx
+implementation before committing:
 
 - **Enums** (`type Direction enum`).
 - **Interfaces and unions** including `implements` lists.

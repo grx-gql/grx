@@ -39,7 +39,7 @@ function seoHead(page: string, title: string, description: string): HeadConfig[]
   ];
 }
 
-/** Sidebar: Start here → Concepts → Getting Started → Guides (grouped) → reference & project. */
+/** Sidebar: Start here, concepts, integrations, guides, examples, reference, and internals. */
 const docsSidebar: DefaultTheme.SidebarItem[] = [
   {
     text: "Start here",
@@ -48,6 +48,10 @@ const docsSidebar: DefaultTheme.SidebarItem[] = [
       {
         text: "What grx is · feature surface",
         link: "/concepts/what-is-grx",
+      },
+      {
+        text: "Why choose grx",
+        link: "/concepts/why-grx",
       },
       {
         text: "Run your first server",
@@ -70,15 +74,15 @@ const docsSidebar: DefaultTheme.SidebarItem[] = [
     collapsed: true,
     items: [
       { text: "Routers & transports", link: "/concepts/transports" },
-      { text: "Benchmarks", link: "/benchmarks" },
       { text: "Organize your code", link: "/concepts/schema-mapping" },
       { text: "Resolver methods", link: "/concepts/resolvers" },
+      { text: "Runtime boundaries", link: "/concepts/runtime-boundaries" },
       { text: "Plugins & hooks", link: "/concepts/plugins" },
       { text: "Architecture", link: "/concepts/architecture" },
     ],
   },
   {
-    text: "Getting Started",
+    text: "Integrations",
     collapsed: true,
     items: [
       { text: "Basic · net/http", link: "/getting-started/basic-http" },
@@ -181,6 +185,9 @@ const docsSidebar: DefaultTheme.SidebarItem[] = [
           { text: "CORS & browsers", link: "/guides/cors-browsers" },
           { text: "Custom plugin", link: "/guides/custom-plugin" },
           { text: "Custom transport", link: "/guides/custom-transport" },
+          { text: "Custom pub/sub", link: "/guides/custom-pubsub" },
+          { text: "Deployment and scaling", link: "/guides/deployment-and-scaling" },
+          { text: "Application architecture", link: "/guides/application-architecture" },
           {
             text: "Migrate to grx",
             collapsed: true,
@@ -221,11 +228,14 @@ const docsSidebar: DefaultTheme.SidebarItem[] = [
     ],
   },
   {
+    text: "Examples",
+    collapsed: true,
+    items: [{ text: "Runnable examples", link: "/examples/" }],
+  },
+  {
     text: "Project",
     collapsed: true,
     items: [
-      { text: "Examples", link: "/examples/" },
-      { text: "Roadmap", link: "/roadmap" },
       {
         text: "Changelog",
         link: "https://github.com/grx-gql/grx/blob/main/CHANGELOG.md",

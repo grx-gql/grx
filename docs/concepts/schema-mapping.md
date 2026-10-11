@@ -86,4 +86,3 @@ If two embedded types both expose a method with the **same** name on the same ro
 ## See also
 
 - [Resolver methods](/concepts/resolvers)  -  `context`, errors, subscription streams.
-- [Roadmap](/roadmap)  -  feature coverage.

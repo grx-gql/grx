@@ -291,8 +291,8 @@ grx.NewServer(
 
 ## Things that aren't yet supported
 
-If your `graphql-go` schema uses any of the following, hold the
-migration until the matching [roadmap](/roadmap) item is checked:
+If your `graphql-go` schema uses any of the following, verify the current grx
+implementation before committing to the migration:
 
 - **Enums.** `graphql.NewEnum(...)`  -  not yet mapped from Go types.
 - **Interfaces and unions.** `graphql.NewInterface`, `graphql.NewUnion`.

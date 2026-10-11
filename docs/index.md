@@ -13,18 +13,21 @@ hero:
     alt: Abstract graph illustrating how fields connect in a GraphQL response.
   actions:
     - theme: brand
-      text: Get started
+      text: Why grx
+      link: /concepts/why-grx
+    - theme: alt
+      text: Run your first server
       link: /getting-started/
     - theme: alt
-      text: Github
+      text: GitHub
       link: https://github.com/grx-gql/grx
 
 features:
   - icon: ✨
     title: Production-ready GraphQL out of the box
-    details: Persisted queries, subscriptions, streaming transports, limits, CORS, gzip, plugins, pub/sub, and security controls built into the runtime.
+    details: Persisted queries, subscriptions, streaming transports, limits, gzip, plugins, pub/sub, and security controls are available when you need them.
     link: /concepts/what-is-grx
-    linkText: Explore capabilities
+    linkText: See the feature surface
   - icon: 📘
     title: Define schemas directly from Go structs
     details: Build schemas from Go types and struct tags so fields, arguments, nullability, descriptions, and resolvers stay close to your code.

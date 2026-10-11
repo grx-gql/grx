@@ -139,8 +139,9 @@ func findUser() (*User, error) {
 ::: warning Don't leak internals
 Wrap or sanitize errors before returning them. Stack traces and database
 errors often contain information that should not be sent to clients. The
-[Roadmap](/roadmap) tracks
-the upcoming first-class error masking story; baseline hygiene applies now.
+First-class error masking is not part of this resolver guide; baseline error
+hygiene still applies now. See [Errors and masking](/guides/errors-and-masking)
+for the current behavior.
 :::
 
 ## Concurrency expectations

@@ -31,7 +31,7 @@ Think “SDL and resolvers”, but the SDL is implied by your types and the reso
 
 5. **Subscriptions**  -  A subscription field is still a method on your `Subscription` struct, but it returns a **receive-only channel** of values (`<-chan *YourType`). Each value pushed to the client is resolved like a normal object.
 
-**Enums, interfaces, unions, and custom scalars** do not appear from structs alone. When you need them, you register them on the same `schema.Config` you already pass to the server. For the exact fields, see [`schema.Config`](/reference/schema/#Config). For what is fully supported today, see the [Roadmap](/roadmap).
+**Enums, interfaces, unions, and custom scalars** do not appear from structs alone. When you need them, register them on the same `schema.Config` you already pass to the server. For the exact fields, see [`schema.Config`](/reference/schema/#Config).
 
 ## The `gql` struct tag (when you need it) {#gql-tags}
 

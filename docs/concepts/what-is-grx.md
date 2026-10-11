@@ -33,7 +33,7 @@ These are concrete capabilities surfaced by the codebase and documented here - n
 | --- | --- |
 | **Code-first schema** | Structs **`+ gql struct tags`** model object types, arguments, descriptions, deprecation - [**Define your schema**](/concepts/schema-basics). |
 | **Roots** | Required **`Query`**, optional **`Mutation`** and **`Subscription`** via **`schema.Config`**. |
-| **Executor** | Lex → parse → validate → execute; targets [**GraphQL October 2021**](https://spec.graphql.org/October2021/) behaviour - parity gaps on [Roadmap](/roadmap). |
+| **Executor** | Lex, parse, validate, and execute GraphQL documents with behavior documented in the relevant execution guides. |
 | **Structured errors** | Field errors with **`path`** and locations; masking for clients via [**Security**](/guides/production-security). |
 
 ### Networking and ergonomics
