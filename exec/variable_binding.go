@@ -15,19 +15,9 @@ func bindSelectedOperation(bundle documentBundle, doc document) document {
 
 func bindOperationVariables(doc document, provided map[string]any) document {
 	scope := operationVariableValues{provided: provided, definitions: doc.VariableDefinitions}
-	doc.Selections = bindSelectionVariables(doc.Selections, scope)
-	doc.Directives = bindDirectiveVariables(doc.Directives, scope)
-	if len(doc.Fragments) > 0 {
-		fragments := make(map[string]*fragmentDef, len(doc.Fragments))
-		for name, original := range doc.Fragments {
-			fragment := *original
-			fragment.Selections = bindSelectionVariables(fragment.Selections, scope)
-			fragment.Directives = bindDirectiveVariables(fragment.Directives, scope)
-			fragments[name] = &fragment
-		}
-		doc.Fragments = fragments
-	}
-	return doc
+	return transformOperationValues(doc, func(value any) (any, bool) {
+		return bindVariableValue(value, scope)
+	})
 }
 
 type operationVariableValues struct {
@@ -35,43 +25,10 @@ type operationVariableValues struct {
 	definitions map[string]variableDefinition
 }
 
-func bindSelectionVariables(selections []selection, scope operationVariableValues) []selection {
-	if len(selections) == 0 {
-		return selections
-	}
-	out := make([]selection, len(selections))
-	for index, selected := range selections {
-		out[index] = selected
-		out[index].Arguments = bindVariableMap(selected.Arguments, scope)
-		out[index].Directives = bindDirectiveVariables(selected.Directives, scope)
-		out[index].Selections = bindSelectionVariables(selected.Selections, scope)
-	}
-	return out
-}
-
-func bindDirectiveVariables(directives []directive, scope operationVariableValues) []directive {
-	if len(directives) == 0 {
-		return directives
-	}
-	out := make([]directive, len(directives))
-	for index, dir := range directives {
-		out[index] = dir
-		out[index].Args = bindVariableMap(dir.Args, scope)
-	}
-	return out
-}
-
 func bindVariableMap(values map[string]any, scope operationVariableValues) map[string]any {
-	if values == nil {
-		return nil
-	}
-	out := make(map[string]any, len(values))
-	for name, value := range values {
-		if bound, present := bindVariableValue(value, scope); present {
-			out[name] = bound
-		}
-	}
-	return out
+	return transformInputValueMap(values, func(value any) (any, bool) {
+		return bindVariableValue(value, scope)
+	})
 }
 
 func bindVariableValue(value any, scope operationVariableValues) (any, bool) {

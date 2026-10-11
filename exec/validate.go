@@ -21,7 +21,8 @@ func ValidateDocument(s *schema.Schema, bundle documentBundle, _ document) []val
 	errs = append(errs, validateFragmentDefinitions(s, bundle.fragments)...)
 	usedFragments := make(map[string]bool)
 	for _, op := range bundle.operations {
-		reachable := reachableFragments(op.Selections, bundle.fragments)
+		reachable := make(map[string]bool)
+		collectReachableFragments(op.Selections, bundle.fragments, reachable)
 		for name := range reachable {
 			usedFragments[name] = true
 		}

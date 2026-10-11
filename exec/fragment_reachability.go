@@ -1,10 +1,9 @@
 package exec
 
-func reachableFragments(selections []selection, fragments map[string]*fragmentDef) map[string]bool {
+func collectReachableFragments(selections []selection, fragments map[string]*fragmentDef, reachable map[string]bool) {
 	if len(fragments) == 0 {
-		return nil
+		return
 	}
-	reachable := make(map[string]bool)
 	var visit func([]selection)
 	visit = func(selections []selection) {
 		for _, sel := range selections {
@@ -18,5 +17,4 @@ func reachableFragments(selections []selection, fragments map[string]*fragmentDe
 		}
 	}
 	visit(selections)
-	return reachable
 }

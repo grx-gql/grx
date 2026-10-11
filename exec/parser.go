@@ -110,11 +110,15 @@ func parseDocumentNamed(query string, variables map[string]any, operationName st
 	if err != nil {
 		return document{}, err
 	}
-	doc, err := selectOperation(bundle, operationName)
+	doc, err := selectOperationDefinition(bundle, operationName)
 	if err != nil {
 		return document{}, err
 	}
-	return resolveDocumentVariableRefs(doc), nil
+	scope := operationVariableValues{provided: variables, definitions: doc.VariableDefinitions}
+	return transformOperationValues(doc, func(value any) (any, bool) {
+		bound, present := bindVariableValue(value, scope)
+		return resolveValueVariableRef(bound), present
+	}), nil
 }
 
 // parseOperationHeader consumes the optional operation type, name, variable

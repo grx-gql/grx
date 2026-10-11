@@ -105,28 +105,6 @@ func selectOperationDefinition(bundle documentBundle, operationName string) (doc
 	return doc, nil
 }
 
-func resolveDocumentVariableRefs(doc document) document {
-	doc.Selections = resolveSelectionVariableRefs(doc.Selections)
-	return doc
-}
-
-func resolveSelectionVariableRefs(selections []selection) []selection {
-	out := make([]selection, len(selections))
-	for index, selected := range selections {
-		out[index] = selected
-		out[index].Arguments = resolveValueMapVariableRefs(selected.Arguments)
-		if len(selected.Directives) > 0 {
-			out[index].Directives = make([]directive, len(selected.Directives))
-			for dirIndex, dir := range selected.Directives {
-				out[index].Directives[dirIndex] = dir
-				out[index].Directives[dirIndex].Args = resolveValueMapVariableRefs(dir.Args)
-			}
-		}
-		out[index].Selections = resolveSelectionVariableRefs(selected.Selections)
-	}
-	return out
-}
-
 func resolveValueMapVariableRefs(values map[string]any) map[string]any {
 	if values == nil {
 		return nil

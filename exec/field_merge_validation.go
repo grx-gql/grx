@@ -9,7 +9,7 @@ import (
 
 type mergeField struct {
 	Parent    schema.Type
-	Selection selection
+	Selection *selection
 }
 
 type mergePair struct {
@@ -58,8 +58,8 @@ func validateFieldMergeConflicts(s *schema.Schema, parent schema.Type, selection
 		}
 	}
 	if direct {
-		for _, sel := range selections {
-			compare(mergeField{Parent: parent, Selection: sel})
+		for index := range selections {
+			compare(mergeField{Parent: parent, Selection: &selections[index]})
 		}
 	} else {
 		for _, field := range collectMergeFields(s, parent, selections, fragments) {
@@ -74,7 +74,8 @@ func collectMergeFields(s *schema.Schema, parent schema.Type, selections []selec
 	var visited map[string]bool
 	var collect func(schema.Type, []selection)
 	collect = func(parent schema.Type, selections []selection) {
-		for _, sel := range selections {
+		for index := range selections {
+			sel := &selections[index]
 			switch {
 			case sel.isField():
 				fields = append(fields, mergeField{Parent: parent, Selection: sel})
