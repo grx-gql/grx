@@ -28,7 +28,6 @@ import (
 	subscriptiongraph "github.com/grx-gql/grx/examples/subscriptions/graph"
 	"github.com/grx-gql/grx/exec"
 	grxhttp "github.com/grx-gql/grx/http"
-	"github.com/grx-gql/grx/middlewares"
 	"github.com/grx-gql/grx/plugins"
 	"github.com/grx-gql/grx/pubsub/memory"
 	"github.com/grx-gql/grx/schema"
@@ -503,41 +502,6 @@ func TestRequestTimeoutStopsSlowValidation(t *testing.T) {
 	msg := graphQLError(t, errors, 0)["message"].(string)
 	if !strings.Contains(msg, "context deadline exceeded") && !strings.Contains(msg, "canceled") {
 		t.Fatalf("unexpected error message %q", msg)
-	}
-}
-
-type ridPlugin struct {
-	plugins.Base
-	t *testing.T
-}
-
-func (p *ridPlugin) ParsingStart(ctx context.Context, req core.Request) error {
-	if core.RequestIDFromContext(ctx) == "" {
-		p.t.Fatal("expected request id in context")
-	}
-	return nil
-}
-
-func TestRequestIDMiddlewarePropagatesContext(t *testing.T) {
-	events := newSubscriptionTestEvents(t)
-	p := &ridPlugin{t: t}
-	srv, err := New(Config{
-		Schema:     subscriptiongraph.New(subscriptiongraph.WithEvents(events)),
-		Plugins:    []plugins.Plugin{p},
-		Middleware: []Middleware{middlewares.RequestID("X-Request-Id")},
-	})
-	if err != nil {
-		t.Fatalf("new server: %v", err)
-	}
-	h := wrapServerInHarness(t, srv)
-	httpResp, _ := execGraphQLHTTP(t, h, &grxclient.Request{Query: "{ __typename }"}, map[string]string{
-		"X-Request-Id": "upstream-1",
-	})
-	if httpResp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d", httpResp.StatusCode)
-	}
-	if got := httpResp.Header.Get("X-Request-Id"); got != "upstream-1" {
-		t.Fatalf("response X-Request-Id = %q", got)
 	}
 }
 
@@ -1106,53 +1070,6 @@ func TestServeHTTPReturnsMutationValidationErrorForUnknownField(t *testing.T) {
 		t.Fatalf("unexpected error message: %#v", errorValue["message"])
 	}
 	assertErrorLocations(t, errorValue, 1, 60)
-}
-
-func TestServeHTTPReturnsRequestIDInResponseExtensions(t *testing.T) {
-	events := newSubscriptionTestEvents(t)
-	srv, err := New(Config{
-		Schema:     subscriptiongraph.New(subscriptiongraph.WithEvents(events)),
-		Middleware: []Middleware{middlewares.RequestID("X-Request-Id")},
-	})
-	if err != nil {
-		t.Fatalf("new server: %v", err)
-	}
-	h := wrapServerInHarness(t, srv)
-
-	httpResp, resp := execGraphQLHTTP(t, h, &grxclient.Request{Query: "{ __typename }"}, map[string]string{
-		"X-Request-Id": "upstream-1",
-	})
-	if httpResp.StatusCode != 200 {
-		t.Fatalf("status = %d", httpResp.StatusCode)
-	}
-	if resp.Extensions == nil || resp.Extensions["requestId"] != "upstream-1" {
-		t.Fatalf("expected requestId in response extensions, got %#v", resp.Extensions)
-	}
-}
-
-func TestServeHTTPRequestErrorIncludesRequestIDInExtensions(t *testing.T) {
-	events := newSubscriptionTestEvents(t)
-	srv, err := New(Config{
-		Schema:     subscriptiongraph.New(subscriptiongraph.WithEvents(events)),
-		Middleware: []Middleware{middlewares.RequestID("X-Request-Id")},
-	})
-	if err != nil {
-		t.Fatalf("new server: %v", err)
-	}
-	h := wrapServerInHarness(t, srv)
-
-	_, resp := execGraphQLHTTP(t, h, &grxclient.Request{
-		Query: "query Broken { user(id: ) { id } }",
-	}, map[string]string{"X-Request-Id": "upstream-1"})
-	if len(resp.Errors) != 1 {
-		t.Fatalf("expected one error, got %#v", resp.Errors)
-	}
-	if resp.Data != nil {
-		t.Fatalf("expected request error to omit data, got %#v", resp.Data)
-	}
-	if resp.Extensions == nil || resp.Extensions["requestId"] != "upstream-1" {
-		t.Fatalf("expected requestId in response extensions, got %#v", resp.Extensions)
-	}
 }
 
 func TestServeHTTPRequestErrorResponseOmitsDataKeyOnWire(t *testing.T) {

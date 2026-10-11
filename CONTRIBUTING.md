@@ -51,7 +51,6 @@ Every pull request must pass `make test`, `make vet` and `gofmt`. Run `make test
 | `http/`, `sse/`, `websocket/` | `core.Transport` implementations: GraphQL over HTTP+JSON, Server-Sent Events, and `graphql-transport-ws`. |
 | `client/` | A GraphQL-over-HTTP client, useful in services and tests. |
 | `plugins/` | The plugin lifecycle interface and built-in plugins. |
-| `middlewares/` | HTTP middleware helpers. |
 | `pubsub/` | The backend-neutral `PubSub` interface and message contract. |
 | `pubsub/memory/` | The process-local `PubSub` backend for subscriptions. |
 | `pubsub/redis/` | A Redis `PubSub`, in its own Go module so Redis never enters the root `go.mod`. |
@@ -62,7 +61,7 @@ Every pull request must pass `make test`, `make vet` and `gofmt`. Run `make test
 
 ### Layering
 
-- `core` imports nothing from `schema`, `exec`, `server`, `plugins` or `middlewares`. Everything else depends on `core`, never the reverse. If two packages need a type, it belongs in `core`.
+- `core` imports nothing from `schema`, `exec`, `server`, or `plugins`. Everything else depends on `core`, never the reverse. If two packages need a type, it belongs in `core`.
 - Every network protocol, HTTP+JSON included, is a `core.Transport` in its own top-level folder. Transports talk only to `core.Executor`; GraphQL execution never happens inside one.
 - `server` owns the playground, `/favicon.ico` and routing, and never parses a GraphQL payload itself. It consults `Config.Transports` in order and appends the default `http` transport last, so `POST /graphql` always has a handler.
 - `exec` stays transport-agnostic.

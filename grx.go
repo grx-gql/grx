@@ -29,7 +29,6 @@ import (
 
 	"github.com/grx-gql/grx/core"
 	"github.com/grx-gql/grx/exec"
-	"github.com/grx-gql/grx/middlewares"
 	"github.com/grx-gql/grx/plugins"
 	"github.com/grx-gql/grx/schema"
 	"github.com/grx-gql/grx/server"
@@ -127,18 +126,6 @@ func WithTransports(transports ...core.Transport) Option {
 	}
 }
 
-// Middleware wraps the HTTP handler exposed by [Server].
-type Middleware = server.Middleware
-
-// WithMiddleware registers HTTP middleware around the final server handler.
-// Middleware is applied in the order supplied, so the first middleware sees
-// each request first.
-func WithMiddleware(middleware ...Middleware) Option {
-	return func(c *server.Config) {
-		c.Middleware = append(c.Middleware, middleware...)
-	}
-}
-
 // WithRequestTimeout sets a deadline on the context passed into each GraphQL
 // request (queries, mutations, and subscription setup).
 func WithRequestTimeout(d time.Duration) Option {
@@ -206,10 +193,4 @@ func WithSchemaSDLPath(path string) Option {
 	return func(c *server.Config) {
 		c.SchemaSDLPath = path
 	}
-}
-
-// RequestID returns middleware that propagates a request ID through
-// [core.RequestIDFromContext]. See [middlewares.RequestID].
-func RequestID(header string) Middleware {
-	return Middleware(middlewares.RequestID(header))
 }

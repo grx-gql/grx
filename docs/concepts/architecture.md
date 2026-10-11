@@ -20,7 +20,7 @@ Roughly everything in **HTTP / WebSocket framing** touches **TCP**, **headers**,
                     ▼
  ┌─────────────────────────────────────────────────────────┐
  │ HTTP / WebSocket framing                                 │
- │  Middleware → server.Server → transports (first Match)   │
+ │  Host HTTP middleware → server.Server → transports       │
  └─────────────────────────────────────────────────────────┘
                     │ Execute(ctx, core.Request)
                     ▼

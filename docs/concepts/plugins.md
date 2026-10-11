@@ -12,7 +12,7 @@ that shouldn't live inside resolvers.
 
 ## Plugins vs middleware
 
-Middleware wraps the HTTP handler before a request becomes GraphQL. It works
+Host HTTP middleware wraps the GraphQL handler before a request becomes GraphQL. It works
 with `http.Request` and `http.ResponseWriter`, so it is the right place for
 transport concerns: headers, cookies, CORS, request IDs, IP allowlists,
 authentication tokens, and request size checks.
@@ -24,7 +24,7 @@ access logging, response hooks, and reporting execution errors.
 
 | Concern | Use | Why |
 | --- | --- | --- |
-| Request ID header | Middleware (`middlewares.RequestID` or `grx.RequestID`) | It reads/writes HTTP headers before GraphQL execution. |
+| Request ID header | Host HTTP middleware | It reads/writes HTTP headers before GraphQL execution. |
 | Bearer token parsing | Middleware | Tokens live in HTTP headers, not `core.Request`. |
 | Field tracing | Plugin | It needs GraphQL field names, return types, and response paths. |
 | Validation/execution metrics | Plugin | It follows executor lifecycle hooks. |
@@ -102,7 +102,7 @@ srv, _ := grx.NewServer(
 
 ## HTTP auth and middleware
 
-[`core.Request`](https://pkg.go.dev/github.com/grx-gql/grx/core#Request) does not expose HTTP headers. Parse `Authorization` in [`WithMiddleware`](/reference/grx/) (or host-router middleware wrapping the GraphQL handler), attach identity with [`context.WithValue`](https://pkg.go.dev/context#WithValue), and reuse that context for the whole GraphQL pipeline.
+[`core.Request`](https://pkg.go.dev/github.com/grx-gql/grx/core#Request) does not expose HTTP headers. Parse `Authorization` in host HTTP middleware wrapping the GraphQL handler, attach identity with [`context.WithValue`](https://pkg.go.dev/context#WithValue), and reuse that context for the whole GraphQL pipeline.
 
 Pair that with [`WithFieldAuthorizer`](/reference/grx/) / [`WithOperationAuthorizer`](/reference/grx/), or enforce policy inside a plugin hook. The [authentication guide](/guides/auth) shows a Bearer token, context-scoped identity, and a field authorizer guarding a `viewer` field - the same wiring as [`examples/auth`](https://github.com/grx-gql/grx/tree/main/examples/auth) in this repository.
 

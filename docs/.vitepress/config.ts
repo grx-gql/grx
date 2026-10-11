@@ -211,7 +211,6 @@ const docsSidebar: DefaultTheme.SidebarItem[] = [
       { text: "exec", link: "/reference/exec/" },
       { text: "server", link: "/reference/server/" },
       { text: "plugins", link: "/reference/plugins/" },
-      { text: "middlewares", link: "/reference/middlewares/" },
       { text: "plugins/logger", link: "/reference/plugins/logger/" },
       { text: "http", link: "/reference/http/" },
       { text: "sse", link: "/reference/sse/" },

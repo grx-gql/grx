@@ -44,7 +44,6 @@ Apply options in any order  -  only `WithSchema` is required (`grx.ErrMissingSch
 - [var ErrMissingSchema](<#ErrMissingSchema>)
 - [type Option](<#Option>)
   - [func WithGraphQLPath\(path string\) Option](<#WithGraphQLPath>)
-  - [func WithMiddleware\(middleware ...Middleware\) Option](<#WithMiddleware>)
   - [func WithPlugins\(pluginList ...plugins.Plugin\) Option](<#WithPlugins>)
   - [func WithPlaygroundPath\(path string\) Option](<#WithPlaygroundPath>)
   - [func WithSchema\(schemaConfig schema.Config\) Option](<#WithSchema>)
@@ -54,7 +53,6 @@ Apply options in any order  -  only `WithSchema` is required (`grx.ErrMissingSch
   - [func WithFieldAuthorizer\(auth FieldAuthorizer\) Option](<#WithFieldAuthorizer>)
 - [type FieldAuthorizationContext](<#FieldAuthorizationContext>)
 - [type FieldAuthorizer](<#FieldAuthorizer>)
-- [type Middleware](<#Middleware>)
 - [type OperationAuthorizer](<#OperationAuthorizer>)
 - [type OperationContext](<#OperationContext>)
 - [type Server](<#Server>)
@@ -127,13 +125,6 @@ func WithPlaygroundPath(path string) Option
 func WithTransports(transports ...core.Transport) Option
 ```
 
-<a name="WithMiddleware"></a>
-### func WithMiddleware
-
-```go
-func WithMiddleware(middleware ...Middleware) Option
-```
-
 <a name="WithOperationAuthorizer"></a>
 ### func WithOperationAuthorizer
 
@@ -147,11 +138,6 @@ func WithOperationAuthorizer(auth OperationAuthorizer) Option
 ```go
 func WithFieldAuthorizer(auth FieldAuthorizer) Option
 ```
-
-<a name="Middleware"></a>
-## type Middleware
-
-Alias of [`server.Middleware`](https://pkg.go.dev/github.com/grx-gql/grx/server#Middleware).
 
 <a name="FieldAuthorizationContext"></a>
 ## type FieldAuthorizationContext

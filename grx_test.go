@@ -40,7 +40,6 @@ func TestAllForwardingOptionsSmoke(t *testing.T) {
 		WithGraphQLPath("/api/query"),
 		WithSubscriptionPath("/api/sub"),
 		WithTransports(websocket.New()),
-		WithMiddleware(RequestID("X-Request-ID")),
 		WithRequestTimeout(5*time.Minute),
 		WithDisableIntrospection(),
 		WithMaxHTTPRequestBytes(96<<10),
@@ -60,34 +59,6 @@ func TestAllForwardingOptionsSmoke(t *testing.T) {
 	srv.ServeHTTP(rec, req)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("GraphQL POST: status %d", rec.Code)
-	}
-}
-
-func TestWithMiddlewareWrapsGraphQLRequests(t *testing.T) {
-	srv, err := NewServer(
-		WithSchema(schema.Config{Query: middlewareQuery{}}),
-		WithMiddleware(func(next http.Handler) http.Handler {
-			return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				w.Header().Set("X-Test-Middleware", "yes")
-				next.ServeHTTP(w, r)
-			})
-		}),
-	)
-	if err != nil {
-		t.Fatalf("new server: %v", err)
-	}
-
-	response := httptest.NewRecorder()
-	request := httptest.NewRequest(http.MethodPost, "/graphql", bytes.NewBufferString(`{"query":"{ hello }"}`))
-	request.Header.Set("Content-Type", "application/json")
-
-	srv.ServeHTTP(response, request)
-
-	if response.Code != http.StatusOK {
-		t.Fatalf("expected status %d, got %d", http.StatusOK, response.Code)
-	}
-	if got := response.Header().Get("X-Test-Middleware"); got != "yes" {
-		t.Fatalf("expected middleware header, got %q", got)
 	}
 }
 
