@@ -206,6 +206,7 @@ type InputValue struct {
 	DefaultValue      any
 	IsDeprecated      bool
 	DeprecationReason *string
+	Directives        []AppliedDirective
 }
 
 // Object describes a GraphQL object type. Fields is keyed by GraphQL
