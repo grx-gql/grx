@@ -6,10 +6,11 @@
       "changelog-path": "CHANGELOG.md",
       "release-type": "go",
       "bump-minor-pre-major": true,
-      "bump-patch-for-minor-pre-major": true,
+      "bump-patch-for-minor-pre-major": false,
       "changelog-sections": [
         { "type": "feat", "section": "✨ Added" },
         { "type": "fix", "section": "🐛 Fixed" },
+        { "type": "refactor", "section": "Refactoring" },
         { "type": "perf", "section": "⚡ Performance" },
         { "type": "revert", "section": "↩️ Reverts" },
         { "type": "docs", "section": "📚 Documentation" },
