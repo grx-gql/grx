@@ -85,7 +85,7 @@ loggerPlugin, _ := logger.New(logger.Config{
 })
 
 srv, _ := grx.NewServer(
-    grx.WithSchema(graph.NewSchema()),
+    grx.WithSchema(graph.Schema()),
     grx.WithPlugins(loggerPlugin),
 )
 ```

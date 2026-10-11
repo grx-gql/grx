@@ -17,7 +17,7 @@ A minimal HTTP GraphQL server only needs a schema:
 
 ```go
 srv, err := grx.NewServer(
-    grx.WithSchema(graph.NewSchema()),
+    grx.WithSchema(graph.Schema()),
 )
 ```
 
@@ -26,7 +26,7 @@ subscriptions, WebSocket, and SSE transports:
 
 ```go
 srv, err := grx.NewServer(
-    grx.WithSchema(graph.New(bus)),
+    grx.WithSchema(graph.Schema(bus)),
     grx.WithPlugins(loggerPlugin),
     grx.WithPlaygroundPath("/"),
     grx.WithSubscriptionPath("/graphql/ws"),

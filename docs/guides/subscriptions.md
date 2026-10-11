@@ -67,7 +67,7 @@ type Subscription struct {
 	UserSubscription
 }
 
-func NewSchema() schema.Config {
+func Schema() schema.Config {
     return schema.Config{
         Query:        Query{},
         Mutation:     Mutation{},
@@ -98,7 +98,7 @@ import (
 
 func main() {
 	srv, err := grx.NewServer(
-		grx.WithSchema(graph.NewSchema()),
+		grx.WithSchema(graph.Schema()),
 		grx.WithPlaygroundPath("/"),
 		grx.WithTransports(
 			websocket.New(websocket.Config{
@@ -145,7 +145,7 @@ import (
 
 func main() {
 	srv, err := grx.NewServer(
-		grx.WithSchema(graph.NewSchema()),
+		grx.WithSchema(graph.Schema()),
 		grx.WithPlaygroundPath("/"),
 		grx.WithSubscriptionPath("/graphql/ws"),
 		grx.WithTransports(websocket.New(websocket.Config{ReadIdleTimeout: 60 * time.Second}), sse.New()),
@@ -337,8 +337,8 @@ This is the message resolver from the runnable subscription example:
 
 ### Construct the bus once and share it
 
-The example's `graph.New(bus)` wires the same bus into mutations and
-subscriptions. `graph.New()` or `graph.New(nil)` exposes only queries and
+The example's `graph.Schema(bus)` wires the same bus into mutations and
+subscriptions. `graph.Schema(nil)` exposes only queries and
 `createPost`; no subscription root or event-publishing mutations are registered.
 The composed user and post resolvers are shown in [Examples](/examples/#examples-subscriptions).
 
@@ -373,7 +373,7 @@ func main() {
 	defer bus.Close()
 
 	srv, err := grx.NewServer(
-		grx.WithSchema(graph.New(bus)),
+		grx.WithSchema(graph.Schema(bus)),
 		grx.WithTransports(
 			websocket.New(websocket.Config{ReadIdleTimeout: 60 * time.Second, CheckOrigin: allowOrigin}),
 			sse.New(),

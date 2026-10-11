@@ -72,7 +72,7 @@ func (Query) User(ctx context.Context, args UserArgs) (*User, error) {
 	return &User{ID: args.ID, Name: "Ada Lovelace"}, nil
 }
 
-func NewSchema() schema.Config {
+func Schema() schema.Config {
 	return schema.Config{Query: Query{}}
 }
 ```

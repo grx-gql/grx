@@ -28,7 +28,7 @@ func main() {
 	}
 
 	srv, err := grx.NewServer(
-		grx.WithSchema(graph.NewSchema()),
+		grx.WithSchema(graph.Schema()),
 		grx.WithPersistedQueries(queries),
 	)
 	if err != nil {

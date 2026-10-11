@@ -29,7 +29,7 @@ import "github.com/grx-gql/grx/schema"
 
 type Query struct{}
 
-func NewSchema() schema.Config {
+func Schema() schema.Config {
 	return schema.Config{
 		Query: Query{},
 	}
@@ -76,7 +76,7 @@ import (
 
 func main() {
 	srv, err := grx.NewServer(
-		grx.WithSchema(graph.NewSchema()),
+		grx.WithSchema(graph.Schema()),
 		grx.WithPlaygroundPath("/"),
 	)
 	if err != nil {
@@ -157,7 +157,7 @@ type User struct {
 	DisplayName string `gql:"displayName,nonNull"`
 }
 
-func NewSchema() schema.Config {
+func Schema() schema.Config {
 	return schema.Config{
 		Query: Query{},
 	}
@@ -239,7 +239,7 @@ func requireViewerField() grx.FieldAuthorizer {
 
 func main() {
 	srv, err := grx.NewServer(
-		grx.WithSchema(graph.NewSchema()),
+		grx.WithSchema(graph.Schema()),
 		grx.WithPlaygroundPath("/"),
 		grx.WithFieldAuthorizer(requireViewerField()),
 	)
@@ -286,8 +286,8 @@ Memory pub/sub feeds [**`graphql-transport-ws`**](https://github.com/graphql/gra
 
 <<< @/../examples/subscriptions/main.go
 
-With `graph.New()`, only queries and `createPost` are exposed. Passing a bus with
-`graph.New(bus)` also exposes `createUser`, `postMessage`, and the subscription root.
+With `graph.Schema(nil)`, only queries and `createPost` are exposed. Passing a bus with
+`graph.Schema(bus)` also exposes `createUser`, `postMessage`, and the subscription root.
 The snippets below are included from the tested example source.
 
 #### `examples/subscriptions/graph/schema.go`
@@ -324,7 +324,7 @@ Build **`graph`** any way you like (see **[Get started**](/getting-started/) or 
 
 ```go
 	gql, err := grx.NewServer(
-		grx.WithSchema(graph.NewSchema()),
+		grx.WithSchema(graph.Schema()),
 		grx.WithPlaygroundPath("/playground"),
 		grx.WithGraphQLPath("/query"),
 	)
@@ -372,7 +372,7 @@ import (
 
 func main() {
 	gql, err := grx.NewServer(
-		grx.WithSchema(graph.NewSchema()),
+		grx.WithSchema(graph.Schema()),
 		grx.WithPlaygroundPath("/playground"),
 		grx.WithGraphQLPath("/query"),
 	)

@@ -34,7 +34,7 @@ import (
 
 func main() {
 	gql, err := grx.NewServer(
-		grx.WithSchema(graph.NewSchema()),
+	grx.WithSchema(graph.Schema()),
 		grx.WithPlaygroundPath("/playground"),
 		grx.WithGraphQLPath("/query"),
 	)

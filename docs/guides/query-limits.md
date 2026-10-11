@@ -37,7 +37,7 @@ import (
 
 func main() {
 	srv, err := server.New(server.Config{
-		Schema:             graph.NewSchema(),
+		Schema:             graph.Schema(),
 		MaxSelectionDepth:  16,
 		MaxSelectionCount:  750,
 		MaxAliasCount:      120,

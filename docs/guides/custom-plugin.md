@@ -99,7 +99,7 @@ func main() {
 	}
 
 	srv, err := grx.NewServer(
-		grx.WithSchema(graph.NewSchema()),
+		grx.WithSchema(graph.Schema()),
 		grx.WithPlugins(logPlug, extensions.RequestID{}),
 	)
 	if err != nil {

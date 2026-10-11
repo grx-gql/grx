@@ -67,7 +67,7 @@ import (
 )
 
 srv, _ := grx.NewServer(
-    grx.WithSchema(graph.NewSchema()),
+    grx.WithSchema(graph.Schema()),
     grx.WithTransports(
         websocket.New(websocket.Config{
             ConnectionInitTimeout: 3 * time.Second,
