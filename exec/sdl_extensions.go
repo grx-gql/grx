@@ -48,7 +48,7 @@ func extendSDLType(def sdlDef, types map[string]schema.Type) error {
 			input.Directives = append(input.Directives, appliedSDLDirectives(def.directives)...)
 			for _, d := range def.directives {
 				if d.Name == "oneOf" {
-					input.IsOneOf = true
+					return fmt.Errorf("input extension %q must not add @oneOf", def.name)
 				}
 			}
 			return nil
