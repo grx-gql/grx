@@ -3,9 +3,11 @@ package exec
 // documentBundle holds every operation and fragment definition in a parsed
 // GraphQL document before an operation is selected for execution.
 type documentBundle struct {
-	source     string
-	operations []document
-	fragments  map[string]*fragmentDef
+	source          string
+	variables       map[string]any
+	hasVariableRefs bool
+	operations      []document
+	fragments       map[string]*fragmentDef
 }
 
 // parseDocumentBundle parses query into a bundle of executable operations plus
@@ -31,7 +33,7 @@ func parseDocumentBundleWithLexer(e *Executor, query string, variables map[strin
 		return documentBundle{}, err
 	}
 
-	p := parser{tokens: tokens, vars: variables, source: source, maxDepth: maxDepth}
+	p := parser{tokens: tokens, source: source, maxDepth: maxDepth}
 
 	fragments := make(map[string]*fragmentDef)
 	var operations []document
@@ -70,16 +72,14 @@ func parseDocumentBundleWithLexer(e *Executor, query string, variables map[strin
 		return documentBundle{}, newParseError(source, 0, "document contains no operations")
 	}
 
-	return documentBundle{source: source, operations: operations, fragments: fragments}, nil
+	return documentBundle{source: source, variables: variables, hasVariableRefs: len(p.variableUses) > 0, operations: operations, fragments: fragments}, nil
 }
 
 func selectOperation(bundle documentBundle, operationName string) (document, error) {
 	if operationName != "" {
 		for _, op := range bundle.operations {
 			if op.Name == operationName {
-				doc := op
-				doc.Fragments = bundle.fragments
-				return doc, nil
+				return bindSelectedOperation(bundle, op), nil
 			}
 		}
 		return document{}, newParseError(bundle.source, 0,
@@ -91,9 +91,7 @@ func selectOperation(bundle documentBundle, operationName string) (document, err
 			"Must provide operation name if query contains multiple operations.")
 	}
 
-	doc := bundle.operations[0]
-	doc.Fragments = bundle.fragments
-	return doc, nil
+	return bindSelectedOperation(bundle, bundle.operations[0]), nil
 }
 
 func resolveDocumentVariableRefs(doc document) document {

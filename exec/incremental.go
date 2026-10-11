@@ -21,7 +21,7 @@ func (e *Executor) HasIncrementalDirectives(req core.Request) bool {
 	if err != nil {
 		return false
 	}
-	return selectionsUseIncremental(doc.Selections, bundle.fragments, map[string]bool{})
+	return selectionsUseIncremental(doc.Selections, doc.Fragments, map[string]bool{})
 }
 
 func selectionsUseIncremental(selections []selection, fragments map[string]*fragmentDef, seen map[string]bool) bool {
