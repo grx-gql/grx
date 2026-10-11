@@ -38,7 +38,7 @@ func (e *Executor) resolveSubscriptionSource(ctx context.Context, root *schema.O
 		e.notifyError(ctx, err)
 		return nil, e.maskError(err, false)
 	}
-	source, err := e.invokeResolver(ctx, nil, field, selected, nil, args)
+	source, err := e.invokeResolver(ctx, nil, field, nil, args)
 	for _, ender := range e.fieldEnders {
 		ender.FieldResolveEnd(ctx, fieldCtx, err)
 	}
