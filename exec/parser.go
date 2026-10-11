@@ -122,43 +122,35 @@ func parseDocumentNamed(query string, variables map[string]any, operationName st
 // definitions, and operation directives, leaving the parser positioned at the
 // top-level selection set. It returns the operation kind, operation name, and
 // declared variable names.
-func (p *parser) parseOperationHeader() (operationKind, string, []string, map[string]string, error) {
-	kind := operationQuery
+func (p *parser) parseOperationHeader() (document, error) {
+	op := document{Kind: operationQuery, Location: locationForOffset(p.source, p.peek().offset)}
 	if p.peek().kind != tokenName {
-		return kind, "", nil, nil, nil
+		return op, nil
 	}
-
 	switch p.peek().value {
 	case "query":
 		p.next()
 	case "mutation":
 		p.next()
-		kind = operationMutation
+		op.Kind = operationMutation
 	case "subscription":
 		p.next()
-		kind = operationSubscription
+		op.Kind = operationSubscription
 	default:
-		return kind, "", nil, nil, newParseError(p.source, p.peek().offset, "unexpected token %q at top of operation", p.peek().value)
+		return document{}, newParseError(p.source, p.peek().offset, "unexpected token %q at top of operation", p.peek().value)
 	}
-
-	var name string
 	if p.peek().kind == tokenName {
-		name = p.next().value
+		op.Name = p.next().value
 	}
-	var variables []string
-	var variableTypes map[string]string
+	var err error
 	if p.peek().kind == tokenParenOpen {
-		parsed, parsedTypes, err := p.parseVariableDefinitions()
+		op.Variables, op.VariableTypes, op.VariableDefinitions, err = p.parseVariableDefinitions()
 		if err != nil {
-			return kind, name, nil, nil, err
+			return document{}, err
 		}
-		variables = parsed
-		variableTypes = parsedTypes
 	}
-	if _, err := p.parseDirectives(); err != nil {
-		return kind, name, nil, nil, err
-	}
-	return kind, name, variables, variableTypes, nil
+	op.Directives, err = p.parseDirectives()
+	return op, err
 }
 
 func (p *parser) parseSelectionSet(depth int) ([]selection, error) {
@@ -169,6 +161,9 @@ func (p *parser) parseSelectionSet(depth int) ([]selection, error) {
 		return nil, err
 	}
 
+	if p.peek().kind == tokenBraceClose {
+		return nil, newParseError(p.source, p.peek().offset, "selection set must contain at least one selection")
+	}
 	selections := make([]selection, 0, 4)
 	for p.peek().kind != tokenBraceClose {
 		if p.peek().kind == tokenEOF {
@@ -187,13 +182,18 @@ func (p *parser) parseSelectionSet(depth int) ([]selection, error) {
 func (p *parser) parseSelection(depth int) (selection, error) {
 	if p.peek().kind == tokenSpread {
 		spread := p.next() // ...
-		if p.peek().kind == tokenBraceOpen {
+		if p.peek().kind == tokenBraceOpen || p.peek().kind == tokenAt {
+			dirs, err := p.parseDirectives()
+			if err != nil {
+				return selection{}, err
+			}
 			nested, err := p.parseSelectionSet(depth + 1)
 			if err != nil {
 				return selection{}, err
 			}
 			return selection{
 				Selections: nested,
+				Directives: dirs,
 				Location:   locationForOffset(p.source, spread.offset),
 			}, nil
 		}
@@ -305,8 +305,8 @@ func (p *parser) parseFragmentDefinition() (*fragmentDef, error) {
 	if typeTok.kind != tokenName {
 		return nil, newParseError(p.source, typeTok.offset, "expected type condition name, got %q", typeTok.value)
 	}
-	// Directives on fragment definitions are parsed and discarded.
-	if _, err := p.parseDirectives(); err != nil {
+	dirs, err := p.parseDirectives()
+	if err != nil {
 		return nil, err
 	}
 	sel, err := p.parseSelectionSet(1)
@@ -315,6 +315,7 @@ func (p *parser) parseFragmentDefinition() (*fragmentDef, error) {
 	}
 	return &fragmentDef{
 		Name:          nameTok.value,
+		Directives:    dirs,
 		TypeCondition: typeTok.value,
 		Selections:    sel,
 		NameOffset:    nameTok.offset,
@@ -344,6 +345,9 @@ func (p *parser) parseDirectives() ([]directive, error) {
 
 func (p *parser) parseArguments() (map[string]any, error) {
 	p.next() // consume (
+	if p.peek().kind == tokenParenClose {
+		return nil, newParseError(p.source, p.peek().offset, "arguments must contain at least one argument")
+	}
 	args := make(map[string]any, 4)
 	for p.peek().kind != tokenParenClose {
 		if p.peek().kind == tokenEOF {
@@ -402,8 +406,8 @@ func (p *parser) parseValue() (any, error) {
 		case "null":
 			return nil, nil
 		default:
-			// Treat as enum value; resolver-side coercion converts it to a typed value.
-			return current.value, nil
+			// Preserve literal kind until input validation and coercion.
+			return enumLiteral(current.value), nil
 		}
 	case tokenDollar:
 		name := p.next()
@@ -470,60 +474,62 @@ func (p *parser) parseListLiteral() ([]any, error) {
 // parseVariableDefinitions parses a parenthesised variable definition list,
 // captures default values, and injects them into p.vars for any variable that
 // is not already present. It returns the list of declared variable names.
-func (p *parser) parseVariableDefinitions() ([]string, map[string]string, error) {
+func (p *parser) parseVariableDefinitions() ([]string, map[string]string, map[string]variableDefinition, error) {
 	if err := p.expect(tokenParenOpen); err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
+	}
+	if p.peek().kind == tokenParenClose {
+		return nil, nil, nil, newParseError(p.source, p.peek().offset, "variable definitions must contain at least one variable")
 	}
 	variables := make([]string, 0, 4)
 	variableTypes := make(map[string]string)
+	definitions := make(map[string]variableDefinition)
 	for p.peek().kind != tokenParenClose {
 		if p.peek().kind == tokenEOF {
-			return nil, nil, newParseError(p.source, p.peek().offset, "unexpected end of query inside operation variables")
+			return nil, nil, nil, newParseError(p.source, p.peek().offset, "unexpected end of query inside operation variables")
 		}
-		// $varName
 		if p.peek().kind != tokenDollar {
-			return nil, nil, newParseError(p.source, p.peek().offset, "expected variable definition, got %q", p.peek().value)
+			return nil, nil, nil, newParseError(p.source, p.peek().offset, "expected variable definition, got %q", p.peek().value)
 		}
-		p.next() // consume $
+		p.next()
 		name := p.next()
 		if name.kind != tokenName {
-			return nil, nil, newParseError(p.source, name.offset, "expected variable name after $")
+			return nil, nil, nil, newParseError(p.source, name.offset, "expected variable name after $")
 		}
-		// : TypeRef
 		if err := p.expect(tokenColon); err != nil {
-			return nil, nil, err
+			return nil, nil, nil, err
 		}
 		typeRef, err := p.parseTypeRef()
 		if err != nil {
-			return nil, nil, err
+			return nil, nil, nil, err
 		}
-		// optional = DefaultValue (constant, no variable references allowed)
+		definition := variableDefinition{Location: locationForOffset(p.source, name.offset)}
 		if p.peek().kind == tokenEquals {
-			p.next() // consume =
-			defaultVal, err := p.parseConstValue()
+			p.next()
+			definition.HasDefault = true
+			definition.DefaultValue, err = p.parseConstValue()
 			if err != nil {
-				return nil, nil, err
+				return nil, nil, nil, err
 			}
-			// Only use the default when the caller did not supply the variable.
 			if _, exists := p.vars[name.value]; !exists {
 				if p.vars == nil {
 					p.vars = make(map[string]any)
 				}
-				p.vars[name.value] = defaultVal
+				p.vars[name.value] = definition.DefaultValue
 			}
 		}
-		// optional directives on the variable definition (parse and discard)
-		if _, err := p.parseDirectives(); err != nil {
-			return nil, nil, err
+		definition.Directives, err = p.parseDirectives()
+		if err != nil {
+			return nil, nil, nil, err
 		}
 		variables = append(variables, name.value)
 		variableTypes[name.value] = typeRef
+		definitions[name.value] = definition
 	}
-	p.next() // consume )
-	return variables, variableTypes, nil
+	p.next()
+	return variables, variableTypes, definitions, nil
 }
 
-// parseTypeRef parses a GraphQL type reference such as ID!, [String!]!, or Boolean.
 func (p *parser) parseTypeRef() (string, error) {
 	var out string
 	switch p.peek().kind {
@@ -582,7 +588,7 @@ func (p *parser) parseConstValue() (any, error) {
 		case "null":
 			return nil, nil
 		default:
-			return current.value, nil // enum value
+			return enumLiteral(current.value), nil // enum value
 		}
 	case tokenBraceOpen:
 		return p.parseConstObjectLiteral()
@@ -679,6 +685,14 @@ func lexNormalizedSource(input string) ([]token, error) {
 		if c == '#' {
 			j := i + 1
 			for j < n && input[j] != '\n' && input[j] != '\r' {
+				if input[j] >= utf8.RuneSelf {
+					_, size := utf8.DecodeRuneInString(input[j:])
+					if size == 1 {
+						return nil, newParseError(input, j, "invalid UTF-8 source character")
+					}
+					j += size
+					continue
+				}
 				j++
 			}
 			i = j
@@ -790,7 +804,11 @@ func lexNormalizedSource(input string) ([]token, error) {
 
 		// Non-ASCII byte: decode and report a precise rune in the error.
 		if c >= 0x80 {
-			r, _ := utf8.DecodeRuneInString(input[i:])
+			r, size := utf8.DecodeRuneInString(input[i:])
+			if r == '\uFEFF' {
+				i += size
+				continue
+			}
 			return nil, newParseError(input, i, "unexpected character %q", r)
 		}
 		return nil, newParseError(input, i, "unexpected character %q", rune(c))
@@ -885,6 +903,14 @@ func locationForOffset(source string, offset int) core.Location {
 func readString(input string, start int) (string, int, error) {
 	n := len(input)
 	for j := start + 1; j < n; j++ {
+		if input[j] >= utf8.RuneSelf {
+			_, size := utf8.DecodeRuneInString(input[j:])
+			if size == 1 {
+				return "", 0, fmt.Errorf("invalid UTF-8 source character")
+			}
+			j += size - 1
+			continue
+		}
 		switch input[j] {
 		case '"':
 			return input[start+1 : j], j + 1, nil
@@ -946,9 +972,9 @@ func readStringSlow(input string, contentStart, escapeAt int) (string, int, erro
 					return "", 0, err
 				}
 				// Combine UTF-16 surrogate pair `\uD83D\uDE00` if present.
-				if utf16.IsSurrogate(r) && j+consumed+1 < n && input[j+consumed] == '\\' && input[j+consumed+1] == 'u' {
+				if consumed == 6 && utf16.IsSurrogate(r) && j+consumed+1 < n && input[j+consumed] == '\\' && input[j+consumed+1] == 'u' {
 					r2, consumed2, err2 := readUnicodeEscape(input, j+consumed)
-					if err2 == nil && utf16.IsSurrogate(r2) {
+					if err2 == nil && consumed2 == 6 && utf16.IsSurrogate(r2) {
 						if combined := utf16.DecodeRune(r, r2); combined != utf8.RuneError {
 							b.WriteRune(combined)
 							j += consumed + consumed2
@@ -956,12 +982,24 @@ func readStringSlow(input string, contentStart, escapeAt int) (string, int, erro
 						}
 					}
 				}
+				if utf16.IsSurrogate(r) {
+					return "", 0, fmt.Errorf("invalid unicode escape: unpaired surrogate")
+				}
 				b.WriteRune(r)
 				j += consumed
 			default:
 				return "", 0, fmt.Errorf("invalid string escape %q", input[j:j+2])
 			}
 		default:
+			if c >= utf8.RuneSelf {
+				_, size := utf8.DecodeRuneInString(input[j:])
+				if size == 1 {
+					return "", 0, fmt.Errorf("invalid UTF-8 source character")
+				}
+				b.WriteString(input[j : j+size])
+				j += size
+				continue
+			}
 			b.WriteByte(c)
 			j++
 		}
@@ -990,7 +1028,7 @@ func readUnicodeEscape(input string, start int) (rune, int, error) {
 			return 0, 0, fmt.Errorf("invalid unicode escape %q", input[start:end+1])
 		}
 		code, err := strconv.ParseUint(hex, 16, 32)
-		if err != nil {
+		if err != nil || code > utf8.MaxRune || utf16.IsSurrogate(rune(code)) {
 			return 0, 0, fmt.Errorf("invalid unicode escape %q", input[start:end+1])
 		}
 		return rune(code), (end + 1) - start, nil
@@ -1029,6 +1067,15 @@ func readBlockString(input string, start int) (string, int, error) {
 			raw.WriteByte('"')
 			raw.WriteByte('"')
 			j += 2
+			continue
+		}
+		if input[j] >= utf8.RuneSelf {
+			_, size := utf8.DecodeRuneInString(input[j:])
+			if size == 1 {
+				return "", 0, fmt.Errorf("invalid UTF-8 source character")
+			}
+			raw.WriteString(input[j : j+size])
+			j += size
 			continue
 		}
 		raw.WriteByte(input[j])

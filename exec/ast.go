@@ -2,6 +2,8 @@ package exec
 
 import "github.com/grx-gql/grx/core"
 
+type enumLiteral string
+
 type operationKind string
 
 const (
@@ -18,6 +20,8 @@ type directive struct {
 
 // fragmentDef is a named fragment definition from the document.
 type fragmentDef struct {
+	VariableUses  []variableUse
+	Directives    []directive
 	Name          string
 	TypeCondition string
 	Selections    []selection
@@ -25,13 +29,24 @@ type fragmentDef struct {
 }
 
 type document struct {
-	Kind          operationKind
-	Name          string
-	Variables     []string
-	VariableTypes map[string]string
-	Selections    []selection
+	VariableUses        []variableUse
+	Directives          []directive
+	VariableDefinitions map[string]variableDefinition
+	Location            core.Location
+	Kind                operationKind
+	Name                string
+	Variables           []string
+	VariableTypes       map[string]string
+	Selections          []selection
 	// Fragments holds fragment definitions in scope for this operation.
 	Fragments map[string]*fragmentDef
+}
+
+type variableDefinition struct {
+	Directives   []directive
+	DefaultValue any
+	HasDefault   bool
+	Location     core.Location
 }
 
 type variableUse struct {
