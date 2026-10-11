@@ -6,7 +6,9 @@ outline: [2, 3]
 
 # Organize your code
 
-You already know [how grx maps GraphQL to Go](/concepts/schema-basics). This page is about **project layout**: where to put types and resolvers when the app gets bigger.
+You already know [how grx maps GraphQL to Go](/concepts/schema-basics). This
+page is about project layout: where to put types and resolvers when the app
+gets bigger.
 
 ## Roots in GraphQL terms
 
@@ -83,6 +85,15 @@ Put dependencies you need in resolvers (database pool, config, clients) on **`Us
 If two embedded types both expose a method with the **same** name on the same root, Go’s method rules hide one of them. Rename a resolver so each top-level field name is unique.
 :::
 
+## A useful growth path
+
+Start with one `Query` and one `Schema` function. Split by domain when a root
+type becomes difficult to scan. Keep domain resolver structs responsible for
+their own dependencies, then embed them in the root type.
+
+This keeps schema assembly explicit without making one file own every field.
+
 ## See also
 
-- [Resolver methods](/concepts/resolvers)  -  `context`, errors, subscription streams.
+- [Resolver methods](/concepts/resolvers): context, errors, and subscription streams.
+- [Application architecture](/guides/application-architecture): services, repositories, and request boundaries.

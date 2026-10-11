@@ -1,58 +1,62 @@
 ---
-title: Basic · net/http
-description: Run GraphQL on a standalone listener - the smallest way to inspect grx wiring.
+title: Basic net/http integration
+description: Run a grx handler on a standalone net/http listener.
 outline: [2, 3]
 ---
 
-# Basic · net/http
+# Basic `net/http` integration
 
-Best when GraphQL deserves its own TCP port (local tools, playgrounds, gateways that reverse-proxy cleanly). **`grx.Server`** answers **`GET`** for bundled GraphiQL and **`POST /graphql`** for JSON bodies.
+Use this integration when GraphQL has its own listener or when a reverse proxy
+will route a dedicated public path to it. The schema is covered in
+[Run your first server](/getting-started/). This page only shows the HTTP
+integration.
 
-Reuse the **`graph`** package from **[Get started › Minimal schema](/getting-started/#minimal-schema)**.
-
-## `main.go`
+## Create the handler
 
 ```go
-package main
-
-import (
-	"log"
-	"net/http"
-
-	"example.com/hello-grx/graph"
-	"github.com/grx-gql/grx"
-)
-
-func main() {
-	gql, err := grx.NewServer(
+server, err := grx.NewServer(
 	grx.WithSchema(graph.Schema()),
-		grx.WithPlaygroundPath("/"),
-	)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	log.Println("GraphiQL playground: http://localhost:4000/")
-	log.Println("GraphQL POST: http://localhost:4000/graphql")
-	log.Fatal(http.ListenAndServe(":4000", gql))
+	grx.WithPlaygroundPath("/"),
+)
+if err != nil {
+	return err
 }
 ```
 
-## Run
+`grx.NewServer` returns an `http.Handler`. The default HTTP transport handles
+GraphQL JSON requests on `/graphql`.
 
-```bash
-go run .
+## Serve it
+
+```go
+log.Fatal(http.ListenAndServe(":4000", server))
 ```
 
-Open `http://localhost:4000` and paste the **[sample query](/getting-started/#try-query)**.
+Run the complete example with:
 
-::: tip Need REST on the same process?  
-See **[ServeMux](./servemux)** or pick **[Chi](./chi)** · **[Gin](./gin)** · **[Echo](./echo)**.  
-:::
+```bash
+go run ./examples/basic
+```
 
----
+## Add host middleware
 
-## Related
+Wrap the handler when you need CORS, authentication, request IDs, tracing, or
+other host-level policy. See [CORS and browsers](/guides/cors-browsers) and
+[HTTP middleware](/guides/middleware).
 
-- **[Examples › Basic HTTP](../examples/#examples-basic-http)**  -  runnable repo copy  
-- **[Transports conceptual doc](/concepts/transports)**
+## Other routers
+
+- [ServeMux](./servemux)
+- [Chi](./chi)
+- [Gin](./gin)
+- [Echo](./echo)
+- [Fiber](./fiber)
+
+All integrations mount the same `http.Handler`. They do not change how the
+GraphQL schema or resolver methods work.
+
+## Related concepts
+
+- [HTTP, WebSocket, and SSE](/concepts/transports)
+- [Runtime boundaries](/concepts/runtime-boundaries)
+- [API reference for grx](/reference/grx/)

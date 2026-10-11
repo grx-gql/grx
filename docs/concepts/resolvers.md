@@ -8,7 +8,14 @@ outline: [2, 3]
 
 In GraphQL terms, a **resolver** is the function that runs when a client asks for a field. In grx, that function is almost always a **Go method**: either a method on your `Query` / `Mutation` / `Subscription` struct (top-level fields), or - under the hood - property reads on structs you return (nested object fields are read from the struct, not separate methods you write).
 
-This page covers **methods you write yourself**: legal signatures, `context`, errors, and subscription channels.
+This page covers methods you write yourself: legal signatures, context,
+errors, and subscription channels. Read [Define your schema](/concepts/schema-basics)
+first if the root types or `gql` tags are new.
+
+The resolver boundary should stay small. Convert GraphQL input into an
+application service call, return the result, and keep database and business
+logic below the resolver. See [Application architecture](/guides/application-architecture)
+for the larger service boundary.
 
 ## Signatures
 
@@ -153,3 +160,9 @@ for the current behavior.
   pool, an RPC client)  -  treat those as immutable after construction.
 - Subscriptions own their goroutine: spawn workers from the resolver, but
   always honour `ctx.Done()` to release them.
+
+## Next steps
+
+- [Application architecture](/guides/application-architecture)
+- [Authentication and authorization](/guides/auth)
+- [Realtime subscriptions](/guides/subscriptions)
