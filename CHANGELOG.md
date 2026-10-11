@@ -10,6 +10,26 @@ Published versions use section titles that match
 headings such as **`### ✨ Added`**, **`### 🐛 Fixed`**, **`### 📚 Documentation`**, … —
 see **`release-please-config.json`**). This file **`CHANGELOG.md`** is the changelog; browse it **[on GitHub](https://github.com/grx-gql/grx/blob/main/CHANGELOG.md)** (the docs site no longer duplicates it).
 
+## [0.8.0](https://github.com/grx-gql/grx/compare/v0.7.1...v0.8.0) (2026-10-11)
+
+
+### ✨ Added
+
+* add request-scoped resolver batching ([#80](https://github.com/grx-gql/grx/issues/80)) ([550c3c9](https://github.com/grx-gql/grx/commit/550c3c94b0d245d04f25c71a5257dfa7e38a1750))
+
+
+### 🐛 Fixed
+
+* configure conventional commit version bumps ([#86](https://github.com/grx-gql/grx/issues/86)) ([4ad22aa](https://github.com/grx-gql/grx/commit/4ad22aa581c12f874516892dabd264601afad68f))
+
+
+### 🧹 Chores
+
+* **deps:** bump actions/setup-go from 6.5.0 to 7.0.0 ([#81](https://github.com/grx-gql/grx/issues/81)) ([b020eb2](https://github.com/grx-gql/grx/commit/b020eb2365c860d82631e3430164f4039254b058))
+* **deps:** bump github.com/alicebob/miniredis/v2 in /pubsub/redis ([#84](https://github.com/grx-gql/grx/issues/84)) ([d5fea4e](https://github.com/grx-gql/grx/commit/d5fea4eab8501ff5c532d62fac967fce68b5b9e9))
+* **deps:** bump github.com/go-chi/chi/v5 in /integration/cors ([#82](https://github.com/grx-gql/grx/issues/82)) ([986e536](https://github.com/grx-gql/grx/commit/986e536bf981a7480da99a1fef25d9385181ca0a))
+* **deps:** bump github.com/redis/go-redis/v9 from 9.7.0 to 9.23.0 in /pubsub/redis ([#83](https://github.com/grx-gql/grx/issues/83)) ([1e686d4](https://github.com/grx-gql/grx/commit/1e686d4b7d310fdd8dbd9e114b1dd4c8ca7b12da))
+
 ## [0.7.1](https://github.com/grx-gql/grx/compare/v0.7.0...v0.7.1) (2026-10-11)
 
 
