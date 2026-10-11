@@ -2,6 +2,7 @@ package exec
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/grx-gql/grx/core"
@@ -175,7 +176,7 @@ func validateFragmentSpread(
 	}
 
 	var errs []validationError
-	errs = append(errs, validateDirectives(sel, "FRAGMENT_SPREAD")...)
+	errs = append(errs, validateDirectives(s, sel, "FRAGMENT_SPREAD")...)
 
 	if parent != nil && !fragmentTypeMatches(parent, fd.TypeCondition) {
 		errs = append(errs, newValidationError(sel.Location,
@@ -207,7 +208,7 @@ func validateInlineFragment(
 	variableTypes map[string]string,
 ) []validationError {
 	var errs []validationError
-	errs = append(errs, validateDirectives(sel, "INLINE_FRAGMENT")...)
+	errs = append(errs, validateDirectives(s, sel, "INLINE_FRAGMENT")...)
 
 	cond := sel.InlineFragmentOn
 	if cond == "" {
@@ -252,7 +253,7 @@ func validateField(
 	}
 
 	var errs []validationError
-	errs = append(errs, validateDirectives(sel, "FIELD")...)
+	errs = append(errs, validateDirectives(s, sel, "FIELD")...)
 
 	fieldName := sel.Name
 	if fieldName == "__typename" {
@@ -443,21 +444,18 @@ var executableDirectiveLocations = map[string]map[string]bool{
 	"stream":  {"FIELD": true},
 }
 
-// repeatableExecutableDirectives lists directives that may appear more than
-// once on the same location in an executable document.
-var repeatableExecutableDirectives = map[string]bool{}
-
-func validateDirectives(sel selection, location string) []validationError {
+func validateDirectives(s *schema.Schema, sel selection, location string) []validationError {
 	var errs []validationError
 	seen := make(map[string]bool)
 	for _, d := range sel.Directives {
 		allowedLocs, known := executableDirectiveLocations[d.Name]
-		if !known {
+		definition := s.DirectiveDefinitions[d.Name]
+		if !known && definition == nil {
 			errs = append(errs, newValidationError(sel.Location, `Unknown directive "@%s".`, d.Name))
 			continue
 		}
 
-		isRepeatable := repeatableExecutableDirectives[d.Name]
+		isRepeatable := definition != nil && definition.IsRepeatable
 		if seen[d.Name] && !isRepeatable {
 			errs = append(errs, newValidationError(sel.Location,
 				`Directive "@%s" may not be used more than once at this location.`, d.Name))
@@ -465,11 +463,19 @@ func validateDirectives(sel selection, location string) []validationError {
 		}
 		seen[d.Name] = true
 
-		if !allowedLocs[location] {
+		allowed := allowedLocs[location]
+		if definition != nil {
+			allowed = slices.Contains(definition.Locations, location)
+		}
+		if !allowed {
 			errs = append(errs, newValidationError(sel.Location,
 				`Directive "@%s" may not be used on %s.`, d.Name, location))
 		}
-		errs = append(errs, validateDirectiveArguments(sel.Location, d)...)
+		if definition != nil {
+			errs = append(errs, validateDefinedDirectiveArguments(sel.Location, d, definition)...)
+		} else {
+			errs = append(errs, validateDirectiveArguments(sel.Location, d)...)
+		}
 	}
 	return errs
 }
