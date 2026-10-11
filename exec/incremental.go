@@ -164,10 +164,34 @@ func (e *Executor) completeListStreamed(ctx context.Context, itemType schema.Typ
 // initial response's HasNext is set to true when at least one payload follows.
 // Callers that detect no incremental directives should prefer [Executor.Execute].
 func (e *Executor) ExecuteIncremental(ctx context.Context, req core.Request) (core.Response, []core.IncrementalPayload) {
+	var initial core.Response
+	var payloads []core.IncrementalPayload
+	err := e.ExecuteIncrementalStream(ctx, req, func(response core.Response) error {
+		initial = response
+		return nil
+	}, func(payload core.IncrementalPayload, _ bool) error {
+		payloads = append(payloads, payload)
+		return nil
+	})
+	if err != nil {
+		initial.Errors = append(initial.Errors, core.NewRequestError(err))
+		hasNext := false
+		initial.HasNext = &hasNext
+	}
+	return initial, payloads
+}
+
+// ExecuteIncrementalStream emits the initial response before completing pending
+// @defer/@stream work. Callbacks run synchronously while execution state is alive;
+// callback errors and context cancellation stop all remaining work.
+func (e *Executor) ExecuteIncrementalStream(ctx context.Context, req core.Request, emitInitial func(core.Response) error, emitPatch func(core.IncrementalPayload, bool) error) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	preparedCtx, root, doc, short := e.prepareExecution(ctx, req)
 	ctx = preparedCtx
 	if short != nil {
-		return *short, nil
+		return emitInitial(*short)
 	}
 
 	collector := &incrementalCollector{}
@@ -189,17 +213,35 @@ func (e *Executor) ExecuteIncremental(ctx context.Context, req core.Request) (co
 		initial.Errors = nil
 	}
 
-	var payloads []core.IncrementalPayload
-	for len(collector.work) > 0 {
-		item := collector.work[0]
-		collector.work = collector.work[1:]
-		payloads = append(payloads, e.runIncrementalWork(ctx, item))
-	}
-
-	hasNext := len(payloads) > 0
+	hasNext := len(collector.work) > 0
 	initial.HasNext = &hasNext
 	initial = e.sendResponse(ctx, initial)
-	return initial, payloads
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if err := emitInitial(initial); err != nil {
+		return err
+	}
+	// A response hook can replace the initial response with an error response.
+	if initial.HasNext == nil || !*initial.HasNext {
+		return ctx.Err()
+	}
+	for len(collector.work) > 0 {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		item := collector.work[0]
+		collector.work[0] = incrementalWork{}
+		collector.work = collector.work[1:]
+		payload := e.runIncrementalWork(ctx, item)
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		if err := emitPatch(payload, len(collector.work) > 0); err != nil {
+			return err
+		}
+	}
+	return ctx.Err()
 }
 
 func (e *Executor) runIncrementalWork(ctx context.Context, item incrementalWork) core.IncrementalPayload {
