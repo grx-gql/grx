@@ -24,6 +24,10 @@ to clients connected to different replicas, use a shared pub/sub backend such
 as Redis. An in-memory backend only reaches clients connected to the same
 process.
 
+Sticky sessions can keep a client on one replica, but they do not provide
+cross-replica event delivery. Prefer shared event infrastructure when a
+mutation can run on one replica while the subscriber is connected to another.
+
 Plan for connection draining during deployments. Stop accepting new
 connections, allow active streams to close within a deadline, and make clients
 reconnect with an explicit backoff policy.
@@ -34,6 +38,7 @@ reconnect with an explicit backoff policy.
 - Set WebSocket upgrade and idle timeout policy in the load balancer.
 - Use `CheckOrigin` for browser WebSocket connections.
 - Use shared pub/sub for cross-replica fan-out.
+- Decide whether sticky sessions are needed for your proxy and client model.
 - Expose readiness separately from liveness.
 - Add request IDs, metrics, and tracing before increasing replica count.
 - Test rolling deployments with active subscriptions.

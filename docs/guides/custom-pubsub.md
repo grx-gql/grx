@@ -14,6 +14,20 @@ Start with the `pubsub.PubSub` interface in the
 [API reference](/reference/pubsub/). Then define delivery, cancellation,
 buffering, and failure behavior for your backend.
 
+The interface is:
+
+```go
+type PubSub interface {
+	Publish(ctx context.Context, topic string, payload []byte) error
+	Subscribe(ctx context.Context, topic string) (<-chan Message, error)
+	Close() error
+}
+```
+
+`Message.Payload` is opaque to the backend. The publisher must not mutate or
+reuse the payload after `Publish` returns. A subscriber that needs to retain
+or modify bytes must copy them.
+
 ## Choose the delivery model first
 
 - An in-memory backend is process-local and best effort.
