@@ -78,6 +78,9 @@ func fragmentTypeMatches(o *schema.Object, condition string) bool {
 }
 
 func (e *Executor) flattenSelections(collectDefers bool, object *schema.Object, selections []selection, fragments map[string]*fragmentDef) ([]selection, []pendingDefer, []core.Error) {
+	if simpleSelections(selections) {
+		return selections, nil, nil
+	}
 	var out []selection
 	var defers []pendingDefer
 	var errs []core.Error
@@ -132,6 +135,24 @@ func (e *Executor) flattenSelections(collectDefers bool, object *schema.Object, 
 		}
 	}
 	return out, defers, errs
+}
+
+// simpleSelections reports whether a selection set can be reused read-only
+// without expanding fragments, evaluating directives, or merging response keys.
+func simpleSelections(selections []selection) bool {
+	for index := range selections {
+		selected := &selections[index]
+		if !selected.isField() || len(selected.Directives) != 0 {
+			return false
+		}
+		key := selected.responseKey()
+		for previous := 0; previous < index; previous++ {
+			if selections[previous].responseKey() == key {
+				return false
+			}
+		}
+	}
+	return true
 }
 
 // deferDirective reports whether a selection carries an active @defer directive
@@ -218,5 +239,8 @@ func appendMergedSelection(values []selection, next selection) []selection {
 		values[index].Selections = append(values[index].Selections, next.Selections...)
 		return values
 	}
+	// The first merge must allocate its own child storage instead of writing
+	// into a shared document. Later merges can reuse that owned capacity.
+	next.Selections = next.Selections[:len(next.Selections):len(next.Selections)]
 	return append(values, next)
 }
