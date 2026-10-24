@@ -10,6 +10,15 @@ Published versions use section titles that match
 headings such as **`### ✨ Added`**, **`### 🐛 Fixed`**, **`### 📚 Documentation`**, … —
 see **`release-please-config.json`**). This file **`CHANGELOG.md`** is the changelog; browse it **[on GitHub](https://github.com/grx-gql/grx/blob/main/CHANGELOG.md)** (the docs site no longer duplicates it).
 
+## [0.8.1](https://github.com/grx-gql/grx/compare/v0.8.0...v0.8.1) (2026-10-24)
+
+
+### 🧹 Chores
+
+* **deps-dev:** bump vue from 3.5.43 to 3.5.44 in /docs ([#89](https://github.com/grx-gql/grx/issues/89)) ([9b1eebd](https://github.com/grx-gql/grx/commit/9b1eebd8fd1f2034f55acf49579665dc4e5914af))
+* **deps:** bump github.com/alicebob/miniredis/v2 in /pubsub/redis ([#88](https://github.com/grx-gql/grx/issues/88)) ([6c72739](https://github.com/grx-gql/grx/commit/6c727399f626e1ce72ef40133a1fac0589dec4d1))
+* **deps:** bump github.com/go-chi/chi/v5 in /integration/cors ([#87](https://github.com/grx-gql/grx/issues/87)) ([8be9713](https://github.com/grx-gql/grx/commit/8be97138e70c0e6dde5702605b6e94fafb1b620e))
+
 ## [0.8.0](https://github.com/grx-gql/grx/compare/v0.7.1...v0.8.0) (2026-10-11)
 
 
