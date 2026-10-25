@@ -5,6 +5,7 @@ import (
 	"math"
 	nethttp "net/http"
 	"net/http/httptest"
+	"reflect"
 	"testing"
 
 	"github.com/grx-gql/grx/core"
@@ -39,13 +40,14 @@ func TestOrdinaryResponseEncodingCompatibility(t *testing.T) {
 		{"unsupported", core.Response{Data: func() {}}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			expected, err := json.Marshal(tc.response)
+			expected, err := tc.response.MarshalJSON()
 			recorder := httptest.NewRecorder()
 			request := httptest.NewRequest(nethttp.MethodGet, "/graphql", nil)
 			transport.writeGraphQLPayload(recorder, request, nethttp.StatusCreated, core.MediaTypeJSON, tc.response)
 			if err != nil {
-				if recorder.Code != nethttp.StatusInternalServerError || recorder.Body.String() != err.Error()+"\n" {
-					t.Fatalf("status=%d body=%q expected error=%q", recorder.Code, recorder.Body.String(), err.Error())
+				wrapped := &json.MarshalerError{Type: reflect.TypeFor[core.Response](), Err: err}
+				if recorder.Code != nethttp.StatusInternalServerError || recorder.Body.String() != wrapped.Error()+"\n" {
+					t.Fatalf("status=%d body=%q expected error=%q", recorder.Code, recorder.Body.String(), wrapped.Error())
 				}
 				if recorder.Header().Get("Content-Type") != "text/plain; charset=utf-8" || recorder.Header().Get("X-Content-Type-Options") != "nosniff" {
 					t.Fatalf("error headers=%v", recorder.Header())
