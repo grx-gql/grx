@@ -112,9 +112,8 @@ func WriteJSON(w http.ResponseWriter, status int, value any) {
 // case-insensitive, comma-separated token. Useful for parsing request
 // headers like Connection or Accept.
 func HeaderContains(values []string, needle string) bool {
-	needle = strings.ToLower(needle)
 	for _, raw := range values {
-		for _, part := range strings.Split(raw, ",") {
+		for part := range strings.SplitSeq(raw, ",") {
 			if strings.EqualFold(strings.TrimSpace(part), needle) {
 				return true
 			}

@@ -775,28 +775,3 @@ func typeString(t schema.Type) string {
 	return t.Name()
 }
 
-func objectTypeForSelection(t schema.Type) *schema.Object {
-	switch x := innerNamedType(t).(type) {
-	case *schema.Object:
-		return x
-	case *schema.Interface:
-		// Use interface fields for validation when concrete type unknown.
-		return &schema.Object{TypeName: x.Name(), Fields: x.Fields}
-	default:
-		return nil
-	}
-}
-
-func objectTypeForFieldType(s *schema.Schema, t schema.Type) *schema.Object {
-	named := innerNamedType(t)
-	switch x := named.(type) {
-	case *schema.Object:
-		return x
-	case *schema.Interface:
-		return &schema.Object{TypeName: x.Name(), Fields: x.Fields}
-	case *schema.Union:
-		return nil
-	default:
-		return nil
-	}
-}

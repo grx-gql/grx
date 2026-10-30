@@ -367,7 +367,7 @@ func (e *Executor) parseBundle(req core.Request) (documentBundle, error) {
 		return parseDocumentBundleWithLexer(e, req.Query, req.Variables, e.maxSelectionDepth)
 	}
 	normQuery := normalizeSource(req.Query)
-	key := fmt.Sprintf("%d:%s", e.maxSelectionDepth, normQuery)
+	key := strconv.Itoa(e.maxSelectionDepth) + ":" + normQuery
 	e.documentCacheMu.RLock()
 	if cached, ok := e.documentCache[key]; ok {
 		e.documentCacheMu.RUnlock()
@@ -600,11 +600,17 @@ func sourceIdentity(source any) (string, bool) {
 		if v.IsNil() {
 			return "nil", true
 		}
-		return fmt.Sprintf("%s@%x", v.Type(), v.Pointer()), true
-	case reflect.String, reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
-		reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64,
-		reflect.Float32, reflect.Float64, reflect.Bool:
-		return fmt.Sprintf("%s:%v", v.Type(), source), true
+		return v.Type().String() + "@" + strconv.FormatUint(uint64(v.Pointer()), 16), true
+	case reflect.String:
+		return v.Type().String() + ":" + v.String(), true
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		return v.Type().String() + ":" + strconv.FormatInt(v.Int(), 10), true
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+		return v.Type().String() + ":" + strconv.FormatUint(v.Uint(), 10), true
+	case reflect.Float32, reflect.Float64:
+		return v.Type().String() + ":" + strconv.FormatFloat(v.Float(), 'g', -1, 64), true
+	case reflect.Bool:
+		return v.Type().String() + ":" + strconv.FormatBool(v.Bool()), true
 	default:
 		// Structs and other non-addressable values have no stable identity for
 		// memoization; skip caching to stay correct.
