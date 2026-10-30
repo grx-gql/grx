@@ -53,6 +53,7 @@ func operationKindFromTokens(source string, tokens []token, operationName string
 			return "", newParseError(source, current.offset, "unexpected token %q at top of operation", current.value)
 		}
 		foundOperations++
+		anonymousKind = kind
 		index++
 
 		name := ""
