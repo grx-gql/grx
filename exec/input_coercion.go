@@ -109,10 +109,6 @@ func coerceInputValueUsing(inputType schema.Type, raw any, scalarCoercer scalarI
 	}
 }
 
-func coerceInputObject(inputType *schema.InputObject, raw any) (any, error) {
-	return coerceInputObjectUsing(inputType, raw, coerceBuiltinScalarInput)
-}
-
 func coerceInputObjectUsing(inputType *schema.InputObject, raw any, scalarCoercer scalarInputCoercer) (any, error) {
 	if raw == nil {
 		return nil, nil

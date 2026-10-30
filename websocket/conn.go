@@ -319,8 +319,8 @@ func (c *Conn) ReadMessage() (opcode byte, payload []byte, err error) {
 			return 0, nil, errors.New("websocket frame exceeds addressable memory")
 		}
 
-		mask := make([]byte, 4)
-		if _, err := io.ReadFull(c.reader, mask); err != nil {
+		var mask [4]byte
+		if _, err := io.ReadFull(c.reader, mask[:]); err != nil {
 			return 0, nil, err
 		}
 		framePayload := make([]byte, length)
@@ -330,7 +330,7 @@ func (c *Conn) ReadMessage() (opcode byte, payload []byte, err error) {
 			}
 		}
 		for i := range framePayload {
-			framePayload[i] ^= mask[i%4]
+			framePayload[i] ^= mask[i&3]
 		}
 
 		switch op {
