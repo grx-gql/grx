@@ -3,7 +3,7 @@ import { baseOptions } from '@/lib/layout.shared';
 
 export default function Layout({ children }: LayoutProps<'/'>) {
   return (
-    <HomeLayout {...baseOptions({ centerLinks: true })} searchToggle={{ enabled: false }}>
+    <HomeLayout {...baseOptions({ linksBeforeTheme: true })} searchToggle={{ enabled: false }}>
       {children}
     </HomeLayout>
   );

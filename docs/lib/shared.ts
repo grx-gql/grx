@@ -18,6 +18,11 @@ export const gitConfig = {
 
 export const githubUrl = `https://github.com/${gitConfig.user}/${gitConfig.repo}`;
 
+export const headerLinks = [
+  { text: 'Docs', url: '/getting-started/' },
+  { text: 'API reference', url: '/reference/' },
+] as const;
+
 const getContentUrl = createGetUrl(docsContentRoute);
 
 export function getPageMarkdownUrl(page: { slugs: string[]; locale?: string }) {
