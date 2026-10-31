@@ -1,0 +1,32 @@
+---
+title: Application architecture
+description: Keep data access and business rules separate from GraphQL resolvers.
+---
+
+Resolvers are the boundary between GraphQL and your application. Keep them
+small. Parse GraphQL arguments, call an application service, and map the
+result to the GraphQL response.
+
+## Keep business logic below resolvers
+
+Put database access, transactions, authorization policy, caching, queues, and
+background jobs in application services. This keeps the same business rules
+usable from HTTP handlers, jobs, and tests.
+
+## Watch for N+1 work
+
+Nested fields can call a repository once per parent object. Use request-scoped
+batching or repository methods that fetch related records together. Keep the
+batch lifecycle scoped to the request so values do not leak between users.
+
+## Choose the right boundary
+
+- Resolvers translate GraphQL input and output.
+- Services own business decisions and transactions.
+- Repositories own database queries.
+- Queues own work that should outlive the request.
+- Caches own reusable data with explicit expiry and invalidation rules.
+
+See [Resolver batching and N+1](/guides/resolver-batching),
+[Authentication and authorization](/guides/auth), and
+[Runtime boundaries](/concepts/runtime-boundaries) next.

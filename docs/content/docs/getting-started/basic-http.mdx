@@ -1,0 +1,66 @@
+---
+title: Basic net/http integration
+description: Run a grx handler on a standalone net/http listener.
+---
+
+Use this integration when GraphQL has its own listener or when a reverse proxy
+will route a dedicated public path to it. The schema is covered in
+[Run your first server](/getting-started/). This page only shows the HTTP
+integration.
+
+## Create the handler
+
+```go
+func newHandler() (http.Handler, error) {
+	server, err := grx.NewServer(
+	grx.WithSchema(graph.Schema()),
+	grx.WithPlaygroundPath("/"),
+	)
+	if err != nil {
+		return nil, err
+	}
+	return server, nil
+}
+```
+
+`grx.NewServer` returns an `http.Handler`. The default HTTP transport handles
+GraphQL JSON requests on `/graphql`.
+
+## Serve it
+
+```go
+server, err := newHandler()
+if err != nil {
+	log.Fatal(err)
+}
+log.Fatal(http.ListenAndServe(":4000", server))
+```
+
+Run the complete example with:
+
+```bash
+go run ./examples/basic
+```
+
+## Add host middleware
+
+Wrap the handler when you need CORS, authentication, request IDs, tracing, or
+other host-level policy. See [CORS and browsers](/guides/cors-browsers) and
+[HTTP middleware](/guides/middleware).
+
+## Other routers
+
+- [ServeMux](/getting-started/servemux)
+- [Chi](/getting-started/chi)
+- [Gin](/getting-started/gin)
+- [Echo](/getting-started/echo)
+- [Fiber](/getting-started/fiber)
+
+All integrations mount the same `http.Handler`. They do not change how the
+GraphQL schema or resolver methods work.
+
+## Related concepts
+
+- [HTTP, WebSocket, and SSE](/concepts/transports)
+- [Runtime boundaries](/concepts/runtime-boundaries)
+- [API reference for grx](/reference/grx/)

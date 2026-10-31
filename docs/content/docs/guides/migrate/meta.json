@@ -1,0 +1,4 @@
+{
+  "title": "Migrate to grx",
+  "pages": ["index", "from-graphql-go", "from-graph-gophers"]
+}
