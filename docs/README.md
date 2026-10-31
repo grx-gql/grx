@@ -1,109 +1,88 @@
 # grx documentation site
 
 This directory is the source for the [grx documentation site](https://grx-gql.github.io/grx/).
-It is built with [VitePress](https://vitepress.dev/).
+It is built with [Fumadocs](https://fumadocs.dev/) on Next.js and exported as
+static HTML for GitHub Pages.
 
 ## Local development
 
-Commands are exposed through the repo root `Makefile` so you do not need to
-remember tool-specific flags.
+Commands are exposed through the repo root `Makefile`:
 
 ```bash
-make docs-install   # bun install in docs/
-make docs-dev       # dev server with HMR at http://localhost:4321/grx/
-make docs-build     # production build → docs/.vitepress/dist
-make docs-preview   # serve the built site locally
-make docs-clean     # remove .vitepress/dist, .vitepress/cache, node_modules/
+make docs-install    # bun install in docs/
+make docs-dev        # dev server with hot reload at http://localhost:4321/grx/
+make docs-build      # static export → docs/out
+make docs-linkcheck  # verify internal links and #anchors in docs/out
+make docs-preview    # serve docs/out at http://localhost:4321/grx/
+make docs-clean      # remove out/, .next/, .source/, node_modules/
 ```
 
-You can also run the Bun scripts directly from this directory:
-
-```bash
-bun install
-bun run dev
-bun run build
-bun run preview
-```
+Or run the Bun scripts from this directory: `bun install`, `bun run dev`,
+`bun run build`, `bun run preview`.
 
 ## Layout
 
-The sidebar is grouped for readers: **Start here**, **Concepts**, **Integrations**, **Guides**, **Examples**, **API reference**, and **Under the hood**.
-
 ```
 docs/
-├── .vitepress/
-│   ├── config.ts           # site + sidebar + theme options
-│   └── theme/
-│       ├── index.ts        # extends the default theme
-│       └── custom.css      # accent + home layout tweaks
-├── package.json            # bun deps + scripts
-├── public/                 # static assets (favicon, hero image, …)
-├── index.md                # landing (layout: home)
-├── getting-started/          # first server and router integrations
-├── concepts/               # learn + internals topics
-├── guides/                 # how-to walkthroughs
-├── reference/              # API reference (hand-maintained + mirrored)
-├── benchmarks.md
-└── README.md               # this file
+├── app/
+│   ├── (home)/page.tsx       # landing page
+│   ├── (docs)/[...slug]/     # every docs page, mounted at the site root
+│   ├── api/search/           # static search index (Orama)
+│   ├── og/                   # generated Open Graph images
+│   ├── llms.txt, llms-full.txt, llms.mdx/  # Markdown for LLMs / "Copy Markdown"
+│   └── sitemap.ts
+├── components/
+│   ├── home/                 # landing page widgets
+│   ├── mdx.tsx               # MDX component map
+│   └── search.tsx
+├── content/docs/             # all pages (MDX); URLs mirror this tree
+│   ├── meta.json             # sidebar order and section separators
+│   ├── getting-started/  concepts/  guides/  examples/  reference/
+│   └── benchmarks.mdx
+├── lib/
+│   ├── source.ts             # Fumadocs content source
+│   ├── layout.shared.tsx     # nav, logo, links
+│   └── shared.ts             # site URL, base path, GitHub info
+├── public/                   # static assets copied as-is
+└── next.config.mjs           # basePath /grx, static export
 ```
 
-## Auto-generated content
+## Writing pages
 
-There are currently no generated content pages. **`CHANGELOG.md`** is not
-copied into **`docs/`**; the sidebar links to **[`CHANGELOG.md` on GitHub](https://github.com/grx-gql/grx/blob/main/CHANGELOG.md)**.
+Pages are MDX with `title` and `description` frontmatter. Fumadocs renders the
+title, so do not repeat it as a `#` heading.
+
+- **Sidebar:** `content/docs/meta.json` lists pages in order. `---Label---`
+  entries are section separators; pages from any folder can be listed, so the
+  sidebar grouping is independent of URLs. Add a new page there or it will not
+  appear in the sidebar.
+- **Callouts:** `<Callout type="info" title="Optional title">…</Callout>`
+  (`type` is `info`, `warn`, or `error`).
+- **Embedding repo files:** `<include cwd>../examples/subscriptions/main.go</include>`
+  renders the file as a code block (paths are relative to `docs/`).
+- **Custom heading ids:** `## Heading [#custom-id]`.
+- **Links:** use absolute paths without the base path, e.g. `/guides/auth`.
+- **API reference** pages under `reference/` are plain Markdown generated
+  by gomarkdoc; anchors use `[#Symbol]` heading ids.
 
 ## Deployment
 
-`.github/workflows/docs.yml` builds and publishes the site to GitHub Pages on
-every push to `main`. Pull requests run the same pipeline up to (but not
-including) the deploy so broken builds are caught at review time.
+`.github/workflows/docs.yml` builds the site on pull requests and deploys it to
+GitHub Pages on every push to `main`:
 
-### Pipeline
+1. Checks out the repo with full history (page "last updated" dates come from git).
+2. Sets up Node and Bun.
+3. `bun install --frozen-lockfile` in `docs/`.
+4. `make docs-content` runs the derived-content step.
+5. `bun run build` → `docs/out`.
+6. Verifies the export and runs `make docs-linkcheck`.
+7. Uploads `docs/out` as a Pages artifact and deploys it (skipped on PRs).
 
-1. Checks out the repo with full history (VitePress `lastUpdated` reads git).
-2. Sets up Node and Bun (pinned in the workflow).
-3. `bun install --frozen-lockfile` in `docs/` (uses `docs/bun.lock`).
-4. `make docs-content` runs the repository's derived-content step.
-5. `bun run build` → `docs/.vitepress/dist`.
-6. Verifies `docs/.vitepress/dist/index.html` exists before uploading.
-7. Uploads `docs/.vitepress/dist` as a Pages artifact (skipped on PRs).
-8. The deploy job uses `actions/deploy-pages@v4` with the `github-pages`
-   environment (skipped on PRs).
+The site is served from `/grx/`, configured by `basePath` in
+`next.config.mjs` and `basePath` in `lib/shared.ts`; keep the two in sync.
+`trailingSlash: true` exports `page/index.html`, so both `/page` and `/page/`
+resolve on GitHub Pages and old URLs keep working.
 
 ### One-time GitHub setup
 
-The workflow cannot enable Pages on its own. Do this once in the repository
-settings:
-
-1. Open **Settings → Pages** for `grx-gql/grx`.
-2. Under **Build and deployment**, set **Source** to **GitHub Actions**.
-3. (Optional) Add a custom domain via **Pages** settings and DNS.
-
-Once Pages is enabled, every push to `main` that touches a doc-relevant path
-will publish to **https://grx-gql.github.io/grx/**. Manual runs are also
-available via **Actions → Docs → Run workflow**.
-
-### Path filter
-
-The workflow runs when one of these paths changes:
-
-- `docs/**`
-- `README.md`
-- `Makefile`
-- `.github/workflows/docs.yml`
-- `**/*.go` (so doc-comment changes are picked up for future API reference tooling)
-
-Use **Run workflow** for manual deploys outside that filter.
-
-> **Note:** changes to **`CHANGELOG.md`** alone do **not** trigger a docs redeploy anymore; releases are surfaced on **[GitHub Releases](https://github.com/grx-gql/grx/releases)**.
-
-## Frontmatter cleanup
-
-If you paste Markdown that still uses old Starlight-style frontmatter, run:
-
-```bash
-python3 scripts/normalize-vitepress-frontmatter.py
-```
-
-That script keeps `title`, `description`, heading outline levels, and
-`lastUpdated: false` for generated API pages.
+In **Settings → Pages** for `grx-gql/grx`, set **Source** to **GitHub Actions**.

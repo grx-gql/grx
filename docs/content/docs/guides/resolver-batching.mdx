@@ -1,0 +1,36 @@
+---
+title: Resolver batching & N+1
+description: Batch resolver lookups to reduce datastore round-trips.
+---
+
+GraphQL invokes resolvers independently. A query like **`users { posts { title } }`** can become **one query for users** and **one per user for posts** if each **`posts`** field resolver hits the database alone.
+
+## What grx provides today
+
+For an `exec.Executor`, register lookup adapters with `loader.New` and
+`exec.WithLoaders`. Runtime field resolvers return `loader.Load` pending values;
+the executor groups ready sibling lookups, including fields across list items,
+and dispatches bounded batches before completing the response. See the
+executable `ExampleWithLoaders` example and the API comments for setup and
+cache lifetime rules. Code-first methods keep their declared return types; the
+example replaces the compiled field's runtime resolver to return a pending value.
+
+Batching is opt-in and adds scheduling overhead. Use it for datastore lookups
+where reducing round-trips outweighs that cost. Applications can also:
+
+- Implement **repository batch APIs** scoped to each request.
+- Prefer **`IN`/`JOIN`** preloads where query shapes repeat.
+- **Instrument** resolver timing + DB statements (`plugin` hooks **or** APM wrappers).
+
+<Callout type="info" title="Separate concern from selection limits">
+
+
+**Document-shape caps** stop pathological parses but **do not** consolidate SQL - combine with this guide’s data-access strategies.
+
+
+</Callout>
+
+## See also
+
+- **[Graph fundamentals (incl. N+1)](/guides/graphql-backend-essentials)**
+- **[Query & document limits](/guides/query-limits)**

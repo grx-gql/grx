@@ -1,0 +1,156 @@
+---
+title: Custom scalars
+description: Register Parse and Serialize closures on schema.Config.Scalars, including DateTime values and the multipart Upload scalar for file uploads.
+---
+
+Use a custom scalar when a value has domain-specific parsing or serialization,
+such as a timestamp, money value, or upload handle. Keep validation at the
+scalar boundary and keep business rules in application services.
+
+Anything beyond **`String`**, **`Int`**, **`Float`**, **`Boolean`**, **`ID`** is a **custom scalar**: you choose the Go backing type (`struct`, `string`, `time.Time` wrapper…) and expose **`schema.ScalarConfig{ Name, Parse, Serialize, SpecifiedByURL }`**.
+
+Parsing happens when variables or literal arguments coerce into resolver structs; serialization runs when emitting response JSON.
+
+Runnable references:
+
+| Example | Highlights |
+| --- | --- |
+| **`examples/scalars`** | **`DateTime` scalar**, **`SpecifiedByURL`**, structs returned from resolving root fields (`NextEvent`). |
+| **`examples/file-upload`** | Built-in multipart **`Upload`** scalar wiring (**[File uploads](#file-uploads)**). |
+
+Core pattern (trimmed):
+
+```go
+package graph
+
+import (
+	"time"
+
+	"github.com/grx-gql/grx/schema"
+)
+
+// DateTime is a tiny example carrier  -  see examples/scalars for a full implementation.
+type DateTime struct{ Time time.Time }
+
+var _ = []schema.ScalarConfig{{
+	Type:           DateTime{},
+	Name:           "DateTime",
+	SpecifiedByURL: "https://www.rfc-editor.org/rfc/rfc3339",
+	Parse:          func(input any) (any, error) { /* coerce GraphQL literals / variables */ return nil, nil },
+	Serialize:      func(value any) (any, error) { /* coerce Go → JSON wire shape */ return nil, nil },
+}}
+```
+
+Expose scalars sparingly - they become part of client contracts and tooling must understand coercions. Pair with schema validation tests when changing Parse behaviour.
+
+<Callout type="info" title="Enumerations">
+
+**`examples/enums`** shows tagging strings as enums and binding Go constants - different mechanism than **`Scalars`**, but complementary when modelling closed sets.
+
+</Callout>
+
+## File uploads: the `Upload` scalar [#file-uploads]
+
+Use this when clients must send files with a GraphQL mutation. The HTTP
+transport decodes the multipart request, while your schema registers the
+`Upload` scalar and your resolver decides where to store the file.
+
+grx accepts file uploads via the [**GraphQL multipart request specification**](https://github.com/jaydenseric/graphql-multipart-request-spec):
+
+- **`Content-Type: multipart/form-data`** on `POST`.
+- Form fields **`operations`** (JSON: query + variables with null placeholders where files attach) and **`map`** (JSON: path → multipart part keys).
+- One file field per **`map`** entry; the **`http`** transport injects **[`core.Upload`](https://pkg.go.dev/github.com/grx-gql/grx/core#Upload)** into **`variables`** before execution.
+
+Scalars are explicit: declare an **`Upload`** scalar on **`schema.Config.Scalars`** (see runnable **`examples/file-upload/`**).
+
+### Register the `Upload` scalar
+
+```go
+package graph
+
+import (
+	"fmt"
+
+	"github.com/grx-gql/grx/core"
+	"github.com/grx-gql/grx/schema"
+)
+
+// Omit Query/Mutation declarations here  -  declare them beside your resolver structs.
+//
+//	appgraph.Config{
+//
+//	Query: Query{}, Mutation: Mutation{},
+//	Scalars: []schema.ScalarConfig{ ...
+var UploadScalarSnippet = schema.ScalarConfig{
+	Type: core.Upload{},
+	Name: "Upload",
+	Parse: func(input any) (any, error) {
+		switch u := input.(type) {
+		case *core.Upload:
+			return *u, nil
+		case core.Upload:
+			return u, nil
+		default:
+			return nil, fmt.Errorf("Upload must be a multipart file, got %T", input)
+		}
+	},
+	Serialize: func(value any) (any, error) {
+		u, ok := value.(core.Upload)
+		if !ok {
+			return nil, fmt.Errorf("expected Upload, got %T", value)
+		}
+		return u.Filename, nil
+	},
+}
+```
+
+Resolver arguments still use structs with **`core.Upload`** (or pointer) **`gql` tags**:
+
+```go
+package graph
+
+import (
+	"context"
+
+	"github.com/grx-gql/grx/core"
+)
+
+type UploadArgs struct {
+	File core.Upload `gql:"file,nonNull"`
+}
+
+func (Mutation) UploadFile(ctx context.Context, args UploadArgs) (*Payload, error) {
+	f, err := args.File.Open()
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+	// stream or copy  -  args.File holds Filename, MIME, etc.
+
+	return nil, nil // return your payload
+}
+```
+
+### Curl shape
+
+Mirror the multipart contract (see **`examples/file-upload/graph/schema.go`** comments):
+
+```bash
+curl http://localhost:4005/graphql \
+  -F 'operations={"query":"mutation($f: Upload!){ uploadFile(file: $f){ filename } }","variables":{"f":null}}' \
+  -F 'map={"0":["variables.f"]}' \
+  -F 0=@hello.txt
+```
+
+Lists of uploads use **`[Upload!]`** with matching **`variables`** placeholders set to `null`; **`map`** keys point at each file path.
+
+### Operational notes
+
+- Size limits belong at **reverse proxy**, **`MaxHTTPRequestBytes`**, **or middleware** scanning **`Content-Length`** before parsing - multipart bodies can dominate memory if unbounded (**[Limits](/guides/request-limits)**).
+- Do **stream** **`Upload.Open()`** outputs to storage rather than blindly **`ReadAll`** for large uploads.
+
+## Related
+
+- [`schema.Config.Scalars`](https://pkg.go.dev/github.com/grx-gql/grx/schema#Config)
+- **[Define your schema](/concepts/schema-basics)** (`gql` tags + structs)
+- **`examples/file-upload/`** (`go run ./examples/file-upload`) and **[`core.Upload`](https://pkg.go.dev/github.com/grx-gql/grx/core#Upload)**
