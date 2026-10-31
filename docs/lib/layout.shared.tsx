@@ -1,5 +1,5 @@
 import type { BaseLayoutProps } from 'fumadocs-ui/layouts/shared';
-import { BookOpen, FlaskConical, Gauge, MessagesSquare } from 'lucide-react';
+import { BookOpen, FlaskConical, Gauge, Library, MessagesSquare } from 'lucide-react';
 import { GrxMark } from '@/components/grx-mark';
 import { githubUrl } from './shared';
 
@@ -25,6 +25,12 @@ export function baseOptions(): BaseLayoutProps {
         url: '/getting-started/',
         icon: <BookOpen />,
         active: 'none',
+      },
+      {
+        text: 'API reference',
+        url: '/reference/',
+        icon: <Library />,
+        active: 'nested-url',
       },
       {
         text: 'Examples',

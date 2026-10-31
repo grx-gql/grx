@@ -1,15 +1,14 @@
 ---
-title: Deployment
-description: Ship a grx GraphQL server in containers, behind reverse proxies, on Kubernetes, or managed platforms - plus graceful shutdown and health checks.
+title: Deployment and scaling
+description: Ship and scale a grx GraphQL server - replicas with HTTP, WebSocket and SSE, shared pub/sub, containers, reverse proxies, Kubernetes, managed platforms, graceful shutdown and health checks.
 ---
 
 **`grx.Server`** is a plain [`http.Handler`](https://pkg.go.dev/net/http#Handler). Anything that runs a Go **`net/http`** service applies here: build a static binary (typical), listen on **`0.0.0.0`** in containers, terminate TLS at the edge, and front it with a reverse proxy when you need rate limits, WebSocket upgrades, or multi-service routing.
 
-For a service with only queries and mutations, replicas can usually be
-stateless. Subscriptions add long-lived connections and require a clear plan
-for connection draining and event fan-out. See [Deployment and scaling](/guides/deployment-and-scaling)
-for the decision model, then use this page for concrete container, proxy, and
-shutdown configuration.
+grx can run behind the HTTP infrastructure you already use. The deployment
+model changes when subscriptions keep long-lived WebSocket or SSE connections
+open, so start with the scaling model below, then use the rest of this page
+for concrete container, proxy, and shutdown configuration.
 
 <Callout type="info" title="Production checklist">
 
@@ -18,6 +17,32 @@ Before traffic hits the Internet: **[Security](/guides/production-security)** ·
 
 
 </Callout>
+
+---
+
+## Scaling model [#scaling]
+
+### HTTP-only services
+
+HTTP queries and mutations are stateless when application state lives in your
+database or other shared services. Run multiple replicas behind a load
+balancer, terminate TLS at the proxy, and expose health and readiness checks
+from the host application.
+
+### Services with subscriptions
+
+Each replica owns its connected WebSocket and SSE clients. To publish an event
+to clients connected to different replicas, use a shared pub/sub backend such
+as Redis. An in-memory backend only reaches clients connected to the same
+process.
+
+Sticky sessions can keep a client on one replica, but they do not provide
+cross-replica event delivery. Prefer shared event infrastructure when a
+mutation can run on one replica while the subscriber is connected to another.
+
+Plan for connection draining during deployments. Stop accepting new
+connections, allow active streams to close within a deadline, and make clients
+reconnect with an explicit backoff policy.
 
 ---
 
@@ -329,8 +354,20 @@ When in doubt, choose a **container** or **VM** profile if **WebSocket** or **ho
 
 ---
 
+## Infrastructure checklist
+
+- Set TLS, proxy, and request timeout policy outside grx.
+- Set WebSocket upgrade and idle timeout policy in the load balancer.
+- Use `CheckOrigin` for browser WebSocket connections.
+- Use shared pub/sub for cross-replica fan-out.
+- Decide whether sticky sessions are needed for your proxy and client model.
+- Expose readiness separately from liveness.
+- Add request IDs, metrics, and tracing before increasing replica count.
+- Test rolling deployments with active subscriptions.
+
 ## See also
 
 - **[Transports](/concepts/transports)**  -  how HTTP, WebSocket, and SSE mount on **`http.Handler`**
 - **[Subscriptions](/guides/subscriptions)**  -  paths, `CheckOrigin`, **`OnConnect`**
+- **[Runtime boundaries](/concepts/runtime-boundaries)** and **[Custom pub/sub](/guides/custom-pubsub)**  -  the ownership model behind these choices
 - **[Production hardening hub](/concepts/graphql-security-production)**  -  links to security, introspection, limits

@@ -52,7 +52,7 @@ Common workflow labels:
 
 Either way the **runtime artifact** at execute time is the same pairing: validated schema graph + resolver functions.
 
-**In grx:** schemas are authored from **exported Go structs and methods**, with **`gql` struct tags** for wire naming and optionality - not a handwritten SDL drift problem. Concepts: [**Define your schema**](/concepts/schema-basics) · [**Organize your code**](/concepts/schema-mapping). Clients still see a normal GraphQL API (including **[introspection](#what-is-introspection-and-should-it-stay-on-in-production)** when enabled).
+**In grx:** schemas are authored from **exported Go structs and methods**, with **`gql` struct tags** for wire naming and optionality - not a handwritten SDL drift problem. Concepts: [**Define your schema**](/concepts/schema-basics). Clients still see a normal GraphQL API (including **[introspection](#what-is-introspection-and-should-it-stay-on-in-production)** when enabled).
 
 ---
 
@@ -175,9 +175,8 @@ Start monolithic until **team boundaries force** otherwise.
 | What ships in the box | [**What grx is**](/concepts/what-is-grx) |
 | Run Hello World + routers | [**Get started**](/getting-started/) |
 | Structs ↔ GraphQL modeling | [**Define your schema**](/concepts/schema-basics) |
-| Multipart file mutations | [**File uploads**](/guides/file-upload) |
+| Multipart file mutations | [**File uploads**](/guides/custom-scalars#file-uploads) |
 | Persisted / trusted ops | [**Persisted queries (APQ)**](/guides/persisted-queries) |
-| Multi-module layout | [**Organize your code**](/concepts/schema-mapping) |
 | CRUD-ish API wiring | [**Queries and mutations**](/guides/query-mutation-server) |
 | Realtime streams | [**Subscriptions**](/guides/subscriptions) |
 | Middleware + guards | [**Authentication & authorization**](/guides/auth) |
