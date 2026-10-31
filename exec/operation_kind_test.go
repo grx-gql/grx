@@ -19,6 +19,10 @@ func TestOperationKindAndSecurityBranches(t *testing.T) {
 		{`{ ok }`, "", core.OperationQuery},
 		{`query Q { ok } mutation M { ok }`, "M", core.OperationMutation},
 		{`subscription S { ok } fragment F on Query { ok }`, "S", core.OperationSubscription},
+		{`subscription MySub { evt }`, "", core.OperationSubscription},
+		{`mutation MyMut { ok }`, "", core.OperationMutation},
+		{`query MyQuery { ok }`, "", core.OperationQuery},
+		{`fragment F on Query { ok } subscription MySub { evt }`, "", core.OperationSubscription},
 	}
 	for _, tc := range cases {
 		got, err := parseOperationKind(tc.query, tc.name)

@@ -10,6 +10,28 @@ Published versions use section titles that match
 headings such as **`### ✨ Added`**, **`### 🐛 Fixed`**, **`### 📚 Documentation`**, … —
 see **`release-please-config.json`**). This file **`CHANGELOG.md`** is the changelog; browse it **[on GitHub](https://github.com/grx-gql/grx/blob/main/CHANGELOG.md)** (the docs site no longer duplicates it).
 
+## [0.8.2](https://github.com/grx-gql/grx/compare/v0.8.1...v0.8.2) (2026-10-30)
+
+
+### 🐛 Fixed
+
+* **exec:** detect operation kind for single named op without operationName ([#92](https://github.com/grx-gql/grx/issues/92)) ([418838f](https://github.com/grx-gql/grx/commit/418838fc67a3b45d58b1a6e8083597ade007d35a))
+* **websocket:** propagate request context values to OnConnect ([#94](https://github.com/grx-gql/grx/issues/94)) ([69e94d6](https://github.com/grx-gql/grx/commit/69e94d6b3b755c57e7c906d76a7884e137903f84))
+
+
+### ⚡ Performance
+
+* reduce allocations on executor hot path and clean up dead code ([#93](https://github.com/grx-gql/grx/issues/93)) ([cb5e78c](https://github.com/grx-gql/grx/commit/cb5e78c81d7e21a5775cf15b1d5447d1087befff))
+
+## [0.8.1](https://github.com/grx-gql/grx/compare/v0.8.0...v0.8.1) (2026-10-24)
+
+
+### 🧹 Chores
+
+* **deps-dev:** bump vue from 3.5.43 to 3.5.44 in /docs ([#89](https://github.com/grx-gql/grx/issues/89)) ([9b1eebd](https://github.com/grx-gql/grx/commit/9b1eebd8fd1f2034f55acf49579665dc4e5914af))
+* **deps:** bump github.com/alicebob/miniredis/v2 in /pubsub/redis ([#88](https://github.com/grx-gql/grx/issues/88)) ([6c72739](https://github.com/grx-gql/grx/commit/6c727399f626e1ce72ef40133a1fac0589dec4d1))
+* **deps:** bump github.com/go-chi/chi/v5 in /integration/cors ([#87](https://github.com/grx-gql/grx/issues/87)) ([8be9713](https://github.com/grx-gql/grx/commit/8be97138e70c0e6dde5702605b6e94fafb1b620e))
+
 ## [0.8.0](https://github.com/grx-gql/grx/compare/v0.7.1...v0.8.0) (2026-10-11)
 
 

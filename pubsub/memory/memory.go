@@ -113,10 +113,9 @@ func (m *memoryPubSub) Subscribe(ctx context.Context, topic string) (<-chan pubs
 	m.subs[topic][id] = sub
 	m.mu.Unlock()
 
-	go func() {
-		<-subCtx.Done()
+	context.AfterFunc(subCtx, func() {
 		m.unsubscribe(topic, id, sub)
-	}()
+	})
 
 	return sub.ch, nil
 }

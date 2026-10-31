@@ -10,7 +10,7 @@ go 1.26.0
 replace github.com/grx-gql/grx => ../../
 
 require (
-	github.com/alicebob/miniredis/v2 v2.39.0
+	github.com/alicebob/miniredis/v2 v2.40.0
 	github.com/grx-gql/grx v0.0.0-00010101000000-000000000000
 	github.com/redis/go-redis/v9 v9.23.0
 )

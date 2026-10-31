@@ -347,12 +347,6 @@ func TestValidationHelperBranches(t *testing.T) {
 	if typeString(&schema.NonNull{OfType: stringType}) != "String!" {
 		t.Fatal("type string mismatch")
 	}
-	if objectTypeForSelection(&schema.Object{TypeName: "Obj"}) == nil {
-		t.Fatal("expected object type for field selection")
-	}
-	if objectTypeForFieldType(s, &schema.List{OfType: &schema.NonNull{OfType: &schema.Object{TypeName: "Obj"}}}) == nil {
-		t.Fatal("expected object type through wrappers")
-	}
 }
 
 func TestValidateDocumentErrorBranches(t *testing.T) {

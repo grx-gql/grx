@@ -212,17 +212,17 @@ func (t *WebSocketTransport) Serve(w http.ResponseWriter, r *http.Request, execu
 	}
 	defer t.unregister(conn)
 
-	// The dispatcher derives its own background context for subscription
-	// resolvers so they remain alive for the duration of the WebSocket
-	// session. Net-level disconnect (TCP close, read timeout, etc.) makes
-	// ReadMessage fail and the dispatcher's deferred cleanup cancels every
-	// in-flight subscription.
+	// The dispatcher derives its own context for subscription resolvers so
+	// they remain alive for the duration of the WebSocket session. Net-level
+	// disconnect (TCP close, read timeout, etc.) makes ReadMessage fail and
+	// the dispatcher's deferred cleanup cancels every in-flight subscription.
 	//
-	// We deliberately do not chain to r.Context(): Go's HTTP server may
-	// cancel the request context immediately after the connection is
-	// hijacked, which would falsely terminate every long-lived subscription
-	// before it could deliver its first response.
-	connCtx, cancel := context.WithCancel(context.Background())
+	// We detach from r.Context()'s cancellation (Go's HTTP server may cancel
+	// the request context immediately after the connection is hijacked,
+	// which would falsely terminate every long-lived subscription) but keep
+	// its Values so middleware-propagated data (session, auth, request IDs)
+	// reaches OnConnect and the dispatcher.
+	connCtx, cancel := context.WithCancel(context.WithoutCancel(r.Context()))
 	defer cancel()
 
 	if conn.Subprotocol() != Subprotocol {
