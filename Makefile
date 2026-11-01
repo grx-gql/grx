@@ -69,7 +69,7 @@ install-hooks: ## Point core.hooksPath at .githooks (commit-msg conventional che
 uninstall-hooks: ## Undo install-hooks for this repo (removes core.hooksPath).
 	git config --unset-all core.hooksPath || true
 
-## ---- Docs (VitePress) ----------------------------------------------------
+## ---- Docs (Fumadocs + Next.js) -------------------------------------------
 
 .PHONY: docs-install
 docs-install: ## Install docs site dependencies (uses bun).
@@ -83,11 +83,15 @@ docs-dev: docs-content ## Run the docs dev server with HMR (http://localhost:432
 	cd $(DOCS_DIR) && $(BUN) run dev
 
 .PHONY: docs-build
-docs-build: docs-content ## Build the static docs site into docs/.vitepress/dist.
+docs-build: docs-content ## Build the static docs site into docs/out.
 	cd $(DOCS_DIR) && $(BUN) run build
 
+.PHONY: docs-linkcheck
+docs-linkcheck: ## Check internal links and anchors in docs/out (run after docs-build).
+	cd $(DOCS_DIR) && python3 .linkcheck.py
+
 .PHONY: docs-preview
-docs-preview: ## Preview the built site (run after docs-build).
+docs-preview: ## Preview the built site at http://localhost:4321/grx/ (run after docs-build).
 	cd $(DOCS_DIR) && $(BUN) run preview
 
 .PHONY: docs-pkgsite
@@ -96,8 +100,8 @@ docs-pkgsite: ## Run pkgsite locally (the engine behind pkg.go.dev) on :6060.
 
 .PHONY: docs-clean
 docs-clean: ## Remove the built docs site and node_modules.
-	rm -rf $(DOCS_DIR)/.vitepress/dist $(DOCS_DIR)/.vitepress/cache \
-		$(DOCS_DIR)/node_modules
+	rm -rf $(DOCS_DIR)/out $(DOCS_DIR)/.next $(DOCS_DIR)/.source \
+		$(DOCS_DIR)/.preview $(DOCS_DIR)/node_modules
 
 ## ---- Benchmark & profiling ----------------------------------------------
 

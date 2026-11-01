@@ -1,0 +1,18 @@
+{
+  "title": "API reference",
+  "pages": [
+    "index",
+    "grx",
+    "core",
+    "schema",
+    "exec",
+    "server",
+    "plugins",
+    "http",
+    "sse",
+    "websocket",
+    "pubsub",
+    "memory",
+    "redis"
+  ]
+}

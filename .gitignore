@@ -1,7 +1,10 @@
-# VitePress build artifacts
-docs/.vitepress/dist/
-docs/.vitepress/cache/
+# Docs build artifacts (see also docs/.gitignore)
+docs/out/
+docs/.next/
+docs/.source/
 docs/node_modules/
+# Turbopack loader cache (docs use the repo root as their Turbopack root)
+/.next/
 
 # Dependency lockfile noise from other package managers
 docs/package-lock.json

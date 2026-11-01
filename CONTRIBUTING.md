@@ -55,7 +55,7 @@ Every pull request must pass `make test`, `make vet` and `gofmt`. Run `make test
 | `pubsub/memory/` | The process-local `PubSub` backend for subscriptions. |
 | `pubsub/redis/` | A Redis `PubSub`, in its own Go module so Redis never enters the root `go.mod`. |
 | `examples/` | Runnable examples. `examples/basic` is the reference shape for resolvers and wiring. |
-| `docs/` | The VitePress documentation site published at https://grx-gql.github.io/grx/. |
+| `docs/` | The Fumadocs (Next.js) documentation site published at https://grx-gql.github.io/grx/. |
 
 ## Design rules
 

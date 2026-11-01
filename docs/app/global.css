@@ -1,0 +1,216 @@
+@import 'tailwindcss';
+@import 'fumadocs-ui/css/neutral.css';
+@import 'fumadocs-ui/css/preset.css';
+
+@theme {
+  --font-mono: var(--font-mono), ui-monospace, SFMono-Regular, Menlo, monospace;
+  --font-display: var(--font-display), var(--font-sans), system-ui, sans-serif;
+  /* Palette taken from the grx execution-graph mark (public/hero.svg). */
+  --color-grx-50: #eef2ff;
+  --color-grx-100: #e0e7ff;
+  --color-grx-200: #c7d2fe;
+  --color-grx-300: #a5b4fc;
+  --color-grx-400: #818cf8;
+  --color-grx-500: #6366f1;
+  --color-grx-600: #4f46e5;
+  --color-grx-700: #4338ca;
+  --color-grx-950: #1e1b4b;
+  --color-night: #0c0c1a;
+}
+
+:root {
+  --color-fd-primary: #4f46e5;
+  --color-fd-ring: #4f46e5;
+}
+
+.dark {
+  --color-fd-primary: #a5b4fc;
+  --color-fd-ring: #a5b4fc;
+}
+
+html {
+  scrollbar-gutter: stable;
+}
+
+html > body[data-scroll-locked] {
+  margin-right: 0px !important;
+  --removed-body-scroll-bar-size: 0px !important;
+}
+
+/* Ligatures would render Go's `<-chan` and `!=` as glyphs readers can't type. */
+code,
+pre,
+.font-mono {
+  font-variant-ligatures: none;
+}
+
+.font-display {
+  font-family: var(--font-display);
+  font-stretch: 112%;
+  letter-spacing: -0.035em;
+}
+
+/* Indigo text that keeps AA contrast in both themes. */
+.text-accent {
+  color: #4f46e5;
+}
+
+.dark .text-accent {
+  color: #a5b4fc;
+}
+
+.grx-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.16) transparent;
+}
+
+/* Dot grid, like graph paper, used behind graph panels. */
+.grx-dots {
+  background-image: radial-gradient(color-mix(in oklab, var(--color-fd-foreground) 14%, transparent) 1px, transparent 1.2px);
+  background-size: 22px 22px;
+}
+
+.grx-night-grid {
+  background-color: var(--color-night);
+  background-image:
+    radial-gradient(60% 70% at 55% 45%, rgba(99, 102, 241, 0.22), transparent 70%),
+    linear-gradient(to right, rgba(165, 180, 252, 0.06) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(165, 180, 252, 0.06) 1px, transparent 1px);
+  background-size: 100% 100%, 32px 32px, 32px 32px;
+}
+
+/* Edges draw themselves when they become active (pathLength="1"). */
+.grx-edge {
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  transition: stroke-dashoffset 0.38s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.grx-edge[data-on='true'] {
+  stroke-dashoffset: 0;
+}
+
+.grx-flow {
+  stroke-dasharray: 3 7;
+  animation: grx-flow 0.9s linear infinite;
+}
+
+@keyframes grx-flow {
+  to {
+    stroke-dashoffset: -20;
+  }
+}
+
+@keyframes grx-ping {
+  0% {
+    transform: scale(1);
+    opacity: 0.7;
+  }
+  100% {
+    transform: scale(2.4);
+    opacity: 0;
+  }
+}
+
+.grx-ping {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: grx-ping 0.9s ease-out both;
+}
+
+@keyframes grx-packet-x {
+  0% {
+    left: 0%;
+    opacity: 0;
+  }
+  8% {
+    opacity: 1;
+  }
+  92% {
+    opacity: 1;
+  }
+  100% {
+    left: 100%;
+    opacity: 0;
+  }
+}
+
+@keyframes grx-packet-y {
+  0% {
+    top: 0%;
+    opacity: 0;
+  }
+  8% {
+    opacity: 1;
+  }
+  92% {
+    opacity: 1;
+  }
+  100% {
+    top: 100%;
+    opacity: 0;
+  }
+}
+
+.grx-packet-x {
+  animation: grx-packet-x 4.2s cubic-bezier(0.45, 0, 0.55, 1) infinite;
+}
+
+.grx-packet-y {
+  animation: grx-packet-y 4.2s cubic-bezier(0.45, 0, 0.55, 1) infinite;
+}
+
+@keyframes grx-pulse {
+  0%,
+  100% {
+    opacity: 0.4;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+.grx-pulse {
+  animation: grx-pulse 2.4s ease-in-out infinite;
+}
+
+@keyframes grx-blink {
+  50% {
+    opacity: 0;
+  }
+}
+
+.grx-caret {
+  animation: grx-blink 1s step-end infinite;
+}
+
+@keyframes grx-fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.grx-fade-up {
+  animation: grx-fade-up 0.7s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .grx-flow,
+  .grx-ping,
+  .grx-packet-x,
+  .grx-packet-y,
+  .grx-pulse,
+  .grx-caret,
+  .grx-fade-up {
+    animation: none;
+  }
+
+  .grx-edge {
+    transition: none;
+  }
+}
