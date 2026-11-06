@@ -10,6 +10,19 @@ Published versions use section titles that match
 headings such as **`### ✨ Added`**, **`### 🐛 Fixed`**, **`### 📚 Documentation`**, … —
 see **`release-please-config.json`**). This file **`CHANGELOG.md`** is the changelog; browse it **[on GitHub](https://github.com/grx-gql/grx/blob/main/CHANGELOG.md)** (the docs site no longer duplicates it).
 
+## [0.8.3](https://github.com/grx-gql/grx/compare/v0.8.2...v0.8.3) (2026-11-06)
+
+
+### 📚 Documentation
+
+* migrate documentation site from VitePress to Fumadocs ([#96](https://github.com/grx-gql/grx/issues/96)) ([0abfba2](https://github.com/grx-gql/grx/commit/0abfba2fde52925456c7c137c7677bc32cfe11b9))
+
+
+### 🧹 Chores
+
+* **deps:** bump github.com/gofiber/fiber/v2 in /integration/cors ([#99](https://github.com/grx-gql/grx/issues/99)) ([d605339](https://github.com/grx-gql/grx/commit/d6053393f0cd5c43b4e82cf1d264fc1fe4ec8733))
+* **deps:** bump next from 16.4.2 to 16.4.3 in /docs ([#100](https://github.com/grx-gql/grx/issues/100)) ([e485254](https://github.com/grx-gql/grx/commit/e485254d3e4d706002694497f741a1349e5a75a9))
+
 ## [0.8.2](https://github.com/grx-gql/grx/compare/v0.8.1...v0.8.2) (2026-10-30)
 
 
