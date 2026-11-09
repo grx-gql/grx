@@ -1,4 +1,4 @@
-github.com/graph-gophers/graphql-go v1.10.3 h1:H6bqOfbuyolAQsbLapHnkIFdJ59vrXuAvDmc4uFvjbY=
-github.com/graph-gophers/graphql-go v1.10.3/go.mod h1:AsADheC4CCFwd8n1/QbkduTlHgYYMsRgtPihYVAlEsk=
+github.com/graph-gophers/graphql-go v1.11.0 h1:0aivAeTjiRLDybxMpdwWKhLIU10kY0VlQZ4iV/iEZDI=
+github.com/graph-gophers/graphql-go v1.11.0/go.mod h1:AsADheC4CCFwd8n1/QbkduTlHgYYMsRgtPihYVAlEsk=
 github.com/graphql-go/graphql v0.8.1 h1:p7/Ou/WpmulocJeEx7wjQy611rtXGQaAcXGqanuMMgc=
 github.com/graphql-go/graphql v0.8.1/go.mod h1:nKiHzRM0qopJEwCITUuIsxk9PlVlwIiiI8pnJEhordQ=
