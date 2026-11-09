@@ -10,6 +10,26 @@ Published versions use section titles that match
 headings such as **`### ✨ Added`**, **`### 🐛 Fixed`**, **`### 📚 Documentation`**, … —
 see **`release-please-config.json`**). This file **`CHANGELOG.md`** is the changelog; browse it **[on GitHub](https://github.com/grx-gql/grx/blob/main/CHANGELOG.md)** (the docs site no longer duplicates it).
 
+## [0.8.3](https://github.com/grx-gql/grx/compare/v0.8.2...v0.8.3) (2026-11-09)
+
+
+### 📚 Documentation
+
+* migrate documentation site from VitePress to Fumadocs ([#96](https://github.com/grx-gql/grx/issues/96)) ([0abfba2](https://github.com/grx-gql/grx/commit/0abfba2fde52925456c7c137c7677bc32cfe11b9))
+
+
+### 🧹 Chores
+
+* **deps-dev:** bump @tailwindcss/postcss from 4.3.3 to 4.3.4 in /docs ([#106](https://github.com/grx-gql/grx/issues/106)) ([0ef2486](https://github.com/grx-gql/grx/commit/0ef2486b68a263699c852366fe4c9f11ba28f05f))
+* **deps:** bump fumadocs-core from 16.17.9 to 16.18.0 in /docs ([#105](https://github.com/grx-gql/grx/issues/105)) ([66c7574](https://github.com/grx-gql/grx/commit/66c757409dea856be328ac93aa94fa56df2cf7be))
+* **deps:** bump fumadocs-mdx from 15.4.10 to 15.5.0 in /docs ([#108](https://github.com/grx-gql/grx/issues/108)) ([1101b64](https://github.com/grx-gql/grx/commit/1101b64dddc59b9e7d34c5dcaf2f9e72396d5e46))
+* **deps:** bump github.com/gin-contrib/cors in /integration/cors ([#104](https://github.com/grx-gql/grx/issues/104)) ([8ce5589](https://github.com/grx-gql/grx/commit/8ce55892706c05c978dca011dbe8b72a32cf5968))
+* **deps:** bump github.com/gofiber/fiber/v2 in /integration/cors ([#99](https://github.com/grx-gql/grx/issues/99)) ([d605339](https://github.com/grx-gql/grx/commit/d6053393f0cd5c43b4e82cf1d264fc1fe4ec8733))
+* **deps:** bump github.com/graph-gophers/graphql-go in /benchmark ([#102](https://github.com/grx-gql/grx/issues/102)) ([4fe2abc](https://github.com/grx-gql/grx/commit/4fe2abc0f484fc0a358f5759f794ad9afc74882b))
+* **deps:** bump lucide-react from 1.66.0 to 1.69.0 in /docs ([#103](https://github.com/grx-gql/grx/issues/103)) ([ba6bf1e](https://github.com/grx-gql/grx/commit/ba6bf1eb123fd7852a4db079f4eaa2a50948d4ae))
+* **deps:** bump next from 16.4.2 to 16.4.3 in /docs ([#100](https://github.com/grx-gql/grx/issues/100)) ([e485254](https://github.com/grx-gql/grx/commit/e485254d3e4d706002694497f741a1349e5a75a9))
+* **deps:** bump next from 16.4.3 to 16.4.5 in /docs ([#107](https://github.com/grx-gql/grx/issues/107)) ([dad0d21](https://github.com/grx-gql/grx/commit/dad0d21afdc7f0356f3197313464d39d6e3f266b))
+
 ## [0.8.2](https://github.com/grx-gql/grx/compare/v0.8.1...v0.8.2) (2026-10-30)
 
 
