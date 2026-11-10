@@ -510,9 +510,32 @@ func playgroundHTML(httpPath string, wsPath string) string {
 			const subscriptionUrl = new URL(wsEndpoint, window.location.href);
 			subscriptionUrl.protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
 
+			// graphql-ws rejects with a raw WebSocket Event when the connection
+			// fails, which GraphiQL would print as {"isTrusted": true}. Turn it
+			// into a readable error; GraphQL errors pass through untouched.
+			const wsClient = createWSClient({ url: subscriptionUrl.toString() });
+			const describeWSFailure = (err) => {
+				if (!(err instanceof Event)) return err;
+				const detail = err.reason || (err.code ? "close code " + err.code : "");
+				return new Error(
+					"The WebSocket connection to " + subscriptionUrl.toString() + " failed" +
+						(detail ? " (" + detail + ")" : "") +
+						". Check that the server has a WebSocket transport configured."
+				);
+			};
+			const subscriptionClient = {
+				async *iterate(request) {
+					try {
+						yield* wsClient.iterate(request);
+					} catch (err) {
+						throw describeWSFailure(err);
+					}
+				},
+			};
+
 			const transport = createTransport({
 				url: url.toString(),
-				subscriptionClient: createWSClient({ url: subscriptionUrl.toString() }),
+				subscriptionClient: subscriptionClient,
 			});
 
 			const root = ReactDOM.createRoot(document.getElementById("root"));

@@ -53,7 +53,9 @@ func TestServeHTTPServesPlaygroundAtConfiguredPath(t *testing.T) {
 		"https://esm.sh/graphiql@6.0.1",
 		`const httpEndpoint = "/graphql";`,
 		`const wsEndpoint = "/graphql";`,
-		`subscriptionClient: createWSClient({ url: subscriptionUrl.toString() })`,
+		`createWSClient({ url: subscriptionUrl.toString() })`,
+		`subscriptionClient: subscriptionClient`,
+		`Check that the server has a WebSocket transport configured.`,
 		`transport: transport`,
 	}
 	for _, expectedValue := range expectedValues {
