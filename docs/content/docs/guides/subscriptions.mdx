@@ -164,7 +164,9 @@ after the walkthrough.
 
 ## 4. Try it from the playground
 
-The bundled GraphiQL UI auto-detects subscriptions. Run:
+The bundled GraphiQL UI auto-detects subscriptions. It subscribes over
+WebSocket by default and switches to SSE when `sse.New()` is the only
+subscription transport registered. Run:
 
 ```graphql
 subscription {

@@ -170,7 +170,7 @@ type Server struct {
 	schemaValue      *schema.Schema
 	PlaygroundPath   string
 	GraphqlPath      string // normalized; persisted from New
-	SubscriptionPath string // pathname passed to graphql-ws in playground (canonical subscription URL)
+	SubscriptionPath string // pathname the playground subscribes to (canonical subscription URL)
 	schemaSDLPath    string
 
 	separateSubs   bool             // graphqlPath != subscriptionPath routing
@@ -178,6 +178,10 @@ type Server struct {
 	subChain       []core.Transport // subscriptionPath; empty when combined endpoint
 	handler        http.Handler
 	requestTimeout time.Duration
+
+	// playgroundSSE makes the playground run subscriptions over SSE. It is
+	// set when an *sse.Transport is registered without a WebSocket one.
+	playgroundSSE bool
 }
 
 const faviconPath = "/favicon.ico"
@@ -331,9 +335,27 @@ func New(config Config) (*Server, error) {
 		mainChain:        main,
 		subChain:         sub,
 		requestTimeout:   config.RequestTimeout,
+		playgroundSSE:    playgroundUsesSSE(config.Transports),
 	}
 	srv.handler = http.HandlerFunc(srv.serveHTTP)
 	return srv, nil
+}
+
+// playgroundUsesSSE reports whether the playground should subscribe over SSE:
+// only when the bundled SSE transport is registered and the bundled WebSocket
+// transport is not. WebSocket stays the default so custom transports that
+// speak graphql-ws keep working.
+func playgroundUsesSSE(transports []core.Transport) bool {
+	hasSSE := false
+	for _, transport := range transports {
+		switch transport.(type) {
+		case *websocket.WebSocketTransport:
+			return false
+		case *sse.Transport:
+			hasSSE = true
+		}
+	}
+	return hasSSE
 }
 
 func applySSEServerLimits(transport core.Transport, config Config) {
@@ -396,7 +418,7 @@ func (s *Server) serveHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if r.Method == http.MethodGet && r.URL.Path == s.PlaygroundPath {
-		servePlayground(w, s.canonicalGraphQLPath(), s.canonicalWSPath())
+		servePlayground(w, s.canonicalGraphQLPath(), s.canonicalWSPath(), s.playgroundSSE)
 		return
 	}
 
@@ -446,18 +468,23 @@ func (s *Server) withRequestDeadline(r *http.Request) (*http.Request, context.Ca
 	return r.WithContext(ctx), cancel
 }
 
-func servePlayground(w http.ResponseWriter, httpPath string, wsPath string) {
+func servePlayground(w http.ResponseWriter, httpPath string, subscriptionPath string, useSSE bool) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store")
-	if _, err := w.Write([]byte(playgroundHTML(httpPath, wsPath))); err != nil {
+	if _, err := w.Write([]byte(playgroundHTML(httpPath, subscriptionPath, useSSE))); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
 }
 
-func playgroundHTML(httpPath string, wsPath string) string {
+func playgroundHTML(httpPath string, subscriptionPath string, useSSE bool) string {
+	subscriptionProtocol := "ws"
+	if useSSE {
+		subscriptionProtocol = "sse"
+	}
 	replacer := strings.NewReplacer(
 		"{{HTTP_ENDPOINT}}", strconv.Quote(httpPath),
-		"{{WS_ENDPOINT}}", strconv.Quote(wsPath),
+		"{{SUBSCRIPTION_ENDPOINT}}", strconv.Quote(subscriptionPath),
+		"{{SUBSCRIPTION_PROTOCOL}}", strconv.Quote(subscriptionProtocol),
 	)
 	return replacer.Replace(`<!doctype html>
 <html lang="en">
@@ -492,6 +519,7 @@ func playgroundHTML(httpPath string, wsPath string) string {
 					"@graphiql/react": "https://esm.sh/@graphiql/react@1.0.2?standalone&external=react,react-dom,graphql,@graphiql/toolkit,@emotion/is-prop-valid",
 					"graphql": "https://esm.sh/graphql@16.13.2",
 					"graphql-ws": "https://esm.sh/graphql-ws@6.0.6?external=graphql",
+					"graphql-sse": "https://esm.sh/graphql-sse@2.6.3?external=graphql",
 					"@emotion/is-prop-valid": "data:text/javascript,"
 				}
 			}
@@ -502,36 +530,46 @@ func playgroundHTML(httpPath string, wsPath string) string {
 			import { GraphiQL } from "graphiql";
 			import { createTransport } from "@graphiql/toolkit";
 			import { createClient as createWSClient } from "graphql-ws";
+			import { createClient as createSSEClient } from "graphql-sse";
 			import "graphiql/setup-workers/esm.sh";
 
 			const httpEndpoint = {{HTTP_ENDPOINT}};
-			const wsEndpoint = {{WS_ENDPOINT}};
+			const subscriptionEndpoint = {{SUBSCRIPTION_ENDPOINT}};
+			const subscriptionProtocol = {{SUBSCRIPTION_PROTOCOL}};
 			const url = new URL(httpEndpoint, window.location.href);
-			const subscriptionUrl = new URL(wsEndpoint, window.location.href);
-			subscriptionUrl.protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+			const subscriptionUrl = new URL(subscriptionEndpoint, window.location.href);
 
-			// graphql-ws rejects with a raw WebSocket Event when the connection
-			// fails, which GraphiQL would print as {"isTrusted": true}. Turn it
-			// into a readable error; GraphQL errors pass through untouched.
-			const wsClient = createWSClient({ url: subscriptionUrl.toString() });
-			const describeWSFailure = (err) => {
-				if (!(err instanceof Event)) return err;
-				const detail = err.reason || (err.code ? "close code " + err.code : "");
-				return new Error(
-					"The WebSocket connection to " + subscriptionUrl.toString() + " failed" +
-						(detail ? " (" + detail + ")" : "") +
-						". Check that the server has a WebSocket transport configured."
-				);
+			const createSSESubscriptionClient = () => createSSEClient({ url: subscriptionUrl.toString() });
+
+			const createWSSubscriptionClient = () => {
+				const wsUrl = new URL(subscriptionUrl);
+				wsUrl.protocol = wsUrl.protocol === "https:" ? "wss:" : "ws:";
+				const wsClient = createWSClient({ url: wsUrl.toString() });
+				// graphql-ws rejects with a raw WebSocket Event when the connection
+				// fails, which GraphiQL would print as {"isTrusted": true}. Turn it
+				// into a readable error; GraphQL errors pass through untouched.
+				const describeWSFailure = (err) => {
+					if (!(err instanceof Event)) return err;
+					const detail = err.reason || (err.code ? "close code " + err.code : "");
+					return new Error(
+						"The WebSocket connection to " + wsUrl.toString() + " failed" +
+							(detail ? " (" + detail + ")" : "") +
+							". Check that the server has a WebSocket transport configured."
+					);
+				};
+				return {
+					async *iterate(request) {
+						try {
+							yield* wsClient.iterate(request);
+						} catch (err) {
+							throw describeWSFailure(err);
+						}
+					},
+				};
 			};
-			const subscriptionClient = {
-				async *iterate(request) {
-					try {
-						yield* wsClient.iterate(request);
-					} catch (err) {
-						throw describeWSFailure(err);
-					}
-				},
-			};
+
+			const subscriptionClient =
+				subscriptionProtocol === "sse" ? createSSESubscriptionClient() : createWSSubscriptionClient();
 
 			const transport = createTransport({
 				url: url.toString(),
