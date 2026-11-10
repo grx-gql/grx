@@ -50,11 +50,11 @@ func TestServeHTTPServesPlaygroundAtConfiguredPath(t *testing.T) {
 	body := response.Body.String()
 	expectedValues := []string{
 		"<title>GraphiQL</title>",
-		"https://esm.sh/graphiql@5.2.2",
+		"https://esm.sh/graphiql@6.0.1",
 		`const httpEndpoint = "/graphql";`,
 		`const wsEndpoint = "/graphql";`,
-		`createWSClient({ url: subscriptionUrl.toString() })`,
-		`isSubscription(request) ? wsSubscribe(request) : httpFetch(request)`,
+		`subscriptionClient: createWSClient({ url: subscriptionUrl.toString() })`,
+		`transport: transport`,
 	}
 	for _, expectedValue := range expectedValues {
 		if !strings.Contains(body, expectedValue) {

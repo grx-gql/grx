@@ -465,8 +465,7 @@ func playgroundHTML(httpPath string, wsPath string) string {
 		<meta charset="utf-8">
 		<meta name="viewport" content="width=device-width, initial-scale=1">
 		<title>GraphiQL</title>
-		<link rel="stylesheet" href="https://esm.sh/graphiql@5.2.2/dist/style.css">
-		<link rel="stylesheet" href="https://esm.sh/@graphiql/plugin-explorer@5.1.1/dist/style.css">
+		<link rel="stylesheet" href="https://esm.sh/graphiql@6.0.1/dist/style.css">
 		<style>
 			html,
 			body,
@@ -486,11 +485,11 @@ func playgroundHTML(httpPath string, wsPath string) string {
 					"react/": "https://esm.sh/react@19.2.5/",
 					"react-dom": "https://esm.sh/react-dom@19.2.5",
 					"react-dom/client": "https://esm.sh/react-dom@19.2.5/client",
-					"graphiql": "https://esm.sh/graphiql@5.2.2?standalone&external=react,react-dom,@graphiql/react,graphql",
-					"graphiql/": "https://esm.sh/graphiql@5.2.2/",
-					"@graphiql/plugin-explorer": "https://esm.sh/@graphiql/plugin-explorer@5.1.1?standalone&external=react,@graphiql/react,graphql",
-					"@graphiql/toolkit": "https://esm.sh/@graphiql/toolkit@0.11.3?standalone&external=graphql",
-					"@graphiql/react": "https://esm.sh/@graphiql/react@0.37.3?standalone&external=react,react-dom,graphql,@graphiql/toolkit,@emotion/is-prop-valid",
+					"graphiql": "https://esm.sh/graphiql@6.0.1?standalone&external=react,react-dom,@graphiql/react,graphql",
+					"graphiql/": "https://esm.sh/graphiql@6.0.1/",
+					"graphiql/setup-workers/esm.sh": "https://esm.sh/graphiql@6.0.1/setup-workers/esm.sh?deps=@graphiql/react@1.0.2",
+					"@graphiql/toolkit": "https://esm.sh/@graphiql/toolkit@1.0.1?standalone&external=graphql",
+					"@graphiql/react": "https://esm.sh/@graphiql/react@1.0.2?standalone&external=react,react-dom,graphql,@graphiql/toolkit,@emotion/is-prop-valid",
 					"graphql": "https://esm.sh/graphql@16.13.2",
 					"graphql-ws": "https://esm.sh/graphql-ws@6.0.6?external=graphql",
 					"@emotion/is-prop-valid": "data:text/javascript,"
@@ -500,10 +499,9 @@ func playgroundHTML(httpPath string, wsPath string) string {
 		<script type="module">
 			import React from "react";
 			import ReactDOM from "react-dom/client";
-			import { GraphiQL, HISTORY_PLUGIN } from "graphiql";
-			import { explorerPlugin } from "@graphiql/plugin-explorer";
+			import { GraphiQL } from "graphiql";
+			import { createTransport } from "@graphiql/toolkit";
 			import { createClient as createWSClient } from "graphql-ws";
-			import { parse } from "graphql";
 			import "graphiql/setup-workers/esm.sh";
 
 			const httpEndpoint = {{HTTP_ENDPOINT}};
@@ -511,79 +509,18 @@ func playgroundHTML(httpPath string, wsPath string) string {
 			const url = new URL(httpEndpoint, window.location.href);
 			const subscriptionUrl = new URL(wsEndpoint, window.location.href);
 			subscriptionUrl.protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-			const wsClient = createWSClient({ url: subscriptionUrl.toString() });
 
-			const isSubscription = (request) => {
-				try {
-					const document = parse(request.query);
-					const operation = document.definitions.find(
-						(definition) =>
-							definition.kind === "OperationDefinition" &&
-							(!request.operationName || definition.name?.value === request.operationName)
-					);
-					return operation?.operation === "subscription";
-				} catch {
-					return false;
-				}
-			};
-
-			const httpFetch = async (request) => {
-				const response = await fetch(url.toString(), {
-					method: "POST",
-					headers: { "content-type": "application/json", accept: "application/graphql-response+json, application/json;q=0.9" },
-					body: JSON.stringify(request),
-				});
-				return response.json();
-			};
-
-			const wsSubscribe = (request) => ({
-				[Symbol.asyncIterator]() {
-					const pending = [];
-					const waiters = [];
-					let done = false;
-					let error;
-					const push = (value) => {
-						if (waiters.length) waiters.shift().resolve({ value, done: false });
-						else pending.push(value);
-					};
-					const finish = (err) => {
-						done = true;
-						error = err;
-						while (waiters.length) {
-							const waiter = waiters.shift();
-							err ? waiter.reject(err) : waiter.resolve({ value: undefined, done: true });
-						}
-					};
-					const dispose = wsClient.subscribe(request, {
-						next: (value) => push(value),
-						error: (err) => finish(err),
-						complete: () => finish(),
-					});
-					return {
-						next() {
-							if (pending.length) return Promise.resolve({ value: pending.shift(), done: false });
-							if (done) return error ? Promise.reject(error) : Promise.resolve({ value: undefined, done: true });
-							return new Promise((resolve, reject) => waiters.push({ resolve, reject }));
-						},
-						return() {
-							dispose();
-							finish();
-							return Promise.resolve({ value: undefined, done: true });
-						},
-					};
-				},
+			const transport = createTransport({
+				url: url.toString(),
+				subscriptionClient: createWSClient({ url: subscriptionUrl.toString() }),
 			});
 
-			const fetcher = (request) => (isSubscription(request) ? wsSubscribe(request) : httpFetch(request));
-
-			const plugins = [HISTORY_PLUGIN, explorerPlugin()];
 			const root = ReactDOM.createRoot(document.getElementById("root"));
 
 			root.render(
 				React.createElement(GraphiQL, {
 					defaultEditorToolsVisibility: true,
-					fetcher: fetcher,
-					plugins: plugins
+					transport: transport
 				})
 			);
 		</script>
