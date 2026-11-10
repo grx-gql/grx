@@ -10,6 +10,19 @@ Published versions use section titles that match
 headings such as **`### ✨ Added`**, **`### 🐛 Fixed`**, **`### 📚 Documentation`**, … —
 see **`release-please-config.json`**). This file **`CHANGELOG.md`** is the changelog; browse it **[on GitHub](https://github.com/grx-gql/grx/blob/main/CHANGELOG.md)** (the docs site no longer duplicates it).
 
+## [0.9.0](https://github.com/grx-gql/grx/compare/v0.8.3...v0.9.0) (2026-11-10)
+
+
+### ✨ Added
+
+* **server:** run playground subscriptions over SSE on SSE-only servers ([#111](https://github.com/grx-gql/grx/issues/111)) ([dc14a0f](https://github.com/grx-gql/grx/commit/dc14a0fd0612388a726176dd7fc69eaeeb868a28))
+* **server:** upgrade bundled playground to GraphiQL 6 ([#109](https://github.com/grx-gql/grx/issues/109)) ([c959df7](https://github.com/grx-gql/grx/commit/c959df707bdec9f4b575a9d1356c5c579f2f30bb))
+
+
+### 🧹 Chores
+
+* **deps:** bump github.com/andybalholm/brotli from 1.2.6 to 1.2.8 ([#101](https://github.com/grx-gql/grx/issues/101)) ([680bcec](https://github.com/grx-gql/grx/commit/680bcec7999c028aa6a90df949cf7b8f7bdb6552))
+
 ## [0.8.3](https://github.com/grx-gql/grx/compare/v0.8.2...v0.8.3) (2026-11-09)
 
 
