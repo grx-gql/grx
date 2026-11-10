@@ -178,10 +178,6 @@ type Server struct {
 	subChain       []core.Transport // subscriptionPath; empty when combined endpoint
 	handler        http.Handler
 	requestTimeout time.Duration
-
-	// playgroundSSE makes the playground run subscriptions over SSE. It is
-	// set when an *sse.Transport is registered without a WebSocket one.
-	playgroundSSE bool
 }
 
 const faviconPath = "/favicon.ico"
@@ -335,7 +331,6 @@ func New(config Config) (*Server, error) {
 		mainChain:        main,
 		subChain:         sub,
 		requestTimeout:   config.RequestTimeout,
-		playgroundSSE:    playgroundUsesSSE(config.Transports),
 	}
 	srv.handler = http.HandlerFunc(srv.serveHTTP)
 	return srv, nil
@@ -345,14 +340,19 @@ func New(config Config) (*Server, error) {
 // only when the bundled SSE transport is registered and the bundled WebSocket
 // transport is not. WebSocket stays the default so custom transports that
 // speak graphql-ws keep working.
-func playgroundUsesSSE(transports []core.Transport) bool {
+func (s *Server) playgroundUsesSSE() bool {
 	hasSSE := false
-	for _, transport := range transports {
-		switch transport.(type) {
-		case *websocket.WebSocketTransport:
-			return false
-		case *sse.Transport:
-			hasSSE = true
+	for _, chain := range [][]core.Transport{s.mainChain, s.subChain} {
+		for _, transport := range chain {
+			if restricted, ok := transport.(pathRestricted); ok {
+				transport = restricted.Transport
+			}
+			switch transport.(type) {
+			case *websocket.WebSocketTransport:
+				return false
+			case *sse.Transport:
+				hasSSE = true
+			}
 		}
 	}
 	return hasSSE
@@ -418,7 +418,7 @@ func (s *Server) serveHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if r.Method == http.MethodGet && r.URL.Path == s.PlaygroundPath {
-		servePlayground(w, s.canonicalGraphQLPath(), s.canonicalWSPath(), s.playgroundSSE)
+		servePlayground(w, s.canonicalGraphQLPath(), s.canonicalWSPath(), s.playgroundUsesSSE())
 		return
 	}
 

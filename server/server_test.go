@@ -82,7 +82,7 @@ func TestPlaygroundSubscriptionProtocolFollowsRegisteredTransports(t *testing.T)
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			body := playgroundHTML("/graphql", "/graphql", playgroundUsesSSE(tc.transports))
+			body := playgroundHTML("/graphql", "/graphql", (&Server{mainChain: tc.transports}).playgroundUsesSSE())
 			want := `const subscriptionProtocol = "` + tc.want + `";`
 			if !strings.Contains(body, want) {
 				t.Fatalf("expected playground HTML to contain %q", want)
