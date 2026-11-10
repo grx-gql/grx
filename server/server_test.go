@@ -52,13 +52,63 @@ func TestServeHTTPServesPlaygroundAtConfiguredPath(t *testing.T) {
 		"<title>GraphiQL</title>",
 		"https://esm.sh/graphiql@6.0.1",
 		`const httpEndpoint = "/graphql";`,
-		`const wsEndpoint = "/graphql";`,
-		`createWSClient({ url: subscriptionUrl.toString() })`,
+		`const subscriptionEndpoint = "/graphql";`,
+		`const subscriptionProtocol = "ws";`,
+		`createWSClient({ url: wsUrl.toString() })`,
+		`createSSEClient({ url: subscriptionUrl.toString() })`,
 		`subscriptionClient: subscriptionClient`,
 		`Check that the server has a WebSocket transport configured.`,
 		`transport: transport`,
 	}
 	for _, expectedValue := range expectedValues {
+		if !strings.Contains(body, expectedValue) {
+			t.Fatalf("expected playground HTML to contain %q", expectedValue)
+		}
+	}
+}
+
+func TestPlaygroundSubscriptionProtocolFollowsRegisteredTransports(t *testing.T) {
+	cases := []struct {
+		name       string
+		transports []core.Transport
+		want       string
+	}{
+		{name: "no subscription transport", transports: nil, want: "ws"},
+		{name: "websocket only", transports: []core.Transport{websocket.New()}, want: "ws"},
+		{name: "sse only", transports: []core.Transport{sse.New()}, want: "sse"},
+		{name: "websocket and sse", transports: []core.Transport{websocket.New(), sse.New()}, want: "ws"},
+		{name: "sse listed first", transports: []core.Transport{sse.New(), websocket.New()}, want: "ws"},
+		{name: "custom transport", transports: []core.Transport{customHTTPTransport{}}, want: "ws"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			body := playgroundHTML("/graphql", "/graphql", (&Server{mainChain: tc.transports}).playgroundUsesSSE())
+			want := `const subscriptionProtocol = "` + tc.want + `";`
+			if !strings.Contains(body, want) {
+				t.Fatalf("expected playground HTML to contain %q", want)
+			}
+		})
+	}
+}
+
+func TestNewServesSSEPlaygroundForSSEOnlyServer(t *testing.T) {
+	server, err := New(Config{
+		Schema:           subscriptiongraph.Schema(newSubscriptionTestBus(t)),
+		PlaygroundPath:   "/playground",
+		SubscriptionPath: "/events",
+		Transports:       []core.Transport{sse.New()},
+	})
+	if err != nil {
+		t.Fatalf("new server: %v", err)
+	}
+	response := httptest.NewRecorder()
+	server.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/playground", nil))
+
+	body := response.Body.String()
+	for _, expectedValue := range []string{
+		`const subscriptionEndpoint = "/events";`,
+		`const subscriptionProtocol = "sse";`,
+	} {
 		if !strings.Contains(body, expectedValue) {
 			t.Fatalf("expected playground HTML to contain %q", expectedValue)
 		}
@@ -868,7 +918,7 @@ func (w *failingBodyWriter) Write([]byte) (int, error) {
 
 func TestServePlaygroundReturns500WhenWriteFails(t *testing.T) {
 	w := &failingBodyWriter{}
-	servePlayground(w, "/graphql", "/graphql")
+	servePlayground(w, "/graphql", "/graphql", false)
 	if w.code != http.StatusInternalServerError {
 		t.Fatalf("status = %d", w.code)
 	}
