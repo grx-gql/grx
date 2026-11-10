@@ -329,6 +329,45 @@ go run ./examples/subscriptions
 
 ---
 
+### Subscriptions over SSE only [#examples-sse]
+
+Registers `sse.New()` as the only subscription transport, so subscriptions are ordinary HTTP requests answered with a `text/event-stream` response - no WebSocket upgrade. The bundled playground detects this and subscribes over SSE too.
+
+#### `examples/sse/main.go`
+
+<include cwd>../examples/sse/main.go</include>
+
+`countdown` produces its own stream and closes it when it reaches zero, which ends the response with a `complete` event. `notifications` relays events published by `sendNotification` through the in-memory bus.
+
+#### `examples/sse/graph/schema.go`
+
+<include cwd>../examples/sse/graph/schema.go</include>
+
+#### `examples/sse/graph/countdown.go`
+
+<include cwd>../examples/sse/graph/countdown.go</include>
+
+#### `examples/sse/graph/notification.go`
+
+<include cwd>../examples/sse/graph/notification.go</include>
+
+```bash
+go run ./examples/sse
+```
+
+Subscribe from a terminal:
+
+```bash
+curl -N http://localhost:4000/graphql \
+  -H 'Content-Type: application/json' \
+  -H 'Accept: text/event-stream' \
+  -d '{"query":"subscription { countdown(from: 3) { remaining } }"}'
+```
+
+**Dig deeper:** [**Realtime subscriptions**](/guides/subscriptions)
+
+---
+
 ## Router integrations [#examples-router-integrations]
 
 `grx` answers **`ServeHTTP`** with exact path matches - you usually pair **`http.StripPrefix("/api", gql)`** with **`WithPlaygroundPath("/playground")`** and **`WithGraphQLPath("/query")`** so callers see **`/api/playground`** and **`POST /api/query`**.

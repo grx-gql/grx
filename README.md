@@ -77,6 +77,7 @@ Runnable examples live in [`examples/`](./examples):
 ```bash
 go run ./examples/basic           # queries, mutations, plugins
 go run ./examples/subscriptions   # pub/sub over WebSocket and SSE
+go run ./examples/sse             # SSE-only subscriptions, no WebSocket
 go run ./examples/auth            # bearer auth, context identity, field authorizer
 ```
 
